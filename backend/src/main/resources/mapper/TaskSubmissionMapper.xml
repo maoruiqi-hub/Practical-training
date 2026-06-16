@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.mapper.TaskSubmissionMapper">
+
+    <select id="selectByStudentNo" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
+        SELECT * FROM task_submission WHERE student_no = #{studentNo}
+    </select>
+
+    <select id="selectByTaskNo" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
+        SELECT * FROM task_submission WHERE task_no = #{taskNo}
+    </select>
+
+</mapper>
