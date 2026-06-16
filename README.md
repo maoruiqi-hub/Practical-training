@@ -137,7 +137,8 @@
 | `GET /task/search?keyword=` | ✅ | ✅ | ✅ | 按类型/说明 |
 | **关联查询** | | | | |
 | `GET /course/{courseCode}/lessons` | ✅ | ✅ | ✅ | 课程下级课时 |
-| `GET /lesson/{courseCode}` | ✅ | ✅ | ✅ | 课程下级课时 |
+| `GET /lesson/{courseCode}` | ✅ | ✅ | ✅ | 某课程下所有课时 |
+| `GET /lesson/detail/{lessonNo}` | ✅ | ✅ | ✅ | 课时详情（含课程名、教师名） |
 | `GET /task/{courseCode}` | ✅ | ✅ | ✅ | 课程下级任务 |
 | **管理员专用** | | | | |
 | `GET/PUT/DELETE /student/{studentNo}` | ❌ | ❌ | ✅ | |
