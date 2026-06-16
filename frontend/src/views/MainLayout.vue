@@ -1,0 +1,57 @@
+<template>
+  <el-container>
+    <el-header class="header">
+      <span class="title">AI智慧课程平台</span>
+      <div class="user-info">
+        <el-tag>{{ userRoleLabel }}</el-tag>
+        <span style="margin:0 10px">{{ user.name }}</span>
+        <el-button type="danger" size="small" @click="logout">退出</el-button>
+      </div>
+    </el-header>
+    <el-container>
+      <el-aside width="200px" class="aside">
+        <el-menu :default-active="route.path" router>
+          <el-menu-item index="/dashboard"><el-icon><HomeFilled /></el-icon>首页</el-menu-item>
+          <el-menu-item index="/courses"><el-icon><Reading /></el-icon>课程列表</el-menu-item>
+          <el-menu-item index="/stats"><el-icon><TrendCharts /></el-icon>成绩统计</el-menu-item>
+          <template v-if="isAdmin">
+            <el-sub-menu index="admin">
+              <template #title><el-icon><Setting /></el-icon>管理后台</template>
+              <el-menu-item index="/admin/students">学生管理</el-menu-item>
+              <el-menu-item index="/admin/teachers">教师管理</el-menu-item>
+              <el-menu-item index="/admin/courses">课程管理</el-menu-item>
+            </el-sub-menu>
+          </template>
+        </el-menu>
+      </el-aside>
+      <el-main>
+        <router-view />
+      </el-main>
+    </el-container>
+  </el-container>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+
+const route = useRoute()
+const router = useRouter()
+const user = JSON.parse(localStorage.getItem('user') || '{}')
+const isAdmin = computed(() => user.role === 'admin')
+const userRoleLabel = computed(() => isAdmin.value ? '管理员' : user.role === 'student' ? '学生' : '教师')
+
+const logout = () => {
+  localStorage.removeItem('user')
+  ElMessage.success('已退出')
+  router.push('/login')
+}
+</script>
+
+<style scoped>
+.header { display:flex; justify-content:space-between; align-items:center; background:#409eff; color:#fff; padding:0 20px; height:60px; }
+.header .title { font-size:20px; font-weight:bold; }
+.user-info { display:flex; align-items:center; }
+.aside { background:#fff; border-right:1px solid #e6e6e6; min-height:calc(100vh - 60px); }
+</style>

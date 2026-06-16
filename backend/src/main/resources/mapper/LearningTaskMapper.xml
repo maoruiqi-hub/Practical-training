@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.mapper.LearningTaskMapper">
+
+    <select id="selectByCourseCode" resultType="com.neu.CoursePlatform.entity.LearningTask">
+        SELECT * FROM learning_task WHERE course_code = #{courseCode}
+    </select>
+
+    <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.LearningTask">
+        SELECT * FROM learning_task
+        WHERE task_type LIKE CONCAT('%', #{keyword}, '%')
+           OR description LIKE CONCAT('%', #{keyword}, '%')
+    </select>
+
+</mapper>
