@@ -6,8 +6,13 @@ import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/task")
@@ -35,12 +40,40 @@ public class TaskController {
         return Result.ok(taskService.searchByKeyword(keyword));
     }
 
-    /** 发布任务 | admin/授课教师 */
+    /** 发布任务（支持上传附件） | admin/授课教师 */
     @PostMapping
-    public Result<Void> add(@RequestBody LearningTask task, HttpSession session) {
-        if (!auth.canModifyCourse(session, task.getCourseCode())) return Result.fail("无权限");
+    public Result<String> add(@RequestParam String courseCode,
+                              @RequestParam String taskType,
+                              @RequestParam String description,
+                              @RequestParam(required = false) String deadline,
+                              @RequestParam String submitMethod,
+                              @RequestParam Integer score,
+                              @RequestParam(required = false) MultipartFile file,
+                              HttpSession session) {
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        LearningTask task = new LearningTask();
+        task.setCourseCode(courseCode);
+        task.setTaskType(taskType);
+        task.setDescription(description);
+        task.setSubmitMethod(submitMethod);
+        task.setScore(score);
+        if (deadline != null && !deadline.isEmpty()) {
+            task.setDeadline(LocalDateTime.parse(deadline.replace(" ", "T")));
+        }
+        if (file != null && !file.isEmpty()) {
+            try {
+                String dir = "resource/TaskResource/";
+                File folder = new File(dir);
+                if (!folder.exists()) folder.mkdirs();
+                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+                file.transferTo(new File(dir + filename));
+                task.setResourceUrl(dir + filename);
+            } catch (IOException e) {
+                return Result.fail("附件上传失败");
+            }
+        }
         taskService.save(task);
-        return Result.ok();
+        return Result.ok("任务发布成功");
     }
 
     /** 修改任务 | admin/授课教师 */

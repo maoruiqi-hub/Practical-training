@@ -108,7 +108,13 @@ onMounted(async () => {
   } else {
     loading.value = false
     const res = await searchCourse('Python')
-    if (res.data.code === 200) courses.value = res.data.data
+    if (res.data.code === 200) {
+      courses.value = res.data.data
+      if (courses.value.length > 0) {
+        selectedCourse.value = courses.value[0].courseCode
+        loadCourseStats(selectedCourse.value)
+      }
+    }
   }
 })
 

@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.neu.CoursePlatform.entity.Student;
+import java.util.List;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.service.StudentService;
 import org.springframework.stereotype.Service;
@@ -24,5 +25,10 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
             return false;
         }
         return save(student);
+    }
+
+    @Override
+    public List<Student> searchByKeyword(String keyword) {
+        return baseMapper.selectByKeyword(keyword);
     }
 }

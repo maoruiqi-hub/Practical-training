@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS learning_task (
     description TEXT,
     deadline DATETIME,
     submit_method VARCHAR(64),
-    score INT
+    score INT,
+    resource_url VARCHAR(512)
 );
 
 -- 任务提交记录表
