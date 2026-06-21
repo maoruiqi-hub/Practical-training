@@ -83,12 +83,12 @@ public class LessonController {
 
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "resource/LessonResource/";
+                String dir = "../resource/LessonResource/";
                 File folder = new File(dir);
                 if (!folder.exists()) folder.mkdirs();
                 String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                file.transferTo(new File(dir + filename));
-                lesson.setResourceUrl(dir + filename);
+                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                lesson.setResourceUrl((dir + filename).replace("../", ""));
             } catch (IOException e) {
                 return Result.fail("文件上传失败");
             }
@@ -98,14 +98,34 @@ public class LessonController {
         return Result.ok("课时创建成功");
     }
 
-    /** 修改课时 | admin/授课教师 */
+    /** 修改课时（支持上传资源文件） | admin/授课教师 */
     @PutMapping("/{courseCode}/{lessonNo}")
-    public Result<Void> update(@PathVariable String courseCode, @PathVariable String lessonNo,
-                               @RequestBody Lesson lesson, HttpSession session) {
+    public Result<String> update(@PathVariable String courseCode, @PathVariable String lessonNo,
+                                 @RequestParam String lessonTitle,
+                                 @RequestParam String resourceType,
+                                 @RequestParam(required = false) String description,
+                                 @RequestParam(required = false) MultipartFile file,
+                                 HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
-        lesson.setLessonNo(lessonNo);
+        Lesson lesson = lessonService.getById(lessonNo);
+        if (lesson == null) return Result.fail("课时不存在");
+        lesson.setLessonTitle(lessonTitle);
+        lesson.setResourceType(resourceType);
+        lesson.setDescription(description);
+        if (file != null && !file.isEmpty()) {
+            try {
+                String dir = "../resource/LessonResource/";
+                File folder = new File(dir);
+                if (!folder.exists()) folder.mkdirs();
+                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                lesson.setResourceUrl((dir + filename).replace("../", ""));
+            } catch (IOException e) {
+                return Result.fail("文件上传失败");
+            }
+        }
         lessonService.updateById(lesson);
-        return Result.ok();
+        return Result.ok("课时更新成功");
     }
 
     /** 删除课时 | admin/授课教师 */

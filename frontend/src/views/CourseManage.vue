@@ -81,16 +81,16 @@ const openEdit = (row) => {
 }
 
 const save = async () => {
+  const fd = new FormData()
+  fd.append('courseName', form.courseName)
+  fd.append('teacher', form.teacher)
+  fd.append('credits', String(form.credits))
+  fd.append('hours', String(form.hours))
+  if (coverFile.value) fd.append('file', coverFile.value)
   if (isEdit.value) {
-    await updateCourse(form.courseCode, form)
+    await axios.put(`/practical-training/course/${form.courseCode}`, fd)
     ElMessage.success('已更新')
   } else {
-    const fd = new FormData()
-    fd.append('courseName', form.courseName)
-    fd.append('teacher', form.teacher)
-    fd.append('credits', form.credits)
-    fd.append('hours', form.hours)
-    if (coverFile.value) fd.append('file', coverFile.value)
     await axios.post('/practical-training/course', fd)
     ElMessage.success('已新增')
   }

@@ -72,6 +72,7 @@
 | `deadline` | DATETIME | 截止时间 |
 | `submitMethod` | VARCHAR | 提交方式，如"在线提交""文档上传" |
 | `score` | INT | 任务分值 |
+| `resourceUrl` | VARCHAR | 附件资源路径，如 `resource/TaskResource/xxx.pdf` |
 
 ### TaskSubmission（任务提交记录）
 
@@ -149,7 +150,9 @@
 | **授课教师可操作** | | | | |
 | `PUT /course/{courseCode}` | ❌ | ✅ ① | ✅ | ① 仅限该课授课教师 |
 | `POST /lesson` `PUT/DELETE /lesson/{code}/{no}` | ❌ | ✅ ① | ✅ | |
-| `POST /task` `PUT/DELETE /task/{code}/{no}` | ❌ | ✅ ① | ✅ | |
+| `POST /task`（multipart）`PUT/DELETE /task/{code}/{no}` | ❌ | ✅ ① | ✅ | 发布任务支持上传附件 |
+| **学生搜索** | | | | |
+| `GET /student/search?keyword=` | ❌ | ❌ | ✅ | 按姓名模糊查 |
 | **任务提交** | | | | |
 | `POST /submission` | ✅ | ❌ | ❌ | 提交文字+附件 |
 | `GET /submission/my` | ✅ | ❌ | ❌ | 查看自己的提交 |

@@ -17,15 +17,12 @@
               </template>
             </el-table-column>
             <el-table-column prop="description" label="内容简介" show-overflow-tooltip />
-            <el-table-column label="操作" :width="userRole!=='student' ? 200 : 100">
+            <el-table-column v-if="userRole!=='student'" label="操作" width="150">
               <template #default="{ row }">
-                <el-button size="small" type="primary" @click="$router.push('/lesson/' + row.lessonNo)">查看</el-button>
-                <template v-if="userRole!=='student'">
-                  <el-button size="small" @click="openLessonEdit(row)">编辑</el-button>
+                <el-button size="small" @click="openLessonEdit(row)">编辑</el-button>
                   <el-popconfirm title="确定删除？" @confirm="deleteLesson(row.lessonNo)">
                     <template #reference><el-button size="small" type="danger">删除</el-button></template>
                   </el-popconfirm>
-                </template>
               </template>
             </el-table-column>
           </el-table>
@@ -40,7 +37,11 @@
           </div>
           <el-table :data="tasks" style="width:100%">
             <el-table-column prop="taskNo" label="编号" width="80" />
-            <el-table-column prop="taskType" label="类型" width="100" />
+            <el-table-column label="类型" width="100">
+              <template #default="{ row }">
+                <el-link type="primary" @click="$router.push('/task/detail/' + row.taskNo)">{{ row.taskType }}</el-link>
+              </template>
+            </el-table-column>
             <el-table-column prop="description" label="任务说明" />
             <el-table-column prop="deadline" label="截止时间" width="180" />
             <el-table-column prop="submitMethod" label="提交方式" width="100" />
@@ -165,10 +166,7 @@ const saveLesson = async () => {
   fd.append('description', lessonForm.description || '')
   if (lessonFile.value) fd.append('file', lessonFile.value)
   if (isLessonEdit.value) {
-    await axios.put(`/practical-training/lesson/${code}/${lessonForm.lessonNo}`, {
-      courseCode: code, lessonTitle: lessonForm.lessonTitle,
-      resourceType: lessonForm.resourceType, description: lessonForm.description
-    })
+    await axios.put(`/practical-training/lesson/${code}/${lessonForm.lessonNo}`, fd)
   } else {
     await axios.post('/practical-training/lesson', fd)
   }
@@ -190,15 +188,17 @@ const openTaskAdd = () => {
 }
 const openTaskEdit = (row) => { isTaskEdit.value = true; Object.assign(taskForm, row); taskDialog.value = true }
 const saveTask = async () => {
+  const fd = new FormData()
+  fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
+  fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.submitMethod)
+  fd.append('score', String(taskForm.score))
+  if (taskFile.value) fd.append('file', taskFile.value)
+
   if (isTaskEdit.value) {
-    await axios.put(`/practical-training/task/${code}/${taskForm.taskNo}`, taskForm)
+    await axios.put(`/practical-training/task/${code}/${taskForm.taskNo}`, fd)
     ElMessage.success('已更新')
   } else {
-    const fd = new FormData(); fd.append('courseCode', code)
-    fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
-    fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.submitMethod)
-    fd.append('score', String(taskForm.score))
-    if (taskFile.value) fd.append('file', taskFile.value)
+    fd.append('courseCode', code)
     await axios.post('/practical-training/task', fd)
     ElMessage.success('发布成功')
   }

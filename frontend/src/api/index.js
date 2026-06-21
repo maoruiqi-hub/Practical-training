@@ -44,6 +44,7 @@ export const addLesson = (formData) => api.post('/lesson', formData, {
 export const getTaskList = (code) => api.get(`/task/${code}`)
 export const searchTask = (keyword) => api.get('/task/search', { params: { keyword } })
 export const addTask = (data) => api.post('/task', data)
+export const getTaskDetail = (taskNo) => api.get('/task/detail/' + taskNo)
 export const updateTask = (code, no, data) => api.put(`/task/${code}/${no}`, data)
 export const deleteTask = (code, no) => api.delete(`/task/${code}/${no}`)
 

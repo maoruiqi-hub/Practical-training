@@ -96,12 +96,12 @@ public class CourseController {
         course.setHours(hours);
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "resource/CourseResource/";
+                String dir = "../resource/CourseResource/";
                 File folder = new File(dir);
                 if (!folder.exists()) folder.mkdirs();
                 String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                file.transferTo(new File(dir + filename));
-                course.setCoverUrl(dir + filename);
+                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                course.setCoverUrl((dir + filename).replace("../", ""));
             } catch (IOException e) {
                 return Result.fail("封面上传失败");
             }
@@ -118,12 +118,35 @@ public class CourseController {
         return Result.ok();
     }
 
-    /** 修改课程 | admin/授课教师 */
+    /** 修改课程（支持上传封面） | admin/授课教师 */
     @PutMapping("/{courseCode}")
-    public Result<Void> update(@PathVariable String courseCode, @RequestBody Course course, HttpSession session) {
+    public Result<String> update(@PathVariable String courseCode,
+                                 @RequestParam String courseName,
+                                 @RequestParam String teacher,
+                                 @RequestParam Integer credits,
+                                 @RequestParam Integer hours,
+                                 @RequestParam(required = false) MultipartFile file,
+                                 HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
-        course.setCourseCode(courseCode);
+        Course course = courseService.getById(courseCode);
+        if (course == null) return Result.fail("课程不存在");
+        course.setCourseName(courseName);
+        course.setTeacher(teacher);
+        course.setCredits(credits);
+        course.setHours(hours);
+        if (file != null && !file.isEmpty()) {
+            try {
+                String dir = "../resource/CourseResource/";
+                File folder = new File(dir);
+                if (!folder.exists()) folder.mkdirs();
+                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
+                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                course.setCoverUrl((dir + filename).replace("../", ""));
+            } catch (IOException e) {
+                return Result.fail("封面上传失败");
+            }
+        }
         courseService.updateById(course);
-        return Result.ok();
+        return Result.ok("课程更新成功");
     }
 }

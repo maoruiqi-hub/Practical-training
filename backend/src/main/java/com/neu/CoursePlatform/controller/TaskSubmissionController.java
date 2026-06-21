@@ -51,12 +51,12 @@ public class TaskSubmissionController {
 
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "resource/HomeworkUpload/";
+                String dir = "../resource/HomeworkUpload/";
                 File folder = new File(dir);
                 if (!folder.exists()) folder.mkdirs();
                 String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                file.transferTo(new File(dir + filename));
-                sub.setFilePath(dir + filename);
+                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                sub.setFilePath((dir + filename).replace("../", ""));
             } catch (IOException e) {
                 return Result.fail("文件上传失败");
             }
