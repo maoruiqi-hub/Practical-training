@@ -2,6 +2,24 @@
 
 ---
 
+## [e2e4327] 2026-06-22
+
+**Goal:** 更新详细设计说明书目录结构和项目需求文档，完善需求规格。
+
+**What was changed:**
+- `specs/毛瑞琪/详细设计说明书.md` — 新增系统总体设计、功能设计、工程文件组织设计架构章节；补充数据库设计章节（第6章）；交互原型设计从第3章调整为第7章
+- `specs/项目需求.md` — 标题细化为"AI智慧课程（选定python编程与数据分析这一门课作为对象）"；新增需求项：学习风险预警与干预建议、班级共性问题聚类、学生激励；补充课件PPT智能讲解说明
+
+**Current state:** 详细设计说明书骨架已扩展，项目需求从4项扩展到7项，更贴合实际教学场景。分支 `docs/update-specs` 已推送至 origin。
+
+**Next step:** 如需合并到 master，可创建 PR 或直接 merge；继续填充详细设计说明书中的空白内容。
+
+**Known risks / blockers:** 无。
+
+**What was intentionally NOT touched:** 未修改代码目录，仅涉及 specs/ 下的需求与设计文档。
+
+---
+
 ## [63b28a9] 2026-06-22
 
 **Goal:** 完善项目文档体系 — 效仿 token_reduce 项目风格重写 README，为 specs/ 和 docs/ 建立独立 README 说明各自职责边界。
