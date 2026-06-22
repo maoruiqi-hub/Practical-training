@@ -21,22 +21,20 @@
 
 ## 项目结构
 
-规格驱动（SDD）：`specs/`（待做与需求）→ 代码实现 → `docs/`（确定后的实现说明）。
+规格驱动（SDD）：`specs/`（应该建什么）→ `docs/`（怎么建）→ 代码目录（实际建什么）。
 
 ```
 .
 ├── specs/                  ★ 规格文档 — 待做事项与需求（项目唯一事实源）
 │   ├── 毛瑞琪/             个人需求分析 / 创新点 / 技术调研文档
 │   └── README.md           规格目录说明与写作规范
-├── docs/                   ★ 实现文档 — 确定后的设计方案与实现说明
-│   └── README.md           文档目录说明
+├── docs/                   ★ 设计文档 — 确定后的技术方案与设计说明（怎么写）
 ├── frontend/               前端应用（教师端 + 学生端）
 ├── backend/                后端 RESTful API 服务
 ├── agentic/                AI Agent 服务（LLM 驱动的知识图谱、智能评分、推荐）
 ├── resource/               静态资源与教学资源模板
 ├── references/             参考文档与迭代日志
 │   └── ITERATION_LOG.md    开发迭代日志（每次提交均在此记录）
-├── CLAUDE.md               Claude Code 项目上下文
 └── README.md               本文件
 ```
 
@@ -45,26 +43,26 @@
 | 目录 | 职责 | 内容示例 |
 |------|------|---------|
 | `specs/` | **待做与需求**（开发前先写清楚"应该建什么"） | 需求分析、创新点、技术调研、任务拆解 |
-| `docs/` | **确定后的实现**（开发后记录"实际建了什么"） | 设计说明、API 文档、部署文档、实现总结 |
+| `docs/` | **怎么建**（设计方案，写代码前先确定技术方案） | 架构设计、API 定义、数据模型、部署方案 |
 | `references/` | 开发过程参考 | 迭代日志、外部参考资料 |
 
-> **门控规则**：新功能或行为变更，先把需求写进 `specs/`，实现完成后再把设计说明落进 `docs/`。直接写代码不碰文档 = 不合规。
+> **门控规则**：新功能或行为变更，先把需求写进 `specs/`，再在 `docs/` 确定技术方案，最后写代码。直接写代码不碰文档 = 不合规。
 
 ## 开发流程
 
 ```text
-  需求分析          规格编写           代码实现           文档沉淀
-  ───────→  specs/  ───────→  frontend/  ───────→  docs/
-                （待做与需求）     backend/     （确定后的实现）
-                              agentic/
+  需求分析          规格编写           方案设计           代码实现
+  ───────→  specs/  ───────→  docs/   ───────→  frontend/
+                （应该建什么）    （怎么建）      backend/
+                                              agentic/
 ```
 
-1. **需求阶段** — 在 `specs/` 中编写需求分析、技术选型理由、功能拆解
-2. **实现阶段** — 在对应代码目录（`frontend/`、`backend/`、`agentic/`）中开发
-3. **沉淀阶段** — 将确定的设计方案、API 接口、部署说明写入 `docs/`
+1. **需求阶段** — 在 `specs/` 中编写需求分析、创新点、功能拆解
+2. **设计阶段** — 在 `docs/` 中确定架构设计、API 定义、数据模型等技术方案
+3. **实现阶段** — 在对应代码目录（`frontend/`、`backend/`、`agentic/`）中按设计方案开发
 4. **迭代日志** — 每次提交后更新 `references/ITERATION_LOG.md`
 
-> 新人上手前先读：[CLAUDE.md](CLAUDE.md)（项目上下文）、[specs/README.md](specs/README.md)（规格说明）、[references/ITERATION_LOG.md](references/ITERATION_LOG.md)（最新进展）
+> 新人上手前先读：[specs/README.md](specs/README.md)（规格说明）、[references/ITERATION_LOG.md](references/ITERATION_LOG.md)（最新进展）
 
 ## 技术栈
 

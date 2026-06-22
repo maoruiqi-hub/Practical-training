@@ -2,6 +2,26 @@
 
 ---
 
+## [63b28a9] 2026-06-22
+
+**Goal:** 完善项目文档体系 — 效仿 token_reduce 项目风格重写 README，为 specs/ 和 docs/ 建立独立 README 说明各自职责边界。
+
+**What was changed:**
+- 重写 `README.md` — 新增架构图（ASCII）、完整项目结构、开发流程（specs → 代码 → docs）、技术栈、核心功能、快速启动
+- 新增 `specs/README.md` — 规格文档体系说明，明确 specs/ = 待做与需求，含写作规范与门控规则
+- 新增 `docs/README.md` — 实现文档说明，明确 docs/ = 确定后的实现，区分与 specs/ 的边界
+- 追踪 `specs/毛瑞琪/创新点-数据库.md` 和 `specs/毛瑞琪/创新点-鸿蒙应用.md`
+
+**Current state:** 三级 README（根 / specs / docs）全部到位，项目结构与开发流程一目了然，新人可按 CLAUDE.md → specs/README.md → ITERATION_LOG.md 顺序快速上手。
+
+**Next step:** 合并到 master 并推送。
+
+**Known risks / blockers:** 无。
+
+**What was intentionally NOT touched:** 未修改任何代码目录（frontend/backend/agentic 仍为空骨架）。
+
+---
+
 ## [7d76c11] 2026-06-22
 
 **Goal:** 将之前未追踪的参考文档和规格说明书纳入版本管理，整理文档目录结构。
