@@ -2,6 +2,25 @@
 
 ---
 
+## [7d76c11] 2026-06-22
+
+**Goal:** 将之前未追踪的参考文档和规格说明书纳入版本管理，整理文档目录结构。
+
+**What was changed:**
+- 新增 `references/ITERATION_LOG.md` — 迭代日志文件
+- 新增 `specs/毛瑞琪/详细设计说明书.md` — 详细设计说明书
+- 将 `docs/鸿蒙PC端应用开发总结.md` 移动到 `specs/毛瑞琪/` 目录下 — 归类到个人规格目录
+
+**Current state:** 所有文档已追踪，目录结构更加清晰（references 放参考/日志，specs 放规格说明书）。
+
+**Next step:** 合并到 master 分支并推送到远程。
+
+**Known risks / blockers:** 无。
+
+**What was intentionally NOT touched:** 未修改任何代码文件，仅处理文档追踪和目录整理。
+
+---
+
 ## [3800a86] 2026-06-14
 
 **Goal:** 初始化项目仓库，创建一级目录结构，同步到 GitHub。
