@@ -240,3 +240,65 @@ CREATE TABLE IF NOT EXISTS task_question (
     task_no INT,
     question_id INT
 );
+
+-- ============================================================
+-- 模块5：学情分析与教学决策
+-- ============================================================
+
+-- 班级表
+CREATE TABLE IF NOT EXISTS analytics_class (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    course_id VARCHAR(36),
+    teacher_id VARCHAR(36),
+    semester VARCHAR(32),
+    created_at DATETIME,
+    updated_at DATETIME
+);
+
+-- 班级-学生关联表
+CREATE TABLE IF NOT EXISTS analytics_class_student (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_class_student (class_id, student_id)
+);
+
+-- 学习风险预警表
+CREATE TABLE IF NOT EXISTS analytics_risk_alert (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id VARCHAR(36) NOT NULL,
+    course_id VARCHAR(36),
+    risk_type VARCHAR(32) NOT NULL,
+    risk_level VARCHAR(16) NOT NULL,
+    detail JSON,
+    status VARCHAR(16) DEFAULT 'active',
+    created_at DATETIME,
+    resolved_at DATETIME,
+    resolved_by VARCHAR(36),
+    UNIQUE KEY uk_active_alert (student_id, risk_type, status)
+);
+
+-- 分析报告表
+CREATE TABLE IF NOT EXISTS analytics_report (
+    id VARCHAR(36) PRIMARY KEY,
+    class_id VARCHAR(36) NOT NULL,
+    report_type VARCHAR(32) NOT NULL,
+    data_json JSON,
+    generated_at DATETIME
+);
+
+-- 教学建议表
+CREATE TABLE IF NOT EXISTS analytics_teaching_suggestion (
+    id VARCHAR(36) PRIMARY KEY,
+    class_id VARCHAR(36),
+    course_id VARCHAR(36),
+    suggestion_type VARCHAR(32),
+    content TEXT,
+    target_type VARCHAR(16),
+    target_id VARCHAR(36),
+    urgency VARCHAR(16),
+    based_on JSON,
+    generated_at DATETIME
+);

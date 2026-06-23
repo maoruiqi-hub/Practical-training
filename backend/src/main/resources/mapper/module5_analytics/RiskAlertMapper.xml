@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.module5_analytics.mapper.RiskAlertMapper">
+
+    <select id="selectActiveByStudent" resultType="com.neu.CoursePlatform.module5_analytics.entity.RiskAlert">
+        SELECT * FROM analytics_risk_alert
+        WHERE student_id = #{studentId} AND status = 'active'
+        ORDER BY
+            CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+            created_at DESC
+    </select>
+
+    <select id="selectActiveByClass" resultType="com.neu.CoursePlatform.module5_analytics.entity.RiskAlert">
+        SELECT * FROM analytics_risk_alert
+        WHERE status = 'active'
+        <if test="studentIds != null and studentIds.size() > 0">
+            AND student_id IN
+            <foreach collection="studentIds" item="sid" open="(" separator="," close=")">
+                #{sid}
+            </foreach>
+        </if>
+        <if test="studentIds == null or studentIds.size() == 0">
+            AND 1 = 0
+        </if>
+        ORDER BY
+            CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+            created_at DESC
+    </select>
+
+    <select id="countActiveByType" resultType="int">
+        SELECT COUNT(*) FROM analytics_risk_alert
+        WHERE student_id = #{studentId} AND risk_type = #{riskType} AND status = 'active'
+    </select>
+
+    <select id="selectActiveByStudentIds" resultType="com.neu.CoursePlatform.module5_analytics.entity.RiskAlert">
+        SELECT * FROM analytics_risk_alert
+        WHERE status = 'active'
+        <if test="studentIds != null and studentIds.size() > 0">
+            AND student_id IN
+            <foreach collection="studentIds" item="sid" open="(" separator="," close=")">
+                #{sid}
+            </foreach>
+        </if>
+        <if test="studentIds == null or studentIds.size() == 0">
+            AND 1 = 0
+        </if>
+    </select>
+
+</mapper>
