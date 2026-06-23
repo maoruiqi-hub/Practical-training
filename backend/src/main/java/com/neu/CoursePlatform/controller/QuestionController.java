@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.controller;
 
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.dto.PaperGenerateRequest;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.TaskQuestion;
@@ -59,6 +60,19 @@ public class QuestionController {
     public Result<List<Question>> search(@RequestParam String keyword, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         return Result.ok(questionService.searchByKeyword(keyword));
+    }
+
+    /** 按策略生成测验试卷 | admin/授课教师 */
+    @PostMapping("/course/{courseCode}/generate")
+    public Result<List<Question>> generatePaper(@PathVariable String courseCode,
+                                                @RequestBody PaperGenerateRequest request,
+                                                HttpSession session) {
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        try {
+            return Result.ok(questionService.generatePaper(courseCode, request));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
     }
 
     /** 新增题目 | admin/授课教师 */

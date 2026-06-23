@@ -66,7 +66,7 @@
     <!-- 任务弹窗 -->
     <el-dialog v-model="taskDialog" :title="isTaskEdit ? '编辑任务' : '发布任务'" width="650px">
       <el-form :model="taskForm" label-width="80px">
-        <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="课堂测验" value="课堂测验" /><el-option label="实验报告" value="实验报告" /><el-option label="测验" value="quiz" /><el-option label="其他" value="other" /></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="实验报告" value="实验报告" /><el-option label="在线测验" value="quiz" /><el-option label="其他" value="other" /></el-select></el-form-item>
         <el-form-item :label="taskForm.taskType==='quiz'?'测验名称':'任务说明'"><el-input v-model="taskForm.description" /></el-form-item>
         <el-form-item label="截止时间"><el-input v-model="taskForm.deadline" placeholder="2026-07-15 23:59:59" /></el-form-item>
         <el-form-item v-if="taskForm.taskType!=='quiz'" label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
@@ -79,12 +79,37 @@
             <el-input v-model="qLesson" placeholder="课时编号" style="width:100px" size="small" clearable />
             <el-button size="small" @click="loadQuestions">筛选</el-button>
           </div>
+          <div class="paper-panel">
+            <el-select v-model="paperForm.strategy" size="small" style="width:130px">
+              <el-option label="随机组卷" value="random" />
+              <el-option label="按知识点组卷" value="knowledge" />
+              <el-option label="难度平衡" value="difficulty" />
+            </el-select>
+            <el-input-number v-model="paperForm.count" :min="1" :max="100" size="small" controls-position="right" style="width:110px" />
+            <el-select v-model="paperForm.types" multiple collapse-tags collapse-tags-tooltip placeholder="题型" size="small" style="width:180px">
+              <el-option label="单选" value="single" />
+              <el-option label="多选" value="multi" />
+              <el-option label="填空" value="fill" />
+              <el-option label="简答" value="essay" />
+              <el-option label="编程" value="program" />
+            </el-select>
+            <el-select v-model="paperForm.knowledgePoints" multiple allow-create filterable default-first-option collapse-tags collapse-tags-tooltip placeholder="知识点" size="small" style="width:200px">
+              <el-option v-for="kp in knowledgeOptions" :key="kp" :label="kp" :value="kp" />
+            </el-select>
+            <el-select v-model="paperForm.difficultyRange" placeholder="难度" size="small" style="width:120px">
+              <el-option label="全部难度" :value="[1,5]" />
+              <el-option label="基础 1-2" :value="[1,2]" />
+              <el-option label="中等 3" :value="[3,3]" />
+              <el-option label="提高 4-5" :value="[4,5]" />
+            </el-select>
+            <el-button size="small" type="primary" :loading="paperLoading" @click="generatePaperQuestions">生成试卷</el-button>
+          </div>
           <div v-loading="qLoading" style="max-height:320px;overflow-y:auto;width:100%;border:1px solid #eee;border-radius:6px;padding:12px">
             <div style="color:#999;font-size:12px;margin-bottom:8px">已选 {{ selectedQuestions.length }} 题，共 {{ filteredQuestions.length }} 题</div>
             <el-checkbox-group v-model="selectedQuestions">
               <div v-for="q in filteredQuestions" :key="q.questionId" style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #eee;text-align:left">
                 <el-checkbox :value="q.questionId">{{ q.stem }}</el-checkbox>
-                <span style="margin-left:8px"><el-tag size="small">{{ typeLabel(q.type) }}</el-tag><span style="color:#999;font-size:12px;margin-left:4px">{{ q.score }}分 | 课时{{ q.lessonNo }} | {{ q.knowledgePoint }}</span></span>
+                <span style="margin-left:8px"><el-tag size="small">{{ typeLabel(q.type) }}</el-tag><span style="color:#999;font-size:12px;margin-left:4px">{{ q.score }}分 | 难度{{ q.difficulty || '-' }} | 课时{{ q.lessonNo || '-' }} | {{ q.knowledgePoint || '未关联知识点' }}</span></span>
               </div>
             </el-checkbox-group>
             <el-empty v-if="!questionBank.length && !qLoading" description="暂无题目" :image-size="40" />
@@ -132,6 +157,7 @@ import {
   getTaskList,
   searchQuestion,
   getQuestionsByCourse,
+  generatePaper,
   updateLesson,
   addLesson,
   deleteLesson as deleteLessonApi,
@@ -167,6 +193,8 @@ const questionBank = ref([])
 const qLoading = ref(false)
 const qKeyword = ref('')
 const qLesson = ref('')
+const paperLoading = ref(false)
+const paperForm = reactive({ strategy: 'random', count: 10, types: [], knowledgePoints: [], difficultyRange: [1, 5] })
 
 const filteredQuestions = computed(() => {
   return questionBank.value.filter(q => {
@@ -176,7 +204,11 @@ const filteredQuestions = computed(() => {
   })
 })
 
-const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答'}[t]||t)
+const knowledgeOptions = computed(() => {
+  return [...new Set(questionBank.value.map(q => q.knowledgePoint).filter(Boolean))]
+})
+
+const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
 
 const loadQuestions = async () => {
   qLoading.value = true
@@ -193,19 +225,62 @@ const onTaskTypeChange = async (val) => {
   if (val === 'quiz') { qKeyword.value = ''; qLesson.value = ''; selectedQuestions.value = []; loadQuestions() }
 }
 
+const generatePaperQuestions = async () => {
+  paperLoading.value = true
+  try {
+    const [difficultyMin, difficultyMax] = paperForm.difficultyRange || [1, 5]
+    const res = await generatePaper(code, {
+      strategy: paperForm.strategy,
+      count: paperForm.count,
+      types: paperForm.types,
+      knowledgePoints: paperForm.knowledgePoints,
+      difficultyMin,
+      difficultyMax
+    })
+    if (res.data.code === 200) {
+      const generated = res.data.data || []
+      questionBank.value = mergeQuestions(questionBank.value, generated)
+      selectedQuestions.value = generated.map(q => q.questionId)
+      ElMessage.success(`已生成 ${generated.length} 道题`)
+    } else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('组卷失败')
+  } finally {
+    paperLoading.value = false
+  }
+}
+
+const mergeQuestions = (base, added) => {
+  const map = new Map(base.map(q => [q.questionId, q]))
+  added.forEach(q => map.set(q.questionId, q))
+  return [...map.values()]
+}
+
 onMounted(async () => {
   try {
     const [lRes, cRes] = await Promise.all([getCourseLessons(code), searchCourse(code)])
     if (lRes.data.code === 200) lessons.value = lRes.data.data
     if (cRes.data.code === 200 && cRes.data.data.length > 0) courseName.value = cRes.data.data[0].courseName
+  } catch {
+    ElMessage.error('课时加载失败')
   } finally { loading.value = false }
   try {
     const tRes = await getTaskList(code)
     if (tRes.data.code === 200) tasks.value = tRes.data.data
+  } catch {
+    ElMessage.error('任务加载失败')
   } finally { taskLoading.value = false }
 })
 
-const reloadLessons = async () => { const r = await getCourseLessons(code); if (r.data.code === 200) lessons.value = r.data.data }
+const reloadLessons = async () => {
+  try {
+    const r = await getCourseLessons(code)
+    if (r.data.code === 200) lessons.value = r.data.data
+    else ElMessage.error(r.data.msg)
+  } catch {
+    ElMessage.error('课时加载失败')
+  }
+}
 
 const openLessonAdd = () => {
   isLessonEdit.value = false; lessonFile.value = null
@@ -220,58 +295,110 @@ const openLessonEdit = (row) => {
 const handleLessonFile = (f) => { lessonFile.value = f.raw }
 const handleTaskFile = (f) => { taskFile.value = f.raw }
 const saveLesson = async () => {
-  const fd = new FormData(); fd.append('courseCode', code)
-  fd.append('lessonTitle', lessonForm.lessonTitle)
-  fd.append('resourceType', lessonForm.resourceType)
-  fd.append('description', lessonForm.description || '')
-  if (lessonFile.value) fd.append('file', lessonFile.value)
-  if (isLessonEdit.value) {
-    await updateLesson(code, lessonForm.lessonNo, fd)
-  } else {
-    await addLesson(fd)
+  try {
+    const fd = new FormData(); fd.append('courseCode', code)
+    fd.append('lessonTitle', lessonForm.lessonTitle)
+    fd.append('resourceType', lessonForm.resourceType)
+    fd.append('description', lessonForm.description || '')
+    if (lessonFile.value) fd.append('file', lessonFile.value)
+    if (isLessonEdit.value) {
+      await updateLesson(code, lessonForm.lessonNo, fd)
+    } else {
+      await addLesson(fd)
+    }
+    ElMessage.success(isLessonEdit.value ? '已更新' : '已新增')
+    lessonDialog.value = false; reloadLessons()
+  } catch {
+    ElMessage.error('课时保存失败')
   }
-  ElMessage.success(isLessonEdit.value ? '已更新' : '已新增')
-  lessonDialog.value = false; reloadLessons()
 }
 const deleteLesson = async (lessonNo) => {
-  await deleteLessonApi(code, lessonNo)
-  ElMessage.success('已删除'); reloadLessons()
+  try {
+    await deleteLessonApi(code, lessonNo)
+    ElMessage.success('已删除'); reloadLessons()
+  } catch {
+    ElMessage.error('课时删除失败')
+  }
 }
 
 // 任务增删改
-const reloadTasks = async () => { const r = await getTaskList(code); if (r.data.code === 200) tasks.value = r.data.data }
+const reloadTasks = async () => {
+  try {
+    const r = await getTaskList(code)
+    if (r.data.code === 200) tasks.value = r.data.data
+    else ElMessage.error(r.data.msg)
+  } catch {
+    ElMessage.error('任务加载失败')
+  }
+}
 
 const openTaskAdd = () => {
   isTaskEdit.value = false; taskFile.value = null
   Object.assign(taskForm, { taskNo: '', taskType: '', description: '', deadline: '', submitMethod: '', score: 0 })
+  Object.assign(paperForm, { strategy: 'random', count: 10, types: [], knowledgePoints: [], difficultyRange: [1, 5] })
   taskDialog.value = true
 }
 const openTaskEdit = (row) => { isTaskEdit.value = true; Object.assign(taskForm, row); taskDialog.value = true }
 const saveTask = async () => {
-  const fd = new FormData()
-  fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
-  fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.taskType==='quiz' ? '在线答题' : (taskForm.submitMethod || ''))
-  fd.append('score', String(taskForm.score))
-  if (taskFile.value) fd.append('file', taskFile.value)
-
-  if (isTaskEdit.value) {
-    await updateTask(code, taskForm.taskNo, fd)
-    ElMessage.success('已更新')
-  } else {
-    fd.append('courseCode', code)
-    const created = await addTask(fd)
-    // 测验：保存选题关联
-    if (taskForm.taskType === 'quiz' && selectedQuestions.value.length) {
-      if (created.data.code === 200 && created.data.data) {
-        await addQuestionsToTask(created.data.data, selectedQuestions.value)
-      }
-    }
-    ElMessage.success('发布成功')
+  if (taskForm.taskType === 'quiz' && !selectedQuestions.value.length) {
+    ElMessage.error('请先选择题目或生成试卷')
+    return
   }
-  taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; reloadTasks()
+  try {
+    const fd = new FormData()
+    fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
+    fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.taskType==='quiz' ? '在线答题' : (taskForm.submitMethod || ''))
+    fd.append('score', String(taskForm.score))
+    if (taskFile.value) fd.append('file', taskFile.value)
+
+    if (isTaskEdit.value) {
+      const res = await updateTask(code, taskForm.taskNo, fd)
+      if (res.data.code !== 200) {
+        ElMessage.error(res.data.msg || '任务更新失败')
+        return
+      }
+      ElMessage.success('已更新')
+    } else {
+      fd.append('courseCode', code)
+      const created = await addTask(fd)
+      if (created.data.code !== 200 || !created.data.data) {
+        ElMessage.error(created.data.msg || '任务发布失败')
+        return
+      }
+      // 测验：保存选题关联
+      if (taskForm.taskType === 'quiz' && selectedQuestions.value.length) {
+        const bindRes = await addQuestionsToTask(created.data.data, selectedQuestions.value)
+        if (bindRes.data.code !== 200) {
+          ElMessage.error(bindRes.data.msg || '试卷题目绑定失败')
+          return
+        }
+      }
+      ElMessage.success(taskForm.taskType === 'quiz' ? `发布成功，已绑定 ${selectedQuestions.value.length} 道题` : '发布成功')
+    }
+    taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; reloadTasks()
+  } catch {
+    ElMessage.error(isTaskEdit.value ? '任务更新失败，请稍后重试' : '任务发布失败，请稍后重试')
+  }
 }
 const deleteTask = async (taskNo) => {
-  await deleteTaskApi(code, taskNo)
-  ElMessage.success('已删除'); reloadTasks()
+  try {
+    await deleteTaskApi(code, taskNo)
+    ElMessage.success('已删除'); reloadTasks()
+  } catch {
+    ElMessage.error('任务删除失败')
+  }
 }
 </script>
+
+<style scoped>
+.paper-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafafa;
+}
+</style>

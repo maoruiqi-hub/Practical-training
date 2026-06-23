@@ -25,8 +25,8 @@
         <template v-else-if="q.type==='fill'">
           <el-input v-model="getAns[q.questionId]" placeholder="请输入答案" />
         </template>
-        <template v-else-if="q.type==='essay'">
-          <el-input v-model="getAns[q.questionId]" type="textarea" :rows="4" placeholder="请输入答案" />
+        <template v-else-if="q.type==='essay'||q.type==='program'">
+          <el-input v-model="getAns[q.questionId]" type="textarea" :rows="q.type==='program' ? 8 : 4" :placeholder="q.type==='program' ? '请输入代码或解题思路' : '请输入答案'" />
         </template>
       </el-card>
       <el-button type="success" @click="submitQuiz" :disabled="submitted" style="width:100%" size="large">{{ submitted ? '已提交' : '提交答卷' }}</el-button>
@@ -48,7 +48,7 @@ const questions = ref([])
 const loading = ref(true)
 const submitted = ref(false)
 const getAns = reactive({})
-const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答'}[t]||t)
+const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
 
 onMounted(async () => {
   try {

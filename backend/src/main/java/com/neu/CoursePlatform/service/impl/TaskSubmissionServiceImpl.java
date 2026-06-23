@@ -135,10 +135,10 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         sub.setScore(autoScoreChoices(sub));
         if (containsManualQuestions(sub)) {
             sub.setStatus("submitted");
-            sub.setFeedback("系统已自动批改客观题，主观题待教师复核");
+            sub.setFeedback("系统已自动评阅客观题，主观题/编程题待教师复核");
         } else {
             sub.setStatus("graded");
-            sub.setFeedback("系统已自动批改");
+            sub.setFeedback("系统已自动评阅");
         }
     }
 

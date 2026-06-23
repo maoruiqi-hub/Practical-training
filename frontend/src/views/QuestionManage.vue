@@ -31,7 +31,7 @@
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑题目' : '新增题目'" width="600px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="题型"><el-select v-model="form.type"><el-option label="单选" value="single" /><el-option label="多选" value="multi" /><el-option label="填空" value="fill" /><el-option label="简答" value="essay" /></el-select></el-form-item>
+        <el-form-item label="题型"><el-select v-model="form.type"><el-option label="单选" value="single" /><el-option label="多选" value="multi" /><el-option label="填空" value="fill" /><el-option label="简答" value="essay" /><el-option label="编程" value="program" /></el-select></el-form-item>
         <el-form-item label="题干"><el-input v-model="form.stem" type="textarea" :rows="2" /></el-form-item>
         <el-form-item v-if="form.type==='single'||form.type==='multi'" label="选项">
           <div v-for="(o,i) in optList" :key="i" style="display:flex;gap:8px;margin-bottom:6px">
@@ -40,7 +40,7 @@
           </div>
           <el-button size="small" @click="optList.push('')">+ 添加选项</el-button>
         </el-form-item>
-        <el-form-item label="答案"><el-input v-model="form.answer" placeholder="单选填选项文字，多选用逗号分隔，填空填关键词，简答填评分要点" /></el-form-item>
+        <el-form-item label="答案"><el-input v-model="form.answer" :placeholder="answerPlaceholder" /></el-form-item>
         <el-form-item label="课程"><el-input v-model="form.courseCode" placeholder="课程编号" /></el-form-item>
         <el-form-item label="关联课时"><el-input v-model="form.lessonNo" placeholder="课时编号" /></el-form-item>
         <el-form-item label="知识点"><el-input v-model="form.knowledgePoint" /></el-form-item>
@@ -65,7 +65,13 @@ const isEdit = ref(false)
 const form = reactive({ questionId:'',type:'single',stem:'',answer:'',courseCode:'1',lessonNo:'',knowledgePoint:'',difficulty:3,score:10,options:'' })
 const optList = ref([])
 
-const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答'}[t]||t)
+const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
+const answerPlaceholder = computed(() => {
+  if (form.type === 'multi') return '多选用逗号分隔'
+  if (form.type === 'essay') return '填写评分要点'
+  if (form.type === 'program') return '填写参考代码、测试要点或评分标准'
+  return '填写正确答案'
+})
 
 const doSearch = async () => {
   loading.value = true
@@ -92,18 +98,32 @@ const openEdit = (row) => {
   dialogVisible.value = true
 }
 const save = async () => {
-  if (['single','multi'].includes(form.type)) form.options = JSON.stringify(optList.value)
-  else form.options = null
-  if (isEdit.value) {
-    await updateQuestion(form.questionId, form)
-    ElMessage.success('已更新')
-  } else {
-    await addQuestion(form)
-    ElMessage.success('已新增')
+  try {
+    if (['single','multi'].includes(form.type)) form.options = JSON.stringify(optList.value)
+    else form.options = null
+    if (isEdit.value) {
+      const res = await updateQuestion(form.questionId, form)
+      if (res.data.code !== 200) { ElMessage.error(res.data.msg); return }
+      ElMessage.success('已更新')
+    } else {
+      const res = await addQuestion(form)
+      if (res.data.code !== 200) { ElMessage.error(res.data.msg); return }
+      ElMessage.success('已新增')
+    }
+    dialogVisible.value = false; doSearch()
+  } catch {
+    ElMessage.error('题目保存失败')
   }
-  dialogVisible.value = false; doSearch()
 }
-const del = async (id) => { await deleteQuestion(id); ElMessage.success('已删除'); doSearch() }
+const del = async (id) => {
+  try {
+    const res = await deleteQuestion(id)
+    if (res.data.code !== 200) { ElMessage.error(res.data.msg); return }
+    ElMessage.success('已删除'); doSearch()
+  } catch {
+    ElMessage.error('题目删除失败')
+  }
+}
 </script>
 
 <style scoped>

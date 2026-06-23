@@ -90,7 +90,7 @@ const dialogVisible = ref(false)
 const grading = ref({ submissionId: '', studentName: '', content: '', score: null, feedback: '' })
 const gradeLoading = ref(false)
 const gradeDetails = ref([])
-const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答'}[t]||t)
+const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
 
 const handleFile = (f) => { file.value = f.raw }
 

@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/practical-training',
-  timeout: 10000
+  timeout: 30000
 })
 
 // ============ 学生 ============
@@ -73,6 +73,7 @@ export const getQuestionById = (id) => api.get(`/question/${id}`)
 export const getQuestionsByCourse = (courseCode) => api.get(`/question/course/${courseCode}`)
 export const getQuestionsByLesson = (lessonNo) => api.get(`/question/lesson/${lessonNo}`)
 export const searchQuestion = (keyword) => api.get('/question/search', { params: { keyword } })
+export const generatePaper = (courseCode, data) => api.post(`/question/course/${courseCode}/generate`, data)
 export const addQuestion = (data) => api.post('/question', data)
 export const updateQuestion = (id, data) => api.put(`/question/${id}`, data)
 export const deleteQuestion = (id) => api.delete(`/question/${id}`)
