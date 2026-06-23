@@ -3,30 +3,27 @@ package com.neu.CoursePlatform.controller;
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.LessonDTO;
-import com.neu.CoursePlatform.entity.Course;
 import com.neu.CoursePlatform.entity.Lesson;
-import com.neu.CoursePlatform.service.CourseService;
+import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LessonService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/lesson")
 public class LessonController {
 
     private final LessonService lessonService;
-    private final CourseService courseService;
+    private final FileStorageService fileStorageService;
     private final Auth auth;
 
-    public LessonController(LessonService lessonService, CourseService courseService, Auth auth) {
+    public LessonController(LessonService lessonService, FileStorageService fileStorageService, Auth auth) {
         this.lessonService = lessonService;
-        this.courseService = courseService;
+        this.fileStorageService = fileStorageService;
         this.auth = auth;
     }
 
@@ -34,21 +31,8 @@ public class LessonController {
     @GetMapping("/detail/{lessonNo}")
     public Result<LessonDTO> detail(@PathVariable String lessonNo, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        Lesson l = lessonService.getById(lessonNo);
-        if (l == null) return Result.fail("课时不存在");
-        LessonDTO dto = new LessonDTO();
-        dto.setLessonNo(l.getLessonNo());
-        dto.setCourseCode(l.getCourseCode());
-        dto.setLessonTitle(l.getLessonTitle());
-        dto.setResourceType(l.getResourceType());
-        dto.setResourceUrl(l.getResourceUrl());
-        dto.setDescription(l.getDescription());
-        Course c = courseService.getById(l.getCourseCode());
-        if (c != null) {
-            dto.setCourseName(c.getCourseName());
-            dto.setTeacherName(c.getTeacher());
-        }
-        return Result.ok(dto);
+        LessonDTO dto = lessonService.getDetailDto(lessonNo);
+        return dto != null ? Result.ok(dto) : Result.fail("课时不存在");
     }
 
     /** 查看某课程的课时列表 | 登录用户 */
@@ -83,12 +67,7 @@ public class LessonController {
 
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "../resource/LessonResource/";
-                File folder = new File(dir);
-                if (!folder.exists()) folder.mkdirs();
-                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
-                lesson.setResourceUrl((dir + filename).replace("../", ""));
+                lesson.setResourceUrl(fileStorageService.store(file, "../resource/LessonResource/"));
             } catch (IOException e) {
                 return Result.fail("文件上传失败");
             }
@@ -114,12 +93,7 @@ public class LessonController {
         lesson.setDescription(description);
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "../resource/LessonResource/";
-                File folder = new File(dir);
-                if (!folder.exists()) folder.mkdirs();
-                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
-                lesson.setResourceUrl((dir + filename).replace("../", ""));
+                lesson.setResourceUrl(fileStorageService.store(file, "../resource/LessonResource/"));
             } catch (IOException e) {
                 return Result.fail("文件上传失败");
             }

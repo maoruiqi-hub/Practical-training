@@ -3,27 +3,26 @@ package com.neu.CoursePlatform.controller;
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.entity.LearningTask;
+import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/task")
 public class TaskController {
 
     private final LearningTaskService taskService;
+    private final FileStorageService fileStorageService;
     private final Auth auth;
 
-    public TaskController(LearningTaskService taskService, Auth auth) {
+    public TaskController(LearningTaskService taskService, FileStorageService fileStorageService, Auth auth) {
         this.taskService = taskService;
+        this.fileStorageService = fileStorageService;
         this.auth = auth;
     }
 
@@ -66,23 +65,20 @@ public class TaskController {
         task.setDescription(description);
         task.setSubmitMethod(submitMethod);
         task.setScore(score);
-        if (deadline != null && !deadline.isEmpty()) {
-            task.setDeadline(LocalDateTime.parse(deadline.replace(" ", "T")));
+        try {
+            taskService.applyDeadline(task, deadline);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
         }
         if (file != null && !file.isEmpty()) {
-            String dir = "../resource/TaskResource/";
-            File folder = new File(dir);
-            if (!folder.exists()) folder.mkdirs();
-            String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
             try {
-                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
+                task.setResourceUrl(fileStorageService.store(file, "../resource/TaskResource/"));
             } catch (IOException e) {
                 return Result.fail("附件上传失败");
             }
-            task.setResourceUrl((dir + filename).replace("../", ""));
         }
         taskService.save(task);
-        return Result.ok("任务发布成功");
+        return Result.ok(task.getTaskNo());
     }
 
     /** 修改任务（支持上传附件） | admin/授课教师 */
@@ -102,17 +98,14 @@ public class TaskController {
         task.setDescription(description);
         task.setSubmitMethod(submitMethod);
         task.setScore(score);
-        if (deadline != null && !deadline.isEmpty()) {
-            task.setDeadline(LocalDateTime.parse(deadline.replace(" ", "T")));
+        try {
+            taskService.applyDeadline(task, deadline);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
         }
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "../resource/TaskResource/";
-                File folder = new File(dir);
-                if (!folder.exists()) folder.mkdirs();
-                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
-                task.setResourceUrl((dir + filename).replace("../", ""));
+                task.setResourceUrl(fileStorageService.store(file, "../resource/TaskResource/"));
             } catch (IOException e) {
                 return Result.fail("附件上传失败");
             }

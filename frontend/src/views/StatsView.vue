@@ -5,7 +5,7 @@
       <div v-loading="loading" style="min-height:200px">
         <el-row :gutter="20" v-if="stats">
           <el-col :span="8"><el-statistic title="提交数" :value="stats.totalSubmissions" /></el-col>
-          <el-col :span="8"><el-statistic title="已批改" :value="stats.gradedCount" /></el-col>
+          <el-col :span="8"><el-statistic title="已评阅" :value="stats.gradedCount" /></el-col>
           <el-col :span="8"><el-statistic title="平均分" :value="stats.averageScore" :precision="1" /></el-col>
         </el-row>
         <el-divider />
@@ -13,11 +13,14 @@
         <div ref="chartRef" style="width:100%;height:350px"></div>
         <el-divider />
         <h4>成绩明细</h4>
-        <el-table :data="stats?.details" style="width:100%">
-          <el-table-column prop="taskType" label="任务类型" width="120" />
-          <el-table-column label="得分" width="80">
-            <template #default="{ row }">{{ row.score || '-' }}</template>
-          </el-table-column>
+          <el-table :data="stats?.details" style="width:100%">
+            <el-table-column label="任务名称" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.taskName || row.taskType }}</template>
+            </el-table-column>
+            <el-table-column prop="taskType" label="任务类型" width="120" />
+            <el-table-column label="得分" width="80">
+              <template #default="{ row }">{{ row.score ?? '-' }}</template>
+            </el-table-column>
           <el-table-column prop="status" label="状态" width="100" />
           <el-table-column prop="submitTime" label="提交时间" width="180" />
         </el-table>
@@ -36,9 +39,12 @@
           </el-row>
           <div ref="courseChartRef" style="width:100%;height:350px;margin-bottom:20px"></div>
           <el-table :data="courseStats.taskStats" style="width:100%">
+            <el-table-column label="任务名称" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.taskName || row.taskType }}</template>
+            </el-table-column>
             <el-table-column prop="taskType" label="任务类型" width="120" />
             <el-table-column prop="submittedCount" label="提交人数" width="100" />
-            <el-table-column prop="gradedCount" label="已批改" width="100" />
+            <el-table-column prop="gradedCount" label="已评阅" width="100" />
             <el-table-column label="平均分" width="100">
               <template #default="{ row }">{{ row.averageScore }}</template>
             </el-table-column>
@@ -53,6 +59,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { getStudentStats, getCourseStats, searchCourse } from '../api'
+import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
 const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -75,7 +82,7 @@ const drawChart = (details) => {
   const scored = details.filter(d => d.score != null)
   chartInstance.setOption({
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: scored.map(d => d.taskType) },
+    xAxis: { type: 'category', data: scored.map(d => d.taskName || d.taskType) },
     yAxis: { type: 'value', min: 0, max: 100 },
     series: [{
       data: scored.map(d => d.score), type: 'line', smooth: true,
@@ -89,7 +96,7 @@ const drawCourseChart = (taskStats) => {
   if (!courseChartInstance) courseChartInstance = echarts.init(courseChartRef.value)
   courseChartInstance.setOption({
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: taskStats.map(t => t.taskType) },
+    xAxis: { type: 'category', data: taskStats.map(t => t.taskName || t.taskType) },
     yAxis: { type: 'value', min: 0, max: 100 },
     series: [{ name: '平均分', data: taskStats.map(t => t.averageScore), type: 'bar', label: { show: true } }]
   })
@@ -98,22 +105,34 @@ const drawCourseChart = (taskStats) => {
 onMounted(async () => {
   if (userRole === 'student') {
     try {
-      const res = await getStudentStats(user.studentNo || '1')
+      if (!user.studentNo) {
+        ElMessage.error('未找到学生信息，请重新登录')
+        return
+      }
+      const res = await getStudentStats(user.studentNo)
       if (res.data.code === 200) {
         stats.value = res.data.data
         await nextTick()
         drawChart(res.data.data.details)
-      }
+      } else ElMessage.error(res.data.msg)
+    } catch {
+      ElMessage.error('成绩加载失败')
     } finally { loading.value = false }
   } else {
     loading.value = false
-    const res = await searchCourse('Python')
-    if (res.data.code === 200) {
-      courses.value = res.data.data
-      if (courses.value.length > 0) {
-        selectedCourse.value = courses.value[0].courseCode
-        loadCourseStats(selectedCourse.value)
+    try {
+      const res = await searchCourse('')
+      if (res.data.code === 200) {
+        courses.value = userRole === 'admin' ? res.data.data : res.data.data.filter(c => c.teacher === user.name)
+        if (courses.value.length > 0) {
+          selectedCourse.value = courses.value[0].courseCode
+          loadCourseStats(selectedCourse.value)
+        }
+      } else {
+        ElMessage.error(res.data.msg)
       }
+    } catch {
+      ElMessage.error('课程加载失败')
     }
   }
 })
@@ -126,7 +145,9 @@ const loadCourseStats = async (code) => {
       courseStats.value = res.data.data
       await nextTick()
       drawCourseChart(res.data.data.taskStats)
-    }
+    } else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('课程统计加载失败')
   } finally { courseLoading.value = false }
 }
 </script>

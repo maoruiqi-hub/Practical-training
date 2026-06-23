@@ -11,6 +11,7 @@ const routes = [
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue') },
       { path: 'courses', name: 'CourseList', component: () => import('../views/CourseList.vue') },
+      { path: 'quiz/take/:taskNo', name: 'QuizTake', component: () => import('../views/QuizTake.vue') },
       { path: 'course/:code', name: 'CourseDetail', component: () => import('../views/CourseDetail.vue') },
       { path: 'lesson/:lessonNo', name: 'LessonDetail', component: () => import('../views/LessonDetail.vue') },
       { path: 'task/detail/:taskNo', name: 'TaskDetail', component: () => import('../views/TaskDetail.vue') },
@@ -19,7 +20,8 @@ const routes = [
       { path: 'stats', name: 'Stats', component: () => import('../views/StatsView.vue') },
       { path: 'admin/students', name: 'StudentManage', component: () => import('../views/StudentManage.vue') },
       { path: 'admin/teachers', name: 'TeacherManage', component: () => import('../views/TeacherManage.vue') },
-      { path: 'admin/courses', name: 'CourseManage', component: () => import('../views/CourseManage.vue') }
+      { path: 'admin/courses', name: 'CourseManage', component: () => import('../views/CourseManage.vue') },
+      { path: 'admin/questions', name: 'QuestionManage', component: () => import('../views/QuestionManage.vue') }
     ]
   }
 ]

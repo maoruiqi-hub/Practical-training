@@ -4,7 +4,7 @@
       <el-input v-model="keyword" placeholder="搜索课程" style="width:300px" @keyup.enter="doSearch" />
       <el-button type="primary" @click="doSearch">搜索</el-button>
     </div>
-    <div v-loading="loading" style="min-height:300px">
+    <div v-loading="loading" element-loading-text="正在加载课程..." style="min-height:300px">
       <el-row :gutter="20">
         <el-col v-for="c in courses" :key="c.courseCode" :span="6" style="margin-bottom:20px">
           <el-card shadow="hover" :body-style="{ padding: '0' }" class="course-card" @click="$router.push('/course/' + c.courseCode)">
@@ -29,6 +29,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { searchCourse } from '../api'
+import { ElMessage } from 'element-plus'
 
 const keyword = ref('')
 const courses = ref([])
@@ -36,9 +37,15 @@ const loading = ref(true)
 
 const doSearch = async () => {
   loading.value = true
-  const res = await searchCourse(keyword.value || 'Python')
-  if (res.data.code === 200) courses.value = res.data.data
-  loading.value = false
+  try {
+    const res = await searchCourse(keyword.value || '')
+    if (res.data.code === 200) courses.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('课程加载失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(doSearch)

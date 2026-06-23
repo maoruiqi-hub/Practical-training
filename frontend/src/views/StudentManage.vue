@@ -6,7 +6,7 @@
       <el-button type="primary" @click="doSearch">搜索</el-button>
       <el-button type="success" @click="openAdd">新增学生</el-button>
     </div>
-    <el-table :data="students" style="width:100%" v-loading="loading">
+    <el-table :data="students" style="width:100%" v-loading="loading" element-loading-text="正在加载学生..." empty-text="暂无学生">
       <el-table-column prop="studentNo" label="学号" width="80" />
       <el-table-column prop="name" label="姓名" width="100" />
       <el-table-column prop="college" label="学院" />
@@ -40,11 +40,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getStudentList, searchStudent, updateStudent, deleteStudent, studentRegister } from '../api'
 
-const allStudents = ref([])
 const students = ref([])
 const loading = ref(true)
 const keyword = ref('')
@@ -57,6 +56,9 @@ const doSearch = async () => {
   try {
     const res = keyword.value ? await searchStudent(keyword.value) : await getStudentList()
     if (res.data.code === 200) students.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('学生加载失败')
   } finally { loading.value = false }
 }
 
@@ -71,9 +73,9 @@ const openEdit = (row) => { isEdit.value = true; Object.assign(form, row); dialo
 const save = async () => {
   if (isEdit.value) { await updateStudent(form.studentNo, form); ElMessage.success('已更新') }
   else { await studentRegister(form); ElMessage.success('已新增') }
-  dialogVisible.value = false; location.reload()
+  dialogVisible.value = false; doSearch()
 }
-const del = async (no) => { await deleteStudent(no); ElMessage.success('已删除'); location.reload() }
+const del = async (no) => { await deleteStudent(no); ElMessage.success('已删除'); doSearch() }
 </script>
 
 <style scoped>

@@ -39,3 +39,18 @@ INSERT IGNORE INTO task_submission (submission_id, task_no, student_no, content,
 (5, 1, 2, '简单实现了命令行增删改查', NULL, '2026-06-21 20:00:00', 'graded', 65, '功能基本实现，缺少图形界面'),
 (6, 2, 2, '完成了数据分析报告', NULL, '2026-06-23 16:00:00', 'graded', 88, '报告结构完整，分析深入'),
 (7, 3, 2, '在线答题完成', NULL, '2026-06-19 11:00:00', 'graded', 75, NULL);
+
+-- ============ 题库 ============
+INSERT IGNORE INTO question (question_id, course_code, lesson_no, type, stem, options, answer, difficulty, knowledge_point, score) VALUES
+(1, 1, '1', 'single', 'Python中属于不可变类型的是？', '["int","list","dict","set"]', 'int', 1, '基本数据类型', 10),
+(2, 1, '2', 'single', '获取列表长度的函数是？', '["len()","size()","length()","count()"]', 'len()', 2, '基本数据类型', 10),
+(3, 1, '3', 'multi', '以下哪些是Python关键字？', '["if","def","class","var"]', 'if,def,class', 2, '基本语法', 15),
+(4, 1, '5', 'fill', '定义函数使用的Python关键字是____', NULL, 'def', 2, '函数定义', 10),
+(5, 1, '5', 'essay', '简述面向对象的三大特性，并各举一个例子', NULL, '封装：将数据和方法包装在类中；继承：子类继承父类的属性和方法；多态：不同类实现相同接口的不同行为', 4, '面向对象', 25);
+
+-- 测验套题（Python基础测试）
+INSERT IGNORE INTO learning_task (task_no, course_code, task_type, description, deadline, submit_method, score, resource_url) VALUES
+(4, 1, 'quiz', 'Python基础测试，考察基本语法和面向对象概念', '2026-07-20 23:59:59', '在线答题', 70, NULL);
+
+INSERT IGNORE INTO task_question (id, task_no, question_id) VALUES
+(1, 4, 1), (2, 4, 3), (3, 4, 5);

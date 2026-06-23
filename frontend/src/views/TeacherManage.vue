@@ -6,7 +6,7 @@
       <el-button type="primary" @click="doSearch">搜索</el-button>
       <el-button type="success" @click="openAdd">新增教师</el-button>
     </div>
-    <el-table :data="teachers" style="width:100%" v-loading="loading">
+    <el-table :data="teachers" style="width:100%" v-loading="loading" element-loading-text="正在加载教师..." empty-text="暂无教师">
       <el-table-column prop="teacherNo" label="工号" width="80" />
       <el-table-column prop="name" label="姓名" width="100" />
       <el-table-column prop="college" label="学院" />
@@ -57,6 +57,9 @@ const doSearch = async () => {
   try {
     const res = keyword.value ? await searchTeacher(keyword.value) : await getTeacherList()
     if (res.data.code === 200) teachers.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('教师加载失败')
   } finally { loading.value = false }
 }
 

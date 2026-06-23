@@ -5,11 +5,11 @@
     <el-tabs v-model="activeTab" style="margin-top:10px">
       <!-- 课时列表 -->
       <el-tab-pane label="课时列表" name="lessons">
-        <div v-loading="loading" style="min-height:200px">
+        <div v-loading="loading" element-loading-text="正在加载课时..." style="min-height:200px">
           <div v-if="userRole!=='student'" style="margin-bottom:12px">
             <el-button type="success" @click="openLessonAdd">新增课时</el-button>
           </div>
-          <el-table :data="lessons" style="width:100%">
+          <el-table :data="lessons" style="width:100%" empty-text="暂无课时">
             <el-table-column prop="lessonNo" label="编号" width="80" />
             <el-table-column label="课时标题">
               <template #default="{ row }">
@@ -31,15 +31,15 @@
 
       <!-- 学习任务 -->
       <el-tab-pane label="学习任务" name="tasks">
-        <div v-loading="taskLoading" style="min-height:200px">
+        <div v-loading="taskLoading" element-loading-text="正在加载任务..." style="min-height:200px">
           <div v-if="userRole!=='student'" style="margin-bottom:12px">
             <el-button type="success" @click="openTaskAdd">发布任务</el-button>
           </div>
-          <el-table :data="tasks" style="width:100%">
+          <el-table :data="tasks" style="width:100%" empty-text="暂无任务">
             <el-table-column prop="taskNo" label="编号" width="80" />
-            <el-table-column label="类型" width="100">
+            <el-table-column label="任务名称" width="160">
               <template #default="{ row }">
-                <el-link type="primary" @click="$router.push('/task/detail/' + row.taskNo)">{{ row.taskType }}</el-link>
+                <el-link type="primary" @click="$router.push('/task/detail/' + row.taskNo)">{{ row.description || row.taskType }}</el-link>
               </template>
             </el-table-column>
             <el-table-column prop="description" label="任务说明" />
@@ -48,7 +48,7 @@
             <el-table-column prop="score" label="分值" width="80" />
             <el-table-column label="操作" :width="userRole==='student' ? 100 : 240">
               <template #default="{ row }">
-                <el-button v-if="userRole==='student'" size="small" type="primary" @click="$router.push('/task/' + code + '/submit/' + row.taskNo)">提交</el-button>
+                <el-button v-if="userRole==='student'" size="small" type="primary" @click="row.taskType==='quiz' ? $router.push('/quiz/take/' + row.taskNo) : $router.push('/task/' + code + '/submit/' + row.taskNo)">{{ row.taskType==='quiz' ? '答题' : '提交' }}</el-button>
                 <template v-else>
                   <el-button size="small" type="primary" @click="$router.push('/task/' + code + '/submit/' + row.taskNo)">查看提交</el-button>
                   <el-button size="small" @click="openTaskEdit(row)">编辑</el-button>
@@ -64,14 +64,32 @@
     </el-tabs>
 
     <!-- 任务弹窗 -->
-    <el-dialog v-model="taskDialog" :title="isTaskEdit ? '编辑任务' : '发布任务'">
+    <el-dialog v-model="taskDialog" :title="isTaskEdit ? '编辑任务' : '发布任务'" width="650px">
       <el-form :model="taskForm" label-width="80px">
-        <el-form-item label="类型"><el-input v-model="taskForm.taskType" /></el-form-item>
-        <el-form-item label="说明"><el-input v-model="taskForm.description" /></el-form-item>
+        <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="课堂测验" value="课堂测验" /><el-option label="实验报告" value="实验报告" /><el-option label="测验" value="quiz" /><el-option label="其他" value="other" /></el-select></el-form-item>
+        <el-form-item :label="taskForm.taskType==='quiz'?'测验名称':'任务说明'"><el-input v-model="taskForm.description" /></el-form-item>
         <el-form-item label="截止时间"><el-input v-model="taskForm.deadline" placeholder="2026-07-15 23:59:59" /></el-form-item>
-        <el-form-item label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
+        <el-form-item v-if="taskForm.taskType!=='quiz'" label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
         <el-form-item label="分值"><el-input-number v-model="taskForm.score" :min="0" :max="100" /></el-form-item>
-        <el-form-item label="附件"><el-upload :auto-upload="false" :limit="1" :on-change="handleTaskFile" accept="*"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
+        <el-form-item v-if="taskForm.taskType!=='quiz'" label="附件"><el-upload :auto-upload="false" :limit="1" :on-change="handleTaskFile" accept="*"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
+        <!-- 测验选题 -->
+        <div v-if="taskForm.taskType==='quiz'" style="margin-bottom:16px">
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <el-input v-model="qKeyword" placeholder="搜索题干/知识点" style="width:180px" size="small" @keyup.enter="loadQuestions" clearable />
+            <el-input v-model="qLesson" placeholder="课时编号" style="width:100px" size="small" clearable />
+            <el-button size="small" @click="loadQuestions">筛选</el-button>
+          </div>
+          <div v-loading="qLoading" style="max-height:320px;overflow-y:auto;width:100%;border:1px solid #eee;border-radius:6px;padding:12px">
+            <div style="color:#999;font-size:12px;margin-bottom:8px">已选 {{ selectedQuestions.length }} 题，共 {{ filteredQuestions.length }} 题</div>
+            <el-checkbox-group v-model="selectedQuestions">
+              <div v-for="q in filteredQuestions" :key="q.questionId" style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #eee;text-align:left">
+                <el-checkbox :value="q.questionId">{{ q.stem }}</el-checkbox>
+                <span style="margin-left:8px"><el-tag size="small">{{ typeLabel(q.type) }}</el-tag><span style="color:#999;font-size:12px;margin-left:4px">{{ q.score }}分 | 课时{{ q.lessonNo }} | {{ q.knowledgePoint }}</span></span>
+              </div>
+            </el-checkbox-group>
+            <el-empty v-if="!questionBank.length && !qLoading" description="暂无题目" :image-size="40" />
+          </div>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="taskDialog=false">取消</el-button>
@@ -105,11 +123,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getCourseLessons, searchCourse, getTaskList, addTask } from '../api'
-import axios from 'axios'
+import {
+  getCourseLessons,
+  searchCourse,
+  getTaskList,
+  searchQuestion,
+  getQuestionsByCourse,
+  updateLesson,
+  addLesson,
+  deleteLesson as deleteLessonApi,
+  addTask,
+  updateTask,
+  deleteTask as deleteTaskApi,
+  addQuestionsToTask
+} from '../api'
 
 const route = useRoute()
 const code = route.params.code
@@ -132,6 +162,36 @@ const isLessonEdit = ref(false)
 const lessonFile = ref(null)
 const lessonForm = reactive({ lessonNo: '', lessonTitle: '', resourceType: 'video', description: '' })
 const taskFile = ref(null)
+const selectedQuestions = ref([])
+const questionBank = ref([])
+const qLoading = ref(false)
+const qKeyword = ref('')
+const qLesson = ref('')
+
+const filteredQuestions = computed(() => {
+  return questionBank.value.filter(q => {
+    if (qKeyword.value && !q.stem.includes(qKeyword.value) && !(q.knowledgePoint||'').includes(qKeyword.value)) return false
+    if (qLesson.value && q.lessonNo !== qLesson.value) return false
+    return true
+  })
+})
+
+const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答'}[t]||t)
+
+const loadQuestions = async () => {
+  qLoading.value = true
+  try {
+    const r = qKeyword.value ? await searchQuestion(qKeyword.value) : await getQuestionsByCourse(code)
+    if (r.data.code === 200) questionBank.value = r.data.data
+    else ElMessage.error(r.data.msg)
+  } catch {
+    ElMessage.error('题目加载失败')
+  } finally { qLoading.value = false }
+}
+
+const onTaskTypeChange = async (val) => {
+  if (val === 'quiz') { qKeyword.value = ''; qLesson.value = ''; selectedQuestions.value = []; loadQuestions() }
+}
 
 onMounted(async () => {
   try {
@@ -166,15 +226,15 @@ const saveLesson = async () => {
   fd.append('description', lessonForm.description || '')
   if (lessonFile.value) fd.append('file', lessonFile.value)
   if (isLessonEdit.value) {
-    await axios.put(`/practical-training/lesson/${code}/${lessonForm.lessonNo}`, fd)
+    await updateLesson(code, lessonForm.lessonNo, fd)
   } else {
-    await axios.post('/practical-training/lesson', fd)
+    await addLesson(fd)
   }
   ElMessage.success(isLessonEdit.value ? '已更新' : '已新增')
   lessonDialog.value = false; reloadLessons()
 }
 const deleteLesson = async (lessonNo) => {
-  await axios.delete(`/practical-training/lesson/${code}/${lessonNo}`)
+  await deleteLessonApi(code, lessonNo)
   ElMessage.success('已删除'); reloadLessons()
 }
 
@@ -190,22 +250,28 @@ const openTaskEdit = (row) => { isTaskEdit.value = true; Object.assign(taskForm,
 const saveTask = async () => {
   const fd = new FormData()
   fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
-  fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.submitMethod)
+  fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.taskType==='quiz' ? '在线答题' : (taskForm.submitMethod || ''))
   fd.append('score', String(taskForm.score))
   if (taskFile.value) fd.append('file', taskFile.value)
 
   if (isTaskEdit.value) {
-    await axios.put(`/practical-training/task/${code}/${taskForm.taskNo}`, fd)
+    await updateTask(code, taskForm.taskNo, fd)
     ElMessage.success('已更新')
   } else {
     fd.append('courseCode', code)
-    await axios.post('/practical-training/task', fd)
+    const created = await addTask(fd)
+    // 测验：保存选题关联
+    if (taskForm.taskType === 'quiz' && selectedQuestions.value.length) {
+      if (created.data.code === 200 && created.data.data) {
+        await addQuestionsToTask(created.data.data, selectedQuestions.value)
+      }
+    }
     ElMessage.success('发布成功')
   }
-  taskDialog.value = false; taskFile.value = null; reloadTasks()
+  taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; reloadTasks()
 }
 const deleteTask = async (taskNo) => {
-  await axios.delete(`/practical-training/task/${code}/${taskNo}`)
+  await deleteTaskApi(code, taskNo)
   ElMessage.success('已删除'); reloadTasks()
 }
 </script>

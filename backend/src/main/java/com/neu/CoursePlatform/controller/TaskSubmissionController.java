@@ -5,26 +5,27 @@ import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.entity.TaskSubmission;
+import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 @RequestMapping("/submission")
 public class TaskSubmissionController {
 
     private final TaskSubmissionService submissionService;
+    private final FileStorageService fileStorageService;
     private final Auth auth;
 
-    public TaskSubmissionController(TaskSubmissionService submissionService, Auth auth) {
+    public TaskSubmissionController(TaskSubmissionService submissionService, FileStorageService fileStorageService, Auth auth) {
         this.submissionService = submissionService;
+        this.fileStorageService = fileStorageService;
         this.auth = auth;
     }
 
@@ -41,27 +42,23 @@ public class TaskSubmissionController {
         String courseCode = submissionService.getTaskCourseCode(taskNo);
         if (courseCode == null) return Result.fail("任务不存在");
         if (submissionService.isTaskOverdue(taskNo)) return Result.fail("已超过截止时间，无法提交");
+        if (submissionService.hasSubmitted(taskNo, student.getStudentNo())) return Result.fail("已提交过，请勿重复提交");
 
         TaskSubmission sub = new TaskSubmission();
         sub.setTaskNo(taskNo);
         sub.setStudentNo(student.getStudentNo());
         sub.setContent(content);
         sub.setSubmitTime(LocalDateTime.now());
-        sub.setStatus("submitted");
 
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "../resource/HomeworkUpload/";
-                File folder = new File(dir);
-                if (!folder.exists()) folder.mkdirs();
-                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                java.nio.file.Files.write(new File(dir + filename).toPath(), file.getBytes());
-                sub.setFilePath((dir + filename).replace("../", ""));
+                sub.setFilePath(fileStorageService.store(file, "../resource/HomeworkUpload/"));
             } catch (IOException e) {
                 return Result.fail("文件上传失败");
             }
         }
 
+        submissionService.applyInitialGrading(sub);
         submissionService.save(sub);
         return Result.ok("提交成功");
     }
@@ -83,6 +80,16 @@ public class TaskSubmissionController {
         return Result.ok(submissionService.listByStudentNo(student.getStudentNo()));
     }
 
+    /** 批改详情——含题目、学生答案、正确答案 | admin/授课教师 */
+    @GetMapping("/grade/{submissionId}")
+    public Result<Map<String, Object>> gradeDetail(@PathVariable String submissionId, HttpSession session) {
+        TaskSubmission sub = submissionService.getById(submissionId);
+        if (sub == null) return Result.fail("提交记录不存在");
+        if (!auth.canModifyCourse(session, submissionService.getTaskCourseCode(sub.getTaskNo())))
+            return Result.fail("无权限");
+        return Result.ok(submissionService.buildGradeDetail(submissionId));
+    }
+
     /** 批改打分 | admin/授课教师 */
     @PutMapping("/{submissionId}")
     public Result<Void> grade(@PathVariable String submissionId,
@@ -92,7 +99,12 @@ public class TaskSubmissionController {
         String code = submissionService.getTaskCourseCode(sub.getTaskNo());
         if (code == null || !auth.canModifyCourse(session, code))
             return Result.fail("无权限");
-        sub.setScore(body.getScore());
+
+        if (body.getScore() != null) {
+            sub.setScore(body.getScore());
+        } else {
+            sub.setScore(submissionService.autoScoreChoices(sub));
+        }
         sub.setFeedback(body.getFeedback());
         sub.setStatus("graded");
         submissionService.updateById(sub);

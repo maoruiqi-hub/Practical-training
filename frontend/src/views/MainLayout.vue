@@ -20,6 +20,7 @@
               <el-menu-item index="/admin/students">学生管理</el-menu-item>
               <el-menu-item index="/admin/teachers">教师管理</el-menu-item>
               <el-menu-item index="/admin/courses">课程管理</el-menu-item>
+              <el-menu-item index="/admin/questions">题库管理</el-menu-item>
             </el-sub-menu>
           </template>
         </el-menu>

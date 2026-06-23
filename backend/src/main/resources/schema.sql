@@ -65,3 +65,24 @@ CREATE TABLE IF NOT EXISTS task_submission (
     status VARCHAR(32),
     feedback TEXT
 );
+
+-- 题库表
+CREATE TABLE IF NOT EXISTS question (
+    question_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_code INT,
+    lesson_no VARCHAR(32),
+    type VARCHAR(16),
+    stem TEXT,
+    options TEXT,
+    answer VARCHAR(512),
+    difficulty INT,
+    knowledge_point VARCHAR(128),
+    score INT
+);
+
+-- 测验-题目关联表
+CREATE TABLE IF NOT EXISTS task_question (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    task_no INT,
+    question_id INT
+);
