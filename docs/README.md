@@ -18,12 +18,15 @@
 
 ```
 docs/
-├── README.md               本文件 — 文档目录说明
-├── architecture/           架构设计文档（系统分层、模块关系）
-├── data-model/             数据模型与数据库设计
-├── api/                    API 接口定义
-├── deployment/             部署与运维方案
-└── milestones/             里程碑实现计划（分阶段任务文档）
+├── README.md                    本文件 — 文档目录说明
+├── architecture/                架构设计文档（系统分层、模块关系）
+│   └── 模块接口与协作规范.md       ★ 5 模块接口契约与协作开发指南
+├── data-model/                  数据模型与数据库设计
+├── api/                         API 接口定义
+├── deployment/                  部署与运维方案
+└── plans/                       实施计划（每个模块一份 .plan.md）
+    ├── plan-writing-guide.md    ★ 实施计划写作规范（写 plan 前必读）
+    └── _TEMPLATE.md             计划模板（复制此文件新增 plan）
 ```
 
 ## 与 specs/ 的区别
@@ -62,6 +65,8 @@ docs/
 
 ### 文件命名
 
-- 按主题分类建子目录：`architecture/`、`data-model/`、`api/`、`milestones/`
-- 里程碑文档用数字前缀：`10-基础架构.md`、`20-核心业务.md`
+- 按主题分类建子目录：`architecture/`、`data-model/`、`api/`、`plans/`
+- 实施计划命名：`module<n>-<中文名>.plan.md`，如 `module1-课程内容与知识组织.plan.md`
 - 文件名用中文描述：`数据库设计.md`、`知识图谱服务架构.md`
+
+> **计划文档（plans/）有独立的写作规范**，见 [`plans/plan-writing-guide.md`](plans/plan-writing-guide.md)，写 plan 前必读。

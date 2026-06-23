@@ -6,52 +6,33 @@ import com.neu.CoursePlatform.dto.CourseDTO;
 import com.neu.CoursePlatform.entity.Course;
 import com.neu.CoursePlatform.entity.Lesson;
 import com.neu.CoursePlatform.service.CourseService;
-import com.neu.CoursePlatform.service.LessonService;
+import com.neu.CoursePlatform.service.FileStorageService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/course")
 public class CourseController {
 
     private final CourseService courseService;
-    private final LessonService lessonService;
+    private final FileStorageService fileStorageService;
     private final Auth auth;
 
-    public CourseController(CourseService courseService, LessonService lessonService, Auth auth) {
+    public CourseController(CourseService courseService, FileStorageService fileStorageService, Auth auth) {
         this.courseService = courseService;
-        this.lessonService = lessonService;
+        this.fileStorageService = fileStorageService;
         this.auth = auth;
-    }
-
-    private CourseDTO toDto(Course c) {
-        CourseDTO dto = new CourseDTO();
-        dto.setCourseCode(c.getCourseCode());
-        dto.setCourseName(c.getCourseName());
-        dto.setTeacher(c.getTeacher());
-        dto.setCredits(c.getCredits());
-        dto.setHours(c.getHours());
-        dto.setCoverUrl(c.getCoverUrl());
-        dto.setLessonCount(lessonService.listByCourseCode(c.getCourseCode()).size());
-        return dto;
     }
 
     /** 模糊搜索课程 | 登录用户 */
     @GetMapping("/search")
     public Result<List<CourseDTO>> search(@RequestParam String keyword, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        List<CourseDTO> dtos = new ArrayList<>();
-        for (Course c : courseService.searchByKeyword(keyword)) {
-            dtos.add(toDto(c));
-        }
-        return Result.ok(dtos);
+        return Result.ok(courseService.searchDtoByKeyword(keyword));
     }
 
     /** 查看课程课时列表 | 登录用户 */
@@ -65,11 +46,7 @@ public class CourseController {
     @GetMapping("/list")
     public Result<List<CourseDTO>> list(HttpSession session) {
         if (!auth.isAdmin(session)) return Result.fail("无权限");
-        List<CourseDTO> dtos = new ArrayList<>();
-        for (Course c : courseService.list()) {
-            dtos.add(toDto(c));
-        }
-        return Result.ok(dtos);
+        return Result.ok(courseService.listDto());
     }
 
     /** 按编号查课程 | admin */
@@ -96,12 +73,7 @@ public class CourseController {
         course.setHours(hours);
         if (file != null && !file.isEmpty()) {
             try {
-                String dir = "resource/CourseResource/";
-                File folder = new File(dir);
-                if (!folder.exists()) folder.mkdirs();
-                String filename = UUID.randomUUID() + "_" + file.getOriginalFilename();
-                file.transferTo(new File(dir + filename));
-                course.setCoverUrl(dir + filename);
+                course.setCoverUrl(fileStorageService.store(file, "../resource/CourseResource/"));
             } catch (IOException e) {
                 return Result.fail("封面上传失败");
             }
@@ -118,12 +90,30 @@ public class CourseController {
         return Result.ok();
     }
 
-    /** 修改课程 | admin/授课教师 */
+    /** 修改课程（支持上传封面） | admin/授课教师 */
     @PutMapping("/{courseCode}")
-    public Result<Void> update(@PathVariable String courseCode, @RequestBody Course course, HttpSession session) {
+    public Result<String> update(@PathVariable String courseCode,
+                                 @RequestParam String courseName,
+                                 @RequestParam String teacher,
+                                 @RequestParam Integer credits,
+                                 @RequestParam Integer hours,
+                                 @RequestParam(required = false) MultipartFile file,
+                                 HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
-        course.setCourseCode(courseCode);
+        Course course = courseService.getById(courseCode);
+        if (course == null) return Result.fail("课程不存在");
+        course.setCourseName(courseName);
+        course.setTeacher(teacher);
+        course.setCredits(credits);
+        course.setHours(hours);
+        if (file != null && !file.isEmpty()) {
+            try {
+                course.setCoverUrl(fileStorageService.store(file, "../resource/CourseResource/"));
+            } catch (IOException e) {
+                return Result.fail("封面上传失败");
+            }
+        }
         courseService.updateById(course);
-        return Result.ok();
+        return Result.ok("课程更新成功");
     }
 }

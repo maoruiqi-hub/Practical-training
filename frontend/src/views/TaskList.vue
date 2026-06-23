@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-button @click="$router.back()" style="margin-bottom:10px">返回</el-button>
-    <el-table :data="tasks" style="width:100%" v-loading="loading">
+    <el-table :data="tasks" style="width:100%" v-loading="loading" element-loading-text="正在加载任务..." empty-text="暂无任务">
       <el-table-column prop="taskNo" label="编号" width="80" />
       <el-table-column prop="taskType" label="类型" width="100" />
       <el-table-column prop="description" label="任务说明" />
@@ -10,7 +10,7 @@
       <el-table-column prop="score" label="分值" width="80" />
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
-          <el-button v-if="userRole==='student'" size="small" type="primary" @click="$router.push(`/task/${route.params.courseCode}/submit/${row.taskNo}`)">提交</el-button>
+            <el-button v-if="userRole==='student'" size="small" type="primary" @click="$router.push(row.taskType==='quiz' ? `/quiz/take/${row.taskNo}` : `/task/${route.params.courseCode}/submit/${row.taskNo}`)">{{ row.taskType==='quiz' ? '答题' : '提交' }}</el-button>
           <el-button v-else size="small" type="primary" @click="$router.push(`/task/${route.params.courseCode}/submit/${row.taskNo}`)">查看提交</el-button>
         </template>
       </el-table-column>
@@ -42,16 +42,22 @@ const tasks = ref([])
 const loading = ref(true)
 const newTask = reactive({ taskType: '', description: '', deadline: '', submitMethod: '', score: 0 })
 
-onMounted(async () => {
+const loadTasks = async () => {
+  loading.value = true
   try {
     const res = await getTaskList(route.params.courseCode)
     if (res.data.code === 200) tasks.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('任务加载失败')
   } finally { loading.value = false }
-})
+}
+
+onMounted(loadTasks)
 
 const publishTask = async () => {
   const res = await addTask({ ...newTask, courseCode: route.params.courseCode })
-  if (res.data.code === 200) { ElMessage.success('发布成功'); location.reload() }
+  if (res.data.code === 200) { ElMessage.success('发布成功'); loadTasks() }
   else ElMessage.error(res.data.msg)
 }
 </script>

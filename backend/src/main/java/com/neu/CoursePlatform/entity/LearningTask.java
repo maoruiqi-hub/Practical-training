@@ -28,4 +28,6 @@ public class LearningTask {
     private String submitMethod;
     /** 任务分数 */
     private Integer score;
+    /** 附件资源路径 */
+    private String resourceUrl;
 }

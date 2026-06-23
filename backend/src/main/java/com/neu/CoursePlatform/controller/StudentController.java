@@ -37,6 +37,13 @@ public class StudentController {
         return Result.ok(student);
     }
 
+    /** 模糊搜索学生 | admin */
+    @GetMapping("/search")
+    public Result<java.util.List<Student>> search(@RequestParam String keyword, HttpSession session) {
+        if (!auth.isAdmin(session)) return Result.fail("无权限");
+        return Result.ok(studentService.searchByKeyword(keyword));
+    }
+
     /** 全部学生列表 | admin */
     @GetMapping("/list")
     public Result<List<Student>> list(HttpSession session) {

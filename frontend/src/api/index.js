@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/practical-training',
-  timeout: 10000
+  timeout: 30000
 })
 
 // ============ 学生 ============
@@ -17,6 +17,7 @@ export const deleteStudent = (no) => api.delete(`/student/${no}`)
 export const teacherLogin = (data) => api.post('/teacher/login', data)
 export const teacherRegister = (data) => api.post('/teacher/register', data)
 export const searchTeacher = (keyword) => api.get('/teacher/search', { params: { keyword } })
+export const searchStudent = (keyword) => api.get('/student/search', { params: { keyword } })
 export const getTeacherList = () => api.get('/teacher/list')
 export const getTeacherByNo = (no) => api.get(`/teacher/${no}`)
 export const updateTeacher = (no, data) => api.put(`/teacher/${no}`, data)
@@ -38,11 +39,19 @@ export const searchLesson = (keyword) => api.get('/lesson/search', { params: { k
 export const addLesson = (formData) => api.post('/lesson', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 })
+export const updateLesson = (code, lessonNo, formData) => api.put(`/lesson/${code}/${lessonNo}`, formData)
+export const deleteLesson = (code, lessonNo) => api.delete(`/lesson/${code}/${lessonNo}`)
 
 // ============ 学习任务 ============
 export const getTaskList = (code) => api.get(`/task/${code}`)
 export const searchTask = (keyword) => api.get('/task/search', { params: { keyword } })
-export const addTask = (data) => api.post('/task', data)
+export const addTask = (data) => {
+  if (data instanceof FormData) return api.post('/task', data)
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => formData.append(key, value ?? ''))
+  return api.post('/task', formData)
+}
+export const getTaskDetail = (taskNo) => api.get('/task/detail/' + taskNo)
 export const updateTask = (code, no, data) => api.put(`/task/${code}/${no}`, data)
 export const deleteTask = (code, no) => api.delete(`/task/${code}/${no}`)
 
@@ -52,8 +61,21 @@ export const submitTask = (formData) => api.post('/submission', formData, {
 })
 export const getMySubmissions = () => api.get('/submission/my')
 export const getSubmissionsByTask = (taskNo) => api.get(`/submission/task/${taskNo}`)
+export const getGradeDetail = (submissionId) => api.get(`/submission/grade/${submissionId}`)
 export const gradeSubmission = (id, data) => api.put(`/submission/${id}`, data)
 
 // ============ 成绩统计 ============
 export const getStudentStats = (studentNo) => api.get(`/stats/student/${studentNo}`)
 export const getCourseStats = (courseCode) => api.get(`/stats/course/${courseCode}`)
+
+// ============ 题库 / 测验 ============
+export const getQuestionById = (id) => api.get(`/question/${id}`)
+export const getQuestionsByCourse = (courseCode) => api.get(`/question/course/${courseCode}`)
+export const getQuestionsByLesson = (lessonNo) => api.get(`/question/lesson/${lessonNo}`)
+export const searchQuestion = (keyword) => api.get('/question/search', { params: { keyword } })
+export const generatePaper = (courseCode, data) => api.post(`/question/course/${courseCode}/generate`, data)
+export const addQuestion = (data) => api.post('/question', data)
+export const updateQuestion = (id, data) => api.put(`/question/${id}`, data)
+export const deleteQuestion = (id) => api.delete(`/question/${id}`)
+export const getTaskQuestions = (taskNo) => api.get(`/question/task/${taskNo}`)
+export const addQuestionsToTask = (taskNo, questionIds) => api.post(`/question/task/${taskNo}`, questionIds)

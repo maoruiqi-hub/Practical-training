@@ -25,6 +25,7 @@ server:
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug
+    "[com.neu.CoursePlatform.controller]": debug
 
 mybatis-plus:
   type-aliases-package: com.neu.CoursePlatform.entity

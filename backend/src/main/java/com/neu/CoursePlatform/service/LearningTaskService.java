@@ -10,4 +10,6 @@ public interface LearningTaskService extends IService<LearningTask> {
     List<LearningTask> listByCourseCode(String courseCode);
 
     List<LearningTask> searchByKeyword(String keyword);
+
+    void applyDeadline(LearningTask task, String deadline);
 }

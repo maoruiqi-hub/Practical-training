@@ -6,8 +6,8 @@
       <el-button type="primary" @click="doSearch">搜索</el-button>
       <el-button type="success" @click="openAdd">新增课程</el-button>
     </div>
-    <div v-loading="loading" style="min-height:200px">
-      <el-table :data="courses" style="width:100%">
+    <div v-loading="loading" element-loading-text="正在加载课程..." style="min-height:200px">
+      <el-table :data="courses" style="width:100%" empty-text="暂无课程">
         <el-table-column prop="courseCode" label="编号" width="100" />
         <el-table-column prop="courseName" label="课程名称" />
         <el-table-column prop="teacher" label="授课教师" width="120" />
@@ -48,8 +48,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { searchCourse, updateCourse, deleteCourse } from '../api'
-import axios from 'axios'
+import { searchCourse, addCourse, updateCourse, deleteCourse } from '../api'
 
 const keyword = ref('')
 const courses = ref([])
@@ -63,9 +62,15 @@ const handleCover = (f) => { coverFile.value = f.raw }
 
 const doSearch = async () => {
   loading.value = true
-  const res = await searchCourse(keyword.value || 'Python')
-  if (res.data.code === 200) courses.value = res.data.data
-  loading.value = false
+  try {
+    const res = await searchCourse(keyword.value || '')
+    if (res.data.code === 200) courses.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('课程加载失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 const openAdd = () => {
@@ -81,17 +86,17 @@ const openEdit = (row) => {
 }
 
 const save = async () => {
+  const fd = new FormData()
+  fd.append('courseName', form.courseName)
+  fd.append('teacher', form.teacher)
+  fd.append('credits', String(form.credits))
+  fd.append('hours', String(form.hours))
+  if (coverFile.value) fd.append('file', coverFile.value)
   if (isEdit.value) {
-    await updateCourse(form.courseCode, form)
+    await updateCourse(form.courseCode, fd)
     ElMessage.success('已更新')
   } else {
-    const fd = new FormData()
-    fd.append('courseName', form.courseName)
-    fd.append('teacher', form.teacher)
-    fd.append('credits', form.credits)
-    fd.append('hours', form.hours)
-    if (coverFile.value) fd.append('file', coverFile.value)
-    await axios.post('/practical-training/course', fd)
+    await addCourse(fd)
     ElMessage.success('已新增')
   }
   dialogVisible.value = false

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.mapper.QuestionMapper">
+
+    <select id="selectByCourseCode" resultType="com.neu.CoursePlatform.entity.Question">
+        SELECT * FROM question WHERE course_code = #{courseCode}
+    </select>
+
+    <select id="selectByLessonNo" resultType="com.neu.CoursePlatform.entity.Question">
+        SELECT * FROM question WHERE lesson_no = #{lessonNo}
+    </select>
+
+    <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Question">
+        SELECT * FROM question
+        WHERE stem LIKE CONCAT('%', #{keyword}, '%')
+           OR knowledge_point LIKE CONCAT('%', #{keyword}, '%')
+    </select>
+
+</mapper>
