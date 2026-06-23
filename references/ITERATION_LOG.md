@@ -2,7 +2,30 @@
 
 ---
 
-## 2026-06-23
+## 2026-06-23 (第二次提交)
+
+**Goal:** 从 token_reduce 参考项目引入 SDD 方法论，建立规格文档与实施计划的写作规范体系。
+
+**What was changed:**
+- `specs/README.md` — 重写增强，融入 EARS 需求句式（5种模式）、唯一编号规则（R<组>.<序>）、诚实纪律、「一句话定位+阅读前置」顶部规范、门控检查点、新增spec清单、README路线表
+- `specs/common/authoring-conventions.md` — 新文件。规格文档写作规范：通用排版、EARS句式详解（含示例）、需求文档六小节格式、design.md写法、tasks.md写法、诚实纪律、文件命名、新增spec检查清单
+- `docs/plans/plan-writing-guide.md` — 新文件。实施计划写作规范：spec→plan→实现三联、门控生命周期、5条核心原则（依赖图自底向上/垂直切片/原子任务/验收+验证/检查点）、任务定级表（XS~XL）、强制任务格式、反模式
+- `docs/plans/_TEMPLATE.md` — 新文件。计划模板：Context/Goals/Non-Goals/架构决策/备选方案/假设/任务清单分阶段/风险/Open Questions/越权红线/DoD。复制即用
+- `docs/README.md` — 更新目录结构，新增 `plans/` 目录说明与写作规范链接
+
+**Current state:** 项目现已具备完整的 SDD 方法论体系：
+- `specs/common/authoring-conventions.md` — 告诉每个人"规格文档怎么写"
+- `docs/plans/plan-writing-guide.md` + `_TEMPLATE.md` — 告诉每个人"实施计划怎么写"
+- `docs/architecture/模块接口与协作规范.md` — 告诉每个人"模块间怎么配合"
+三份文档构成"写需求→写计划→写接口"的完整方法论链。
+
+**Next step:** 各组成员按模板为各自模块编写 `.plan.md`，启动 Phase 1 开发。
+
+**Known risks / blockers:** 无。
+
+---
+
+## 2026-06-23 (第一次提交)
 
 **Goal:** 基于模块化分工原则，编写模块接口定义与协作规范，为5人并行开发建立接口契约。
 
