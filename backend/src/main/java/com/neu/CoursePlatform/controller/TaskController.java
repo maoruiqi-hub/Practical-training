@@ -6,12 +6,15 @@ import com.neu.CoursePlatform.dto.TaskUpdateRequest;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.TaskSubmissionService;
+import com.neu.CoursePlatform.entity.TaskSubmission;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,11 +24,14 @@ public class TaskController {
 
     private final LearningTaskService taskService;
     private final FileStorageService fileStorageService;
+    private final TaskSubmissionService submissionService;
     private final Auth auth;
 
-    public TaskController(LearningTaskService taskService, FileStorageService fileStorageService, Auth auth) {
+    public TaskController(LearningTaskService taskService, FileStorageService fileStorageService,
+                          TaskSubmissionService submissionService, Auth auth) {
         this.taskService = taskService;
         this.fileStorageService = fileStorageService;
+        this.submissionService = submissionService;
         this.auth = auth;
     }
 
@@ -171,5 +177,28 @@ public class TaskController {
         result.put("hasSubmissions", hasSubmissions);
         result.put("message", "任务已删除");
         return Result.ok(result);
+    }
+
+    /** 任务完成统计 | admin/授课教师
+     *  GET /api/tasks/{taskNo}/stats */
+    @GetMapping("/{courseCode}/{taskNo}/stats")
+    public Result<Map<String, Object>> taskStats(@PathVariable String courseCode, @PathVariable String taskNo,
+                                                  HttpSession session) {
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        List<TaskSubmission> subs = submissionService.listByTaskNo(taskNo);
+        int total = subs.size();
+        int graded = (int) subs.stream().filter(s -> "graded".equals(s.getStatus())).count();
+        int overdue = (int) subs.stream().filter(s -> s.getIsOverdue() != null && s.getIsOverdue() == 1).count();
+        double avgScore = subs.stream()
+                .filter(s -> "graded".equals(s.getStatus()) && s.getScore() != null)
+                .mapToInt(TaskSubmission::getScore).average().orElse(0);
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("taskNo", taskNo);
+        stats.put("totalSubmissions", total);
+        stats.put("gradedCount", graded);
+        stats.put("overdueCount", overdue);
+        stats.put("averageScore", Math.round(avgScore * 10) / 10.0);
+        stats.put("completionRate", taskService.getById(taskNo) != null ? 100 : 0); // placeholder
+        return Result.ok(stats);
     }
 }

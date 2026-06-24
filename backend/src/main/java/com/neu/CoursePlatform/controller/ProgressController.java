@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/progress")
 public class ProgressController {
 
     private final ProgressService progressService;
@@ -21,8 +20,9 @@ public class ProgressController {
         this.auth = auth;
     }
 
-    /** 学生查看自己某课程的学习进度 | student本人 */
-    @GetMapping("/student/{studentNo}")
+    /** 学生查看自己某课程的学习进度 | student本人
+     *  GET /api/students/{studentNo}/progress?courseCode=  */
+    @GetMapping({"/api/students/{studentNo}/progress", "/progress/student/{studentNo}"})
     public Result<Map<String, Object>> studentProgress(@PathVariable String studentNo,
                                                         @RequestParam String courseCode,
                                                         HttpSession session) {
@@ -33,8 +33,9 @@ public class ProgressController {
         return Result.ok(progressService.buildStudentProgress(studentNo, courseCode));
     }
 
-    /** 教师查看某课程的全班学习进度 | admin/授课教师 */
-    @GetMapping("/course/{courseCode}")
+    /** 教师查看某课程的全班学习进度 | admin/授课教师
+     *  GET /api/courses/{courseCode}/progress */
+    @GetMapping({"/api/courses/{courseCode}/progress", "/progress/course/{courseCode}"})
     public Result<Map<String, Object>> courseProgress(@PathVariable String courseCode, HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         return Result.ok(progressService.buildCourseProgress(courseCode));
