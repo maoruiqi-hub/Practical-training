@@ -1,0 +1,1 @@
+package com.neu.CoursePlatform.mapper; import com.baomidou.mybatisplus.core.mapper.BaseMapper; import com.neu.CoursePlatform.entity.KnowledgeExtractionCandidate; public interface KnowledgeExtractionCandidateMapper extends BaseMapper<KnowledgeExtractionCandidate> { }

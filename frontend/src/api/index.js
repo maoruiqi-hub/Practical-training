@@ -32,6 +32,17 @@ export const addCourse = (data) => api.post('/course', data)
 export const updateCourse = (code, data) => api.put(`/course/${code}`, data)
 export const deleteCourse = (code) => api.delete(`/course/${code}`)
 
+// ============ 课程资源 ============
+export const getCourseResources = (courseCode, filters = {}) => api.get('/course-resource', { params: { courseCode, ...filters } })
+export const getCourseResourcePreview = (resourceId) => api.get(`/course-resource/${resourceId}/preview`)
+export const recordCourseResourceView = (resourceId, data) => api.post(`/course-resource/${resourceId}/view-events`, data)
+
+// ============ 知识图谱 ============
+export const getKnowledgeGraph = (courseCode) => api.get(`/knowledge-point/course/${courseCode}/graph`)
+export const getKnowledgePointDetail = (id) => api.get(`/knowledge-point/${id}`)
+export const getKnowledgePointPrerequisites = (id) => api.get(`/knowledge-point/${id}/prerequisites`)
+export const getKnowledgeRelations = (courseCode) => api.get('/knowledge-relation', { params: { courseCode } })
+
 // ============ 课时 ============
 export const getLessonList = (code) => api.get(`/lesson/${code}`)
 export const getLessonDetail = (lessonNo) => api.get(`/lesson/detail/${lessonNo}`)

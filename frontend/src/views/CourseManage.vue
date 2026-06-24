@@ -36,7 +36,10 @@
           </el-upload>
         </el-form-item>
         <el-form-item v-if="isEdit" label="封面URL"><el-input v-model="form.coverUrl" placeholder="图片链接" /></el-form-item>
-      </el-form>
+        <el-form-item label="课程简介"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
+        <el-form-item label="适用专业"><el-input v-model="form.applicableMajor" /></el-form-item>
+        <el-form-item label="课程目标"><el-input v-model="form.courseObjectives" type="textarea" :rows="3" /></el-form-item>
+        </el-form>
       <template #footer>
         <el-button @click="dialogVisible=false">取消</el-button>
         <el-button type="primary" @click="save">保存</el-button>
@@ -55,7 +58,7 @@ const courses = ref([])
 const loading = ref(true)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
-const form = reactive({ courseCode: '', courseName: '', teacher: '', credits: 0, hours: 0, coverUrl: '' })
+const form = reactive({ courseCode: '', courseName: '', teacher: '', credits: 0, hours: 0, coverUrl: '', description: '', applicableMajor: '', courseObjectives: '' })
 const coverFile = ref(null)
 
 const handleCover = (f) => { coverFile.value = f.raw }
@@ -75,7 +78,7 @@ const doSearch = async () => {
 
 const openAdd = () => {
   isEdit.value = false
-  Object.assign(form, { courseCode: '', courseName: '', teacher: '', credits: 0, hours: 0, coverUrl: '' })
+  Object.assign(form, { courseCode: '', courseName: '', teacher: '', credits: 0, hours: 0, coverUrl: '', description: '', applicableMajor: '', courseObjectives: '' })
   dialogVisible.value = true
 }
 
@@ -91,6 +94,9 @@ const save = async () => {
   fd.append('teacher', form.teacher)
   fd.append('credits', String(form.credits))
   fd.append('hours', String(form.hours))
+  fd.append('description', form.description || '')
+  fd.append('applicableMajor', form.applicableMajor || '')
+  fd.append('courseObjectives', form.courseObjectives || '')
   if (coverFile.value) fd.append('file', coverFile.value)
   if (isEdit.value) {
     await updateCourse(form.courseCode, fd)
