@@ -4,6 +4,7 @@ import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentScoreDTO;
 import com.neu.CoursePlatform.module5_analytics.entity.RiskAlert;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -28,7 +29,7 @@ public class RiskDetectionService {
     /** 进度落后阈值 */
     private static final double PROGRESS_LAG_RATE = 0.30;
 
-    public RiskDetectionService(ExternalDataProvider dataProvider,
+    public RiskDetectionService(@Lazy ExternalDataProvider dataProvider,
                                  RiskAlertService riskAlertService) {
         this.dataProvider = dataProvider;
         this.riskAlertService = riskAlertService;

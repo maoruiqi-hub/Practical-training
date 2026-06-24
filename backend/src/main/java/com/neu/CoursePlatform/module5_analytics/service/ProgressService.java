@@ -4,6 +4,7 @@ import com.neu.CoursePlatform.module5_analytics.dto.ClassProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.TaskCompletionDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class ProgressService {
     /** 进度落后阈值：低于班级平均的百分比 */
     private static final double LAG_THRESHOLD = 0.20;
 
-    public ProgressService(ExternalDataProvider dataProvider) {
+    public ProgressService(@Lazy ExternalDataProvider dataProvider) {
         this.dataProvider = dataProvider;
     }
 

@@ -90,10 +90,16 @@ public class RiskAlertController {
         return ok ? Result.ok() : Result.fail("预警不存在或已处理");
     }
 
+    /**
+     * 风险类型 → 风险等级映射。
+     * 游戏事件类型引用 {@link com.neu.CoursePlatform.common.GameEventTypes}，
+     * 确保与模块4 发送的事件字符串完全一致。
+     */
     private String mapRiskLevel(String riskType) {
         return switch (riskType) {
-            case "hp_critical", "low_score" -> "high";
-            case "procrastination", "stuck_detected", "inactive", "stuck" -> "medium";
+            case com.neu.CoursePlatform.common.GameEventTypes.HP_CRITICAL, "low_score" -> "high";
+            case "procrastination", com.neu.CoursePlatform.common.GameEventTypes.STUCK_DETECTED,
+                 com.neu.CoursePlatform.common.GameEventTypes.INACTIVE, "stuck" -> "medium";
             default -> "low";
         };
     }

@@ -5,6 +5,7 @@ import com.neu.CoursePlatform.module5_analytics.dto.external.MistakeStatsDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentScoreDTO;
 import com.neu.CoursePlatform.module5_analytics.service.ScoreAnalysisService;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -15,7 +16,12 @@ public class ScoreAnalysisServiceImpl implements ScoreAnalysisService {
 
     private final ExternalDataProvider dataProvider;
 
-    public ScoreAnalysisServiceImpl(ExternalDataProvider dataProvider) {
+    /**
+     * @Lazy 预留给 ExternalDataProvider 的真实实现：
+     * 当模块4 的 Service 替换 Mock 后，模块4↔模块5 产生循环依赖，
+     * @Lazy 打破该循环。不影响 Mock 阶段行为。
+     */
+    public ScoreAnalysisServiceImpl(@Lazy ExternalDataProvider dataProvider) {
         this.dataProvider = dataProvider;
     }
 

@@ -6,6 +6,7 @@ import com.neu.CoursePlatform.module5_analytics.dto.WeakPointDTO;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,7 +26,7 @@ public class TeachingSuggestionService {
     private final RiskAlertService riskAlertService;
 
     public TeachingSuggestionService(AgenticClient agenticClient,
-                                      ExternalDataProvider dataProvider,
+                                      @Lazy ExternalDataProvider dataProvider,
                                       ScoreAnalysisService scoreAnalysisService,
                                       RiskAlertService riskAlertService) {
         this.agenticClient = agenticClient;
