@@ -13,7 +13,7 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/task")
+@RequestMapping("/api/tasks")
 public class TaskController {
 
     private final LearningTaskService taskService;

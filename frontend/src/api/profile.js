@@ -25,10 +25,10 @@ export const getLeaderboard = (courseCode, type) =>
     api.get('/profile/leaderboard', { params: { courseCode, type } })
 
 export const importStudents = (formData) =>
-    api.post('/student/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+    api.post('/api/students/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 
 export const exportStudents = () =>
-    api.get('/student/export', { responseType: 'blob' })
+    api.get('/api/students/export', { responseType: 'blob' })
 
 export const getCompetencyHistory = (studentNo, courseCode, abilityPointId) =>
     api.get(`/profile/${studentNo}/${courseCode}/competency/history`, { params: { abilityPointId } })

@@ -1,7 +1,13 @@
 <template>
   <div>
     <el-button @click="$router.back()" style="margin-bottom:10px">← 返回</el-button>
-    <h3>{{ courseName }}</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>{{ courseName }}</h3>
+      <div style="display:flex;gap:8px">
+        <el-button type="primary" plain @click="$router.push('/course/' + code + '/resources')">课程资源</el-button>
+        <el-button type="success" plain @click="$router.push('/course/' + code + '/knowledge-graph')">知识图谱</el-button>
+      </div>
+    </div>
     <el-tabs v-model="activeTab" style="margin-top:10px">
       <!-- 课时列表 -->
       <el-tab-pane label="课时列表" name="lessons">
@@ -48,7 +54,7 @@
             <el-table-column prop="score" label="分值" width="80" />
             <el-table-column label="操作" :width="userRole==='student' ? 100 : 240">
               <template #default="{ row }">
-                <el-button v-if="userRole==='student'" size="small" type="primary" @click="row.taskType==='quiz' ? $router.push('/quiz/take/' + row.taskNo) : $router.push('/task/' + code + '/submit/' + row.taskNo)">{{ row.taskType==='quiz' ? '答题' : '提交' }}</el-button>
+                <el-button v-if="userRole==='student'" size="small" type="primary" @click="isQuizType(row.taskType) ? $router.push('/quiz/take/' + row.taskNo) : $router.push('/task/' + code + '/submit/' + row.taskNo)">{{ isQuizType(row.taskType) ? '答题' : '提交' }}</el-button>
                 <template v-else>
                   <el-button size="small" type="primary" @click="$router.push('/task/' + code + '/submit/' + row.taskNo)">查看提交</el-button>
                   <el-button size="small" @click="openTaskEdit(row)">编辑</el-button>
@@ -66,14 +72,14 @@
     <!-- 任务弹窗 -->
     <el-dialog v-model="taskDialog" :title="isTaskEdit ? '编辑任务' : '发布任务'" width="650px">
       <el-form :model="taskForm" label-width="80px">
-        <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="实验报告" value="实验报告" /><el-option label="在线测验" value="quiz" /><el-option label="其他" value="other" /></el-select></el-form-item>
-        <el-form-item :label="taskForm.taskType==='quiz'?'测验名称':'任务说明'"><el-input v-model="taskForm.description" /></el-form-item>
+        <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="实验报告" value="实验报告" /><el-option label="在线测验" :value="ONLINE_QUIZ_TYPE" /><el-option label="其他" value="other" /></el-select></el-form-item>
+        <el-form-item :label="isQuizType(taskForm.taskType)?'测验名称':'任务说明'"><el-input v-model="taskForm.description" /></el-form-item>
         <el-form-item label="截止时间"><el-input v-model="taskForm.deadline" placeholder="2026-07-15 23:59:59" /></el-form-item>
-        <el-form-item v-if="taskForm.taskType!=='quiz'" label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
+        <el-form-item v-if="!isQuizType(taskForm.taskType)" label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
         <el-form-item label="分值"><el-input-number v-model="taskForm.score" :min="0" :max="100" /></el-form-item>
-        <el-form-item v-if="taskForm.taskType!=='quiz'" label="附件"><el-upload :auto-upload="false" :limit="1" :on-change="handleTaskFile" accept="*"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
+        <el-form-item v-if="!isQuizType(taskForm.taskType)" label="附件"><el-upload :auto-upload="false" :limit="1" :on-change="handleTaskFile" accept="*"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
         <!-- 测验选题 -->
-        <div v-if="taskForm.taskType==='quiz'" style="margin-bottom:16px">
+        <div v-if="isQuizType(taskForm.taskType)" style="margin-bottom:16px">
           <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
             <el-input v-model="qKeyword" placeholder="搜索题干/知识点" style="width:180px" size="small" @keyup.enter="loadQuestions" clearable />
             <el-input v-model="qLesson" placeholder="课时编号" style="width:100px" size="small" clearable />
@@ -82,6 +88,7 @@
           <div class="paper-panel">
             <el-select v-model="paperForm.strategy" size="small" style="width:130px">
               <el-option label="随机组卷" value="random" />
+              <el-option label="按题型数量" value="type" />
               <el-option label="按知识点组卷" value="knowledge" />
               <el-option label="难度平衡" value="difficulty" />
             </el-select>
@@ -93,8 +100,8 @@
               <el-option label="简答" value="essay" />
               <el-option label="编程" value="program" />
             </el-select>
-            <el-select v-model="paperForm.knowledgePoints" multiple allow-create filterable default-first-option collapse-tags collapse-tags-tooltip placeholder="知识点" size="small" style="width:200px">
-              <el-option v-for="kp in knowledgeOptions" :key="kp" :label="kp" :value="kp" />
+            <el-select v-model="paperForm.knowledgePointIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="知识点" size="small" style="width:200px">
+              <el-option v-for="kp in knowledgePoints" :key="kp.knowledgePointId" :label="kp.name" :value="String(kp.knowledgePointId)" />
             </el-select>
             <el-select v-model="paperForm.difficultyRange" placeholder="难度" size="small" style="width:120px">
               <el-option label="全部难度" :value="[1,5]" />
@@ -102,14 +109,33 @@
               <el-option label="中等 3" :value="[3,3]" />
               <el-option label="提高 4-5" :value="[4,5]" />
             </el-select>
-            <el-button size="small" type="primary" :loading="paperLoading" @click="generatePaperQuestions">生成试卷</el-button>
+            <el-input-number v-model="paperForm.targetScore" :min="0" :max="500" placeholder="目标总分" size="small" controls-position="right" style="width:120px" />
+            <template v-if="paperForm.strategy === 'difficulty'">
+              <span class="mini-field"><span>基础</span><el-input-number v-model="paperForm.difficultyRatios[1]" :min="0" :max="100" size="small" controls-position="right" /></span>
+              <span class="mini-field"><span>中等</span><el-input-number v-model="paperForm.difficultyRatios[3]" :min="0" :max="100" size="small" controls-position="right" /></span>
+              <span class="mini-field"><span>综合</span><el-input-number v-model="paperForm.difficultyRatios[5]" :min="0" :max="100" size="small" controls-position="right" /></span>
+            </template>
+            <el-button size="small" type="primary" :loading="paperLoading" @click="generateExamQuestions">生成试卷</el-button>
           </div>
+          <div v-if="paperForm.strategy === 'type'" class="count-panel">
+            <span v-for="item in typeOptions" :key="item.value" class="count-item">
+              <span>{{ item.label }}</span>
+              <el-input-number v-model="paperForm.typeCounts[item.value]" :min="0" :max="50" size="small" controls-position="right" />
+            </span>
+          </div>
+          <div v-if="paperForm.strategy === 'knowledge' && paperForm.knowledgePointIds.length" class="count-panel">
+            <span v-for="kpId in paperForm.knowledgePointIds" :key="kpId" class="count-item">
+              <span>{{ knowledgeLabel(kpId) }}</span>
+              <el-input-number v-model="paperForm.knowledgePointIdCounts[kpId]" :min="0" :max="50" size="small" controls-position="right" />
+            </span>
+          </div>
+          <div v-if="examVersionId" class="paper-version-tip">已生成试卷版本 #{{ examVersionId }}，发布任务后会自动绑定。</div>
           <div v-loading="qLoading" style="max-height:320px;overflow-y:auto;width:100%;border:1px solid #eee;border-radius:6px;padding:12px">
             <div style="color:#999;font-size:12px;margin-bottom:8px">已选 {{ selectedQuestions.length }} 题，共 {{ filteredQuestions.length }} 题</div>
             <el-checkbox-group v-model="selectedQuestions">
               <div v-for="q in filteredQuestions" :key="q.questionId" style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px dashed #eee;text-align:left">
                 <el-checkbox :value="q.questionId">{{ q.stem }}</el-checkbox>
-                <span style="margin-left:8px"><el-tag size="small">{{ typeLabel(q.type) }}</el-tag><span style="color:#999;font-size:12px;margin-left:4px">{{ q.score }}分 | 难度{{ q.difficulty || '-' }} | 课时{{ q.lessonNo || '-' }} | {{ q.knowledgePoint || '未关联知识点' }}</span></span>
+                <span style="margin-left:8px"><el-tag size="small">{{ typeLabel(q.type) }}</el-tag><span style="color:#999;font-size:12px;margin-left:4px">{{ q.score }}分 | {{ difficultyLabel(q.difficulty) }} | 课时{{ q.lessonNo || '-' }} | {{ knowledgeLabel(q.knowledgePointId) || '未关联知识点' }}</span></span>
               </div>
             </el-checkbox-group>
             <el-empty v-if="!questionBank.length && !qLoading" description="暂无题目" :image-size="40" />
@@ -118,7 +144,7 @@
       </el-form>
       <template #footer>
         <el-button @click="taskDialog=false">取消</el-button>
-        <el-button type="primary" @click="saveTask">保存</el-button>
+        <el-button type="primary" @click="saveTask">{{ isTaskEdit ? '保存修改' : '发布' }}</el-button>
       </template>
     </el-dialog>
 
@@ -157,20 +183,24 @@ import {
   getTaskList,
   searchQuestion,
   getQuestionsByCourse,
-  generatePaper,
+  getKnowledgePoints,
+  generateExamVersion,
   updateLesson,
   addLesson,
   deleteLesson as deleteLessonApi,
   addTask,
   updateTask,
   deleteTask as deleteTaskApi,
-  addQuestionsToTask
+  addQuestionsToTask,
+  bindExamToTask
 } from '../api'
 
 const route = useRoute()
 const code = route.params.code
 const user = JSON.parse(localStorage.getItem('user') || '{}')
 const userRole = user.role
+const ONLINE_QUIZ_TYPE = '在线测验'
+const isQuizType = type => type === ONLINE_QUIZ_TYPE
 const courseName = ref(code)
 const lessons = ref([])
 const tasks = ref([])
@@ -190,25 +220,42 @@ const lessonForm = reactive({ lessonNo: '', lessonTitle: '', resourceType: 'vide
 const taskFile = ref(null)
 const selectedQuestions = ref([])
 const questionBank = ref([])
+const knowledgePoints = ref([])
 const qLoading = ref(false)
 const qKeyword = ref('')
 const qLesson = ref('')
 const paperLoading = ref(false)
-const paperForm = reactive({ strategy: 'random', count: 10, types: [], knowledgePoints: [], difficultyRange: [1, 5] })
+const examVersionId = ref('')
+const paperForm = reactive({
+  strategy: 'random',
+  count: 10,
+  types: [],
+  knowledgePointIds: [],
+  difficultyRange: [1, 5],
+  targetScore: 0,
+  typeCounts: { single: 0, multi: 0, fill: 0, essay: 0, program: 0 },
+  knowledgePointIdCounts: {},
+  difficultyRatios: { 1: 40, 3: 40, 5: 20 }
+})
 
 const filteredQuestions = computed(() => {
   return questionBank.value.filter(q => {
-    if (qKeyword.value && !q.stem.includes(qKeyword.value) && !(q.knowledgePoint||'').includes(qKeyword.value)) return false
+    if (qKeyword.value && !q.stem.includes(qKeyword.value) && !knowledgeLabel(q.knowledgePointId).includes(qKeyword.value)) return false
     if (qLesson.value && q.lessonNo !== qLesson.value) return false
     return true
   })
 })
 
-const knowledgeOptions = computed(() => {
-  return [...new Set(questionBank.value.map(q => q.knowledgePoint).filter(Boolean))]
-})
-
 const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
+const difficultyLabel = d => ({1:'基础题',2:'较易题',3:'中等题',4:'提高题',5:'综合题'}[d] || '未设置难度')
+const knowledgeLabel = id => knowledgePoints.value.find(kp => String(kp.knowledgePointId) === String(id))?.name || id
+const typeOptions = [
+  { label: '单选', value: 'single' },
+  { label: '多选', value: 'multi' },
+  { label: '填空', value: 'fill' },
+  { label: '简答', value: 'essay' },
+  { label: '编程', value: 'program' }
+]
 
 const loadQuestions = async () => {
   qLoading.value = true
@@ -222,32 +269,64 @@ const loadQuestions = async () => {
 }
 
 const onTaskTypeChange = async (val) => {
-  if (val === 'quiz') { qKeyword.value = ''; qLesson.value = ''; selectedQuestions.value = []; loadQuestions() }
+  if (isQuizType(val)) { qKeyword.value = ''; qLesson.value = ''; selectedQuestions.value = []; loadQuestions(); loadKnowledgePoints() }
 }
 
-const generatePaperQuestions = async () => {
+const loadKnowledgePoints = async () => {
+  try {
+    const res = await getKnowledgePoints(code)
+    if (res.data.code === 200) knowledgePoints.value = res.data.data
+    else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('知识点加载失败')
+  }
+}
+
+const generateExamQuestions = async () => {
   paperLoading.value = true
   try {
     const [difficultyMin, difficultyMax] = paperForm.difficultyRange || [1, 5]
-    const res = await generatePaper(code, {
+    const typeCounts = positiveCounts(paperForm.typeCounts)
+    const knowledgePointIdCounts = positiveCounts(paperForm.knowledgePointIdCounts)
+    const difficultyRatios = positiveCounts(paperForm.difficultyRatios)
+    const requestedCount = paperForm.strategy === 'type' && sumCounts(typeCounts) > 0
+      ? sumCounts(typeCounts)
+      : paperForm.strategy === 'knowledge' && sumCounts(knowledgePointIdCounts) > 0
+        ? sumCounts(knowledgePointIdCounts)
+        : paperForm.count
+    const payload = {
       strategy: paperForm.strategy,
-      count: paperForm.count,
+      count: requestedCount,
       types: paperForm.types,
-      knowledgePoints: paperForm.knowledgePoints,
+      knowledgePointIds: paperForm.knowledgePointIds,
       difficultyMin,
-      difficultyMax
-    })
+      difficultyMax,
+      targetScore: paperForm.targetScore || undefined,
+      typeCounts: paperForm.strategy === 'type' ? typeCounts : undefined,
+      knowledgePointIdCounts: paperForm.strategy === 'knowledge' ? knowledgePointIdCounts : undefined,
+      difficultyRatios: paperForm.strategy === 'difficulty' ? difficultyRatios : undefined
+    }
+    const res = await generateExamVersion(code, payload)
     if (res.data.code === 200) {
-      const generated = res.data.data || []
+      const generated = res.data.data?.questions || []
+      examVersionId.value = res.data.data?.exam?.examId || ''
       questionBank.value = mergeQuestions(questionBank.value, generated)
       selectedQuestions.value = generated.map(q => q.questionId)
-      ElMessage.success(`已生成 ${generated.length} 道题`)
+      ElMessage.success(`已生成 ${generated.length} 道题，试卷版本已保存`)
     } else ElMessage.error(res.data.msg)
   } catch {
     ElMessage.error('组卷失败')
   } finally {
     paperLoading.value = false
   }
+}
+
+const positiveCounts = (source) => {
+  return Object.fromEntries(Object.entries(source || {}).filter(([, value]) => Number(value) > 0))
+}
+
+const sumCounts = (source) => {
+  return Object.values(source || {}).reduce((sum, value) => sum + Number(value || 0), 0)
 }
 
 const mergeQuestions = (base, added) => {
@@ -261,6 +340,7 @@ onMounted(async () => {
     const [lRes, cRes] = await Promise.all([getCourseLessons(code), searchCourse(code)])
     if (lRes.data.code === 200) lessons.value = lRes.data.data
     if (cRes.data.code === 200 && cRes.data.data.length > 0) courseName.value = cRes.data.data[0].courseName
+    await loadKnowledgePoints()
   } catch {
     ElMessage.error('课时加载失败')
   } finally { loading.value = false }
@@ -333,21 +413,31 @@ const reloadTasks = async () => {
 }
 
 const openTaskAdd = () => {
-  isTaskEdit.value = false; taskFile.value = null
+  isTaskEdit.value = false; taskFile.value = null; examVersionId.value = ''
   Object.assign(taskForm, { taskNo: '', taskType: '', description: '', deadline: '', submitMethod: '', score: 0 })
-  Object.assign(paperForm, { strategy: 'random', count: 10, types: [], knowledgePoints: [], difficultyRange: [1, 5] })
+  Object.assign(paperForm, {
+    strategy: 'random',
+    count: 10,
+    types: [],
+    knowledgePointIds: [],
+    difficultyRange: [1, 5],
+    targetScore: 0,
+    typeCounts: { single: 0, multi: 0, fill: 0, essay: 0, program: 0 },
+    knowledgePointIdCounts: {},
+    difficultyRatios: { 1: 40, 3: 40, 5: 20 }
+  })
   taskDialog.value = true
 }
 const openTaskEdit = (row) => { isTaskEdit.value = true; Object.assign(taskForm, row); taskDialog.value = true }
 const saveTask = async () => {
-  if (taskForm.taskType === 'quiz' && !selectedQuestions.value.length) {
+  if (isQuizType(taskForm.taskType) && !selectedQuestions.value.length) {
     ElMessage.error('请先选择题目或生成试卷')
     return
   }
   try {
     const fd = new FormData()
     fd.append('taskType', taskForm.taskType); fd.append('description', taskForm.description)
-    fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', taskForm.taskType==='quiz' ? '在线答题' : (taskForm.submitMethod || ''))
+    fd.append('deadline', taskForm.deadline || ''); fd.append('submitMethod', isQuizType(taskForm.taskType) ? '在线答题' : (taskForm.submitMethod || ''))
     fd.append('score', String(taskForm.score))
     if (taskFile.value) fd.append('file', taskFile.value)
 
@@ -366,16 +456,23 @@ const saveTask = async () => {
         return
       }
       // 测验：保存选题关联
-      if (taskForm.taskType === 'quiz' && selectedQuestions.value.length) {
+      if (isQuizType(taskForm.taskType) && selectedQuestions.value.length) {
         const bindRes = await addQuestionsToTask(created.data.data, selectedQuestions.value)
         if (bindRes.data.code !== 200) {
           ElMessage.error(bindRes.data.msg || '试卷题目绑定失败')
           return
         }
+        if (examVersionId.value) {
+          const paperBindRes = await bindExamToTask(examVersionId.value, created.data.data)
+          if (paperBindRes.data.code !== 200) {
+            ElMessage.error(paperBindRes.data.msg || '试卷版本绑定失败')
+            return
+          }
+        }
       }
-      ElMessage.success(taskForm.taskType === 'quiz' ? `发布成功，已绑定 ${selectedQuestions.value.length} 道题` : '发布成功')
+      ElMessage.success(isQuizType(taskForm.taskType) ? `发布成功，已绑定 ${selectedQuestions.value.length} 道题` : '发布成功')
     }
-    taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; reloadTasks()
+    taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; examVersionId.value = ''; reloadTasks()
   } catch {
     ElMessage.error(isTaskEdit.value ? '任务更新失败，请稍后重试' : '任务发布失败，请稍后重试')
   }
@@ -400,5 +497,31 @@ const deleteTask = async (taskNo) => {
   border: 1px solid #ebeef5;
   border-radius: 6px;
   background: #fafafa;
+}
+.paper-version-tip {
+  margin: 0 0 8px;
+  color: #67c23a;
+  font-size: 12px;
+}
+.mini-field,
+.count-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #606266;
+  font-size: 12px;
+}
+.mini-field :deep(.el-input-number),
+.count-item :deep(.el-input-number) {
+  width: 86px;
+}
+.count-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
 }
 </style>

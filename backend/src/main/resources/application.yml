@@ -7,7 +7,9 @@ spring:
       continue-on-error: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://6hvKfTDx9562cF6.root:VOPrnl0gCDYLjYhD@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/practical_training?useSSL=true&requireSSL=true&serverTimezone=UTC
+    url: "${DB_URL:jdbc:mysql://localhost:3306/practical_training?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8}"
+    username: "${DB_USERNAME:root}"
+    password: "${DB_PASSWORD:}"
     hikari:
       maximum-pool-size: 20
       minimum-idle: 3
@@ -22,6 +24,16 @@ server:
   servlet:
     context-path: /practical-training
 
+course-resource:
+  office-preview:
+    enabled: ${COURSE_RESOURCE_OFFICE_PREVIEW_ENABLED:false}
+    soffice-path: ${COURSE_RESOURCE_SOFFICE_PATH:C:/Program Files/LibreOffice/program/soffice.exe}
+    timeout-seconds: 60
+
+agentic:
+  mode: ${AGENTIC_MODE:mock}
+  base-url: ${AGENTIC_BASE_URL:}
+
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug
@@ -29,7 +41,13 @@ logging:
 
 mybatis-plus:
   type-aliases-package: com.neu.CoursePlatform.entity
-  mapper-locations: classpath*:/mapper/*.xml
+  mapper-locations: classpath*:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Agentic AI 服务配置
+agentic:
+  api-key: ${AGENTIC_API_KEY:}
+  base-url: ${AGENTIC_BASE_URL:http://localhost:8081}
+  model: ${AGENTIC_MODEL:gpt-4o-mini}

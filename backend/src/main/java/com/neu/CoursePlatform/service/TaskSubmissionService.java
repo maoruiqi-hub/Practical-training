@@ -25,5 +25,7 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     void applyInitialGrading(TaskSubmission sub);
 
+    void submitWithGrading(TaskSubmission sub);
+
     int autoScoreChoices(TaskSubmission sub);
 }

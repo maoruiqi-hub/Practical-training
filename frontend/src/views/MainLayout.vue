@@ -15,6 +15,8 @@
           <el-menu-item index="/courses"><el-icon><Reading /></el-icon>课程列表</el-menu-item>
           <el-menu-item index="/stats"><el-icon><TrendCharts /></el-icon>成绩统计</el-menu-item>
           <el-menu-item index="/profile" v-if="user.role==='student'"><el-icon><User /></el-icon>我的画像</el-menu-item>
+          <el-menu-item v-if="!isStudent" index="/learning-analysis"><el-icon><TrendCharts /></el-icon>学情分析</el-menu-item>
+          <el-menu-item v-if="isStudent" index="/wrong-book"><el-icon><DocumentChecked /></el-icon>错题本</el-menu-item>
           <template v-if="isAdmin">
             <el-sub-menu index="admin">
               <template #title><el-icon><Setting /></el-icon>管理后台</template>
@@ -37,11 +39,13 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { DocumentChecked, HomeFilled, Reading, Setting, TrendCharts } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const user = JSON.parse(localStorage.getItem('user') || '{}')
 const isAdmin = computed(() => user.role === 'admin')
+const isStudent = computed(() => user.role === 'student')
 const userRoleLabel = computed(() => isAdmin.value ? '管理员' : user.role === 'student' ? '学生' : '教师')
 
 const logout = () => {

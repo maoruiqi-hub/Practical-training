@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/stats")
+@RequestMapping("/api")
 public class StatsController {
 
     private final StatsService statsService;
@@ -22,7 +22,7 @@ public class StatsController {
     }
 
     /** 学生成绩总览 | student本人 / admin */
-    @GetMapping("/student/{studentNo}")
+    @GetMapping("/students/{studentNo}/stats")
     public Result<Map<String, Object>> studentStats(@PathVariable String studentNo, HttpSession session) {
         Student loginStudent = (Student) session.getAttribute("student");
         if (!auth.isAdmin(session) && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo))) {
@@ -33,7 +33,7 @@ public class StatsController {
     }
 
     /** 课程成绩总览 | admin/授课教师 */
-    @GetMapping("/course/{courseCode}")
+    @GetMapping("/courses/{courseCode}/stats")
     public Result<Map<String, Object>> courseStats(@PathVariable String courseCode, HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         return Result.ok(statsService.buildCourseStats(courseCode));

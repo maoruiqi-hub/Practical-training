@@ -12,9 +12,37 @@
     </select>
 
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Question">
-        SELECT * FROM question
-        WHERE stem LIKE CONCAT('%', #{keyword}, '%')
-           OR knowledge_point LIKE CONCAT('%', #{keyword}, '%')
+        SELECT q.* FROM question q
+        LEFT JOIN knowledge_point kp ON kp.knowledge_point_id = q.knowledge_point_id
+        WHERE q.stem LIKE CONCAT('%', #{keyword}, '%')
+           OR kp.name LIKE CONCAT('%', #{keyword}, '%')
+    </select>
+
+    <select id="selectByFilter" resultType="com.neu.CoursePlatform.entity.Question">
+        SELECT q.* FROM question q
+        LEFT JOIN knowledge_point kp ON kp.knowledge_point_id = q.knowledge_point_id
+        <where>
+            <if test="courseCode != null and courseCode != ''">
+                AND q.course_code = #{courseCode}
+            </if>
+            <if test="lessonNo != null and lessonNo != ''">
+                AND q.lesson_no = #{lessonNo}
+            </if>
+            <if test="knowledgePointId != null and knowledgePointId != ''">
+                AND q.knowledge_point_id = #{knowledgePointId}
+            </if>
+            <if test="type != null and type != ''">
+                AND q.type = #{type}
+            </if>
+            <if test="difficulty != null">
+                AND q.difficulty = #{difficulty}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (q.stem LIKE CONCAT('%', #{keyword}, '%')
+                    OR kp.name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY q.question_id DESC
     </select>
 
 </mapper>
