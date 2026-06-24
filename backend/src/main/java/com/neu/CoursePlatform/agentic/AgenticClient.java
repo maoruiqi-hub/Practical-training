@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -75,6 +76,34 @@ public class AgenticClient {
      */
     public String riskDetect(Map<String, Object> request) throws AgenticException {
         return post("/api/agent/risk-detect", request);
+    }
+
+    /**
+     * 通用 invoke（供 LectureController 等旧调用方使用）
+     */
+    public AgenticResponse invoke(String capability, AgenticRequest request) {
+        if (baseUrl == null || baseUrl.isBlank() || "mock".equalsIgnoreCase(baseUrl)) {
+            return mockResponse(capability, request);
+        }
+        try {
+            Map<String, Object> body = Map.of("capability", capability, "request", request);
+            String result = post("/api/agent/" + capability, body);
+            return new AgenticResponse(true, Map.of("result", result), "ok");
+        } catch (AgenticException e) {
+            return new AgenticResponse(false, Map.of(), e.getMessage());
+        }
+    }
+
+    private AgenticResponse mockResponse(String capability, AgenticRequest request) {
+        if ("lecture".equals(capability)) {
+            return new AgenticResponse(true, Map.of(
+                    "explanation", "这是针对当前知识点和 PPT 页面的本地联调讲解。",
+                    "learningFocus", "理解概念定义与适用场景。",
+                    "commonMistakes", "不要只记结论，应结合例子判断。",
+                    "example", "请尝试用自己的话复述该概念。",
+                    "mock", true), "Mock lecture response");
+        }
+        return new AgenticResponse(true, Map.of("capability", capability, "mock", true), "Mock agentic response");
     }
 
     // ---- internal ----
