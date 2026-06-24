@@ -1,6 +1,9 @@
 package com.neu.CoursePlatform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.neu.CoursePlatform.dto.ExamDetailDTO;
+import com.neu.CoursePlatform.dto.ExamQuestionViewDTO;
 import com.neu.CoursePlatform.dto.ExamGenerateRequest;
 import com.neu.CoursePlatform.dto.ExamGenerateResult;
 import com.neu.CoursePlatform.entity.Exam;
@@ -66,6 +69,38 @@ public class ExamServiceImpl extends ServiceImpl<ExamMapper, Exam> implements Ex
         exam.setTaskNo(taskNo);
         exam.setStatus("published");
         updateById(exam);
+    }
+
+    @Override
+    public List<Exam> listByCourseCode(String courseCode) {
+        return list(new LambdaQueryWrapper<Exam>()
+                .eq(Exam::getCourseCode, courseCode)
+                .orderByDesc(Exam::getCreateTime));
+    }
+
+    @Override
+    public ExamDetailDTO getDetail(String examId) {
+        Exam exam = getById(examId);
+        if (exam == null) return null;
+        List<ExamQuestion> snapshots = examQuestionService.list(new LambdaQueryWrapper<ExamQuestion>()
+                .eq(ExamQuestion::getExamId, examId)
+                .orderByAsc(ExamQuestion::getSortOrder));
+        List<ExamQuestionViewDTO> questions = snapshots.stream().map(snapshot -> {
+            Question question = questionService.getById(snapshot.getQuestionId());
+            ExamQuestionViewDTO view = new ExamQuestionViewDTO();
+            view.setQuestionId(snapshot.getQuestionId());
+            view.setSortOrder(snapshot.getSortOrder());
+            view.setScore(snapshot.getScoreSnapshot());
+            view.setType(snapshot.getQuestionType());
+            view.setKnowledgePointId(snapshot.getKnowledgePointId());
+            view.setDifficulty(snapshot.getDifficulty());
+            if (question != null) {
+                view.setStem(question.getStem());
+                view.setOptions(question.getOptions());
+            }
+            return view;
+        }).toList();
+        return new ExamDetailDTO(exam, questions);
     }
 
     private String buildTitle(ExamGenerateRequest request) {

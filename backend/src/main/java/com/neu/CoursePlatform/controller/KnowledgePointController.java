@@ -49,9 +49,12 @@ public class KnowledgePointController {
     }
 
     @GetMapping("/knowledge-points")
-    public Result<List<KnowledgePoint>> list(@RequestParam String courseCode,
+    public Result<List<KnowledgePoint>> list(@RequestParam(required = false) String courseCode,
+                                             @RequestParam(name = "course_id", required = false) String courseId,
                                              @RequestParam(required = false) String chapter,
                                              HttpSession session) {
+        courseCode = courseCode == null || courseCode.isBlank() ? courseId : courseCode;
+        if (courseCode == null || courseCode.isBlank()) return Result.fail("course_id 不能为空");
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
         return Result.ok(knowledgePointService.listByCourseCode(courseCode, chapter));
@@ -65,7 +68,11 @@ public class KnowledgePointController {
     }
 
     @GetMapping("/knowledge-graph")
-    public Result<KnowledgeGraphDTO> graph(@RequestParam String courseCode, HttpSession session) {
+    public Result<KnowledgeGraphDTO> graph(@RequestParam(required = false) String courseCode,
+                                           @RequestParam(name = "course_id", required = false) String courseId,
+                                           HttpSession session) {
+        courseCode = courseCode == null || courseCode.isBlank() ? courseId : courseCode;
+        if (courseCode == null || courseCode.isBlank()) return Result.fail("course_id 不能为空");
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
         return Result.ok(new KnowledgeGraphDTO(

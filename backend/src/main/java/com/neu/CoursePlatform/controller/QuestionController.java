@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.controller;
 
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.dto.KnowledgePointLinkRequest;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
@@ -25,6 +26,20 @@ public class QuestionController {
     private final KnowledgePointService knowledgePointService;
     private final Auth auth;
 
+    /** Shared-contract query: GET /api/questions?course_id=&knowledge_point_id=&difficulty=. */
+    @GetMapping
+    public Result<List<Question>> listByContract(@RequestParam(name = "course_id", required = false) String courseId,
+                                                  @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                  @RequestParam(name = "knowledge_point_id", required = false) String knowledgePointId,
+                                                  @RequestParam(name = "difficulty", required = false) Integer difficulty,
+                                                  @RequestParam(name = "type", required = false) String type,
+                                                  HttpSession session) {
+        String resolvedCourseCode = courseId == null || courseId.isBlank() ? courseCode : courseId;
+        if (resolvedCourseCode == null || resolvedCourseCode.isBlank()) return Result.fail("course_id 不能为空");
+        if (!auth.canModifyCourse(session, resolvedCourseCode)) return Result.fail("无权查看该课程题库");
+        return Result.ok(questionService.filterQuestions(resolvedCourseCode, null, knowledgePointId, type, difficulty, null));
+    }
+
     public QuestionController(QuestionService questionService, TaskQuestionService taskQuestionService,
                               LearningTaskService taskService,
                               KnowledgePointService knowledgePointService, Auth auth) {
@@ -40,6 +55,9 @@ public class QuestionController {
     public Result<Question> detail(@PathVariable String questionId, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         Question q = questionService.getById(questionId);
+        if (q != null && !auth.canModifyCourse(session, q.getCourseCode())) {
+            return Result.ok(toStudentQuestion(q));
+        }
         return q != null ? Result.ok(q) : Result.fail("题目不存在");
     }
 
@@ -114,6 +132,27 @@ public class QuestionController {
     }
 
     /** 删除题目 | admin/授课教师 */
+    /** Links a question to a Module-1 knowledge point by ID, never by name. */
+    @PostMapping("/{questionId}/link-kp")
+    public Result<Void> linkKnowledgePoint(@PathVariable String questionId,
+                                           @RequestBody KnowledgePointLinkRequest request,
+                                           HttpSession session) {
+        Question question = questionService.getById(questionId);
+        if (question == null) return Result.fail("题目不存在");
+        if (!auth.canModifyCourse(session, question.getCourseCode())) return Result.fail("无权维护该课程题库");
+        if (request == null || request.getKnowledgePointId() == null || request.getKnowledgePointId().isBlank()) {
+            return Result.fail("knowledgePointId 不能为空");
+        }
+        question.setKnowledgePointId(request.getKnowledgePointId());
+        try {
+            syncKnowledgePoint(question);
+        } catch (IllegalArgumentException exception) {
+            return Result.fail(exception.getMessage());
+        }
+        questionService.updateById(question);
+        return Result.ok();
+    }
+
     @DeleteMapping("/{questionId}")
     public Result<Void> delete(@PathVariable String questionId, HttpSession session) {
         Question existing = questionService.getById(questionId);
@@ -158,6 +197,20 @@ public class QuestionController {
             return Result.fail(e.getMessage());
         }
         return Result.ok();
+    }
+
+    private Question toStudentQuestion(Question source) {
+        Question safe = new Question();
+        safe.setQuestionId(source.getQuestionId());
+        safe.setCourseCode(source.getCourseCode());
+        safe.setLessonNo(source.getLessonNo());
+        safe.setType(source.getType());
+        safe.setStem(source.getStem());
+        safe.setOptions(source.getOptions());
+        safe.setDifficulty(source.getDifficulty());
+        safe.setKnowledgePointId(source.getKnowledgePointId());
+        safe.setScore(source.getScore());
+        return safe;
     }
 
     private void syncKnowledgePoint(Question question) {

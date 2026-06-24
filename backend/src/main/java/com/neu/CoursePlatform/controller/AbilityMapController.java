@@ -43,7 +43,11 @@ public class AbilityMapController {
     }
 
     @GetMapping
-    public Result<AbilityMapDTO> get(@RequestParam String courseCode, HttpSession session) {
+    public Result<AbilityMapDTO> get(@RequestParam(required = false) String courseCode,
+                                     @RequestParam(name = "course_id", required = false) String courseId,
+                                     HttpSession session) {
+        courseCode = courseCode == null || courseCode.isBlank() ? courseId : courseCode;
+        if (courseCode == null || courseCode.isBlank()) return Result.fail("course_id 不能为空");
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
         return Result.ok(abilityMapService.getByCourseCode(courseCode));

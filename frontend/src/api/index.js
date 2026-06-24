@@ -80,8 +80,8 @@ export const getAiReview = (id) => api.get(`/api/submissions/${id}/ai-review`)
 // ============ 成绩统计 ============
 export const getStudentStats = (studentNo) => api.get(`/api/students/${studentNo}/stats`)
 export const getCourseStats = (courseCode) => api.get(`/api/courses/${courseCode}/stats`)
-export const getStudentWrongQuestions = (studentNo, params) => api.get(`/api/students/${studentNo}/mistakes`, { params })
-export const getCourseWrongQuestions = (courseCode) => api.get(`/api/courses/${courseCode}/mistake-stats`)
+export const getStudentWrongQuestions = (studentNo, params) => api.get(`/api/analysis/students/${studentNo}/mistakes`, { params })
+export const getCourseWrongQuestions = (courseCode) => api.get(`/api/analysis/courses/${courseCode}/mistake-stats`)
 
 // ============ 知识点 / 知识图谱 ============
 export const getKnowledgePoints = (courseCode, params = {}) => api.get('/api/knowledge-points', { params: { ...params, courseCode } })

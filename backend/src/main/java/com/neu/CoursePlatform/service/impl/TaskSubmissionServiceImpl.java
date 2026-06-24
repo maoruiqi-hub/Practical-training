@@ -11,11 +11,13 @@ import com.neu.CoursePlatform.entity.SubmissionAnswer;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.mapper.TaskSubmissionMapper;
 import com.neu.CoursePlatform.service.KnowledgePointService;
+import com.neu.CoursePlatform.service.AssessmentMasteryService;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.StudentService;
 import com.neu.CoursePlatform.service.SubmissionAnswerService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
+import com.neu.CoursePlatform.service.TowerAssessmentEventService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,15 +34,21 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     private final QuestionService questionService;
     private final SubmissionAnswerService answerService;
     private final KnowledgePointService knowledgePointService;
+    private final AssessmentMasteryService assessmentMasteryService;
+    private final TowerAssessmentEventService towerAssessmentEventService;
 
     public TaskSubmissionServiceImpl(LearningTaskService taskService, StudentService studentService,
                                      QuestionService questionService, SubmissionAnswerService answerService,
-                                     KnowledgePointService knowledgePointService) {
+                                     KnowledgePointService knowledgePointService,
+                                     AssessmentMasteryService assessmentMasteryService,
+                                     TowerAssessmentEventService towerAssessmentEventService) {
         this.taskService = taskService;
         this.studentService = studentService;
         this.questionService = questionService;
         this.answerService = answerService;
         this.knowledgePointService = knowledgePointService;
+        this.assessmentMasteryService = assessmentMasteryService;
+        this.towerAssessmentEventService = towerAssessmentEventService;
     }
 
     @Override
@@ -141,7 +149,13 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     public void submitWithGrading(TaskSubmission sub) {
         applyInitialGrading(sub);
         save(sub);
-        saveAnswerDetails(sub);
+        List<SubmissionAnswer> answers = saveAnswerDetails(sub);
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        if (task != null && !answers.isEmpty()) {
+            assessmentMasteryService.refreshFromObjectiveAnswers(sub.getStudentNo(), task.getCourseCode(),
+                    answers, sub.getSubmissionId());
+            towerAssessmentEventService.publishAssessmentEvents(task, sub.getStudentNo(), sub.getSubmissionId(), answers);
+        }
     }
 
     @Override
@@ -174,12 +188,13 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         return false;
     }
 
-    private void saveAnswerDetails(TaskSubmission sub) {
+    private List<SubmissionAnswer> saveAnswerDetails(TaskSubmission sub) {
         LearningTask task = taskService.getById(sub.getTaskNo());
-        if (!taskService.isQuizTask(task) || sub.getSubmissionId() == null) return;
+        if (!taskService.isQuizTask(task) || sub.getSubmissionId() == null) return List.of();
 
         List<SubmissionAnswer> answers = buildSubmissionAnswers(sub, parseQuizAnswers(sub));
         if (!answers.isEmpty()) answerService.saveBatch(answers);
+        return answers;
     }
 
     private List<SubmissionAnswer> buildSubmissionAnswers(TaskSubmission sub, List<Map<String, Object>> answers) {

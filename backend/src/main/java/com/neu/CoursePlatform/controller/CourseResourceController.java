@@ -94,7 +94,7 @@ public class CourseResourceController {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         CourseResource resource = courseResourceService.getById(resourceId);
         if (resource == null) return Result.fail("课程资源不存在");
-        String contentUrl = "/course-resource/" + resourceId + "/content";
+        String contentUrl = "/api/resources/" + resourceId + "/content";
         boolean officePreviewReady = ("ppt".equals(resource.getResourceType()) || "word".equals(resource.getResourceType()))
                 && "ready".equals(resource.getPreviewStatus());
         String previewUrl = officePreviewReady ? contentUrl + "?preview=true" : contentUrl;

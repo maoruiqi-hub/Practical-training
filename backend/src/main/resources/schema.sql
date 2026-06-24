@@ -93,6 +93,25 @@ CREATE TABLE IF NOT EXISTS knowledge_mastery (mastery_id INT AUTO_INCREMENT PRIM
 CREATE TABLE IF NOT EXISTS knowledge_extraction_candidate (candidate_id INT AUTO_INCREMENT PRIMARY KEY, course_code INT NOT NULL, resource_id INT NOT NULL, name VARCHAR(256) NOT NULL, description TEXT, chapter VARCHAR(256), importance INT, status VARCHAR(32) NOT NULL, created_at DATETIME NOT NULL, INDEX idx_extraction_candidate_course(course_code));
 ALTER TABLE knowledge_extraction_candidate ADD COLUMN IF NOT EXISTS importance INT;
 
+-- Module 1 <-> tower game contract. Module 4 owns game attributes, while
+-- Module 1 owns the course switch and per-knowledge-point floor labels.
+CREATE TABLE IF NOT EXISTS course_game_config (
+    course_code INT PRIMARY KEY,
+    game_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_point_floor_status (
+    floor_status_id INT AUTO_INCREMENT PRIMARY KEY,
+    student_no INT NOT NULL,
+    course_code INT NOT NULL,
+    knowledge_point_id INT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_floor_status_student_course_kp (student_no, course_code, knowledge_point_id),
+    INDEX idx_floor_status_student_course (student_no, course_code)
+);
+
 -- 课时表
 CREATE TABLE IF NOT EXISTS lesson (
     lesson_no INT AUTO_INCREMENT PRIMARY KEY,
@@ -141,6 +160,21 @@ CREATE TABLE IF NOT EXISTS submission_ai_review (
     risk_level VARCHAR(32),
     status VARCHAR(32),
     create_time DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS grade_result (
+    grade_result_id INT AUTO_INCREMENT PRIMARY KEY,
+    target_id INT NOT NULL,
+    target_type VARCHAR(32) NOT NULL,
+    course_code INT NOT NULL,
+    student_no INT NOT NULL,
+    score INT,
+    feedback TEXT,
+    graded_by VARCHAR(16) NOT NULL,
+    create_time DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_grade_result_target (target_id, target_type),
+    INDEX idx_grade_result_course_student (course_code, student_no)
 );
 
 -- 在线测验逐题作答明细表

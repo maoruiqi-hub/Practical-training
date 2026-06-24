@@ -21,6 +21,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 public class KnowledgePointServiceImpl extends ServiceImpl<KnowledgePointMapper, KnowledgePoint>
@@ -85,6 +91,34 @@ public class KnowledgePointServiceImpl extends ServiceImpl<KnowledgePointMapper,
             query.eq(KnowledgePoint::getChapter, chapter);
         }
         return list(query);
+    }
+
+    @Override
+    public List<KnowledgePoint> getPrerequisiteChain(String knowledgePointId) {
+        KnowledgePoint target = getById(knowledgePointId);
+        if (target == null) return List.of();
+        Map<String, KnowledgePoint> pointsById = new HashMap<>();
+        for (KnowledgePoint point : listByCourseCode(target.getCourseCode(), null)) {
+            pointsById.put(point.getKnowledgePointId(), point);
+        }
+        Map<String, List<String>> directPrerequisites = new HashMap<>();
+        List<KnowledgeRelation> relations = knowledgeRelationMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeRelation>()
+                        .eq(KnowledgeRelation::getCourseCode, target.getCourseCode())
+                        .eq(KnowledgeRelation::getRelationType, "prerequisite"));
+        for (KnowledgeRelation relation : relations) {
+            directPrerequisites.computeIfAbsent(relation.getToKnowledgePointId(), ignored -> new ArrayList<>())
+                    .add(relation.getFromKnowledgePointId());
+        }
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        Set<String> prerequisiteIds = new LinkedHashSet<>();
+        queue.add(knowledgePointId);
+        while (!queue.isEmpty()) {
+            for (String prerequisiteId : directPrerequisites.getOrDefault(queue.removeFirst(), List.of())) {
+                if (prerequisiteIds.add(prerequisiteId)) queue.addLast(prerequisiteId);
+            }
+        }
+        return prerequisiteIds.stream().map(pointsById::get).filter(java.util.Objects::nonNull).toList();
     }
 
     @Override

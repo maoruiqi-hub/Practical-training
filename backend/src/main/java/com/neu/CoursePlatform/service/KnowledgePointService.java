@@ -13,6 +13,9 @@ public interface KnowledgePointService extends IService<KnowledgePoint> {
 
     List<KnowledgePoint> listByCourseCode(String courseCode, String chapter);
 
+    /** In-process contract used by Module 4 to calculate tower accessibility and DEF. */
+    List<KnowledgePoint> getPrerequisiteChain(String knowledgePointId);
+
     /**
      * Deletes a knowledge point and clears every Module 1 relationship that
      * refers to it. Resources are preserved, but become uncategorised.

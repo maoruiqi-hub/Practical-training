@@ -33,6 +33,8 @@ course-resource:
 agentic:
   mode: ${AGENTIC_MODE:mock}
   base-url: ${AGENTIC_BASE_URL:}
+  api-key: ${AGENTIC_API_KEY:}
+  model: ${AGENTIC_MODEL:}
 
 logging:
   level:
@@ -45,8 +47,3 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-agentic:
-  api-key: ${AGENTIC_API_KEY:}
-  base-url: ${AGENTIC_BASE_URL:https://api.openai.com/v1/chat/completions}
-  model: ${AGENTIC_MODEL:gpt-4o-mini}
