@@ -5,45 +5,34 @@ const api = axios.create({
   timeout: 30000
 })
 
-// ============ 学生 ============
+// ============ 学生 (/api/students) ============
 export const studentLogin = (data) => api.post('/api/students/login', data)
 export const studentRegister = (data) => api.post('/api/students/register', data)
 export const getStudentList = () => api.get('/api/students/list')
 export const getStudentByNo = (no) => api.get(`/api/students/${no}`)
 export const updateStudent = (no, data) => api.put(`/api/students/${no}`, data)
 export const deleteStudent = (no) => api.delete(`/api/students/${no}`)
+export const searchStudent = (keyword) => api.get('/api/students/search', { params: { keyword } })
 
-// ============ 教师 ============
+// ============ 教师 (/api/teachers) ============
 export const teacherLogin = (data) => api.post('/api/teachers/login', data)
 export const teacherRegister = (data) => api.post('/api/teachers/register', data)
 export const searchTeacher = (keyword) => api.get('/api/teachers/search', { params: { keyword } })
-export const searchStudent = (keyword) => api.get('/api/students/search', { params: { keyword } })
 export const getTeacherList = () => api.get('/api/teachers/list')
 export const getTeacherByNo = (no) => api.get(`/api/teachers/${no}`)
 export const updateTeacher = (no, data) => api.put(`/api/teachers/${no}`, data)
 export const deleteTeacher = (no) => api.delete(`/api/teachers/${no}`)
 
-// ============ 课程 ============
-export const searchCourse = (keyword) => api.get('/api/courses/search', { params: { keyword } })
-export const getCourseLessons = (code) => api.get(`/api/courses/${code}/lessons`)
-export const getCourseList = () => api.get('/api/courses/list')
-export const getCourseByCode = (code) => api.get(`/api/courses/${code}`)
-export const addCourse = (data) => api.post('/api/courses', data)
-export const updateCourse = (code, data) => api.put(`/api/courses/${code}`, data)
-export const deleteCourse = (code) => api.delete(`/api/courses/${code}`)
+// ============ 课程 (/course) ============
+export const searchCourse = (keyword) => api.get('/course/search', { params: { keyword } })
+export const getCourseLessons = (code) => api.get(`/course/${code}/lessons`)
+export const getCourseList = () => api.get('/course/list')
+export const getCourseByCode = (code) => api.get(`/course/${code}`)
+export const addCourse = (data) => api.post('/course', data)
+export const updateCourse = (code, data) => api.put(`/course/${code}`, data)
+export const deleteCourse = (code) => api.delete(`/course/${code}`)
 
-// ============ 课程资源 ============
-export const getCourseResources = (courseCode, filters = {}) => api.get('/api/resources', { params: { courseCode, ...filters } })
-export const getCourseResourcePreview = (resourceId) => api.get(`/api/resources/${resourceId}/preview`)
-export const recordCourseResourceView = (resourceId, data) => api.post(`/api/resources/${resourceId}/view-events`, data)
-
-// ============ 知识图谱 ============
-export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
-export const getKnowledgePointDetail = (id) => api.get(`/api/knowledge-points/${id}`)
-export const getKnowledgePointPrerequisites = (id) => api.get(`/api/knowledge-points/${id}/prerequisites`)
-export const getKnowledgeRelations = (courseCode) => api.get('/api/knowledge-relations', { params: { courseCode } })
-
-// ============ 课时 ============
+// ============ 课时 (/api/lessons) ============
 export const getLessonList = (code) => api.get(`/api/lessons/${code}`)
 export const getLessonDetail = (lessonNo) => api.get(`/api/lessons/detail/${lessonNo}`)
 export const searchLesson = (keyword) => api.get('/api/lessons/search', { params: { keyword } })
@@ -53,7 +42,7 @@ export const addLesson = (formData) => api.post('/api/lessons', formData, {
 export const updateLesson = (code, lessonNo, formData) => api.put(`/api/lessons/${code}/${lessonNo}`, formData)
 export const deleteLesson = (code, lessonNo) => api.delete(`/api/lessons/${code}/${lessonNo}`)
 
-// ============ 学习任务 ============
+// ============ 学习任务 (/api/tasks) ============
 export const getTaskList = (code) => api.get(`/api/tasks/${code}`)
 export const searchTask = (keyword) => api.get('/api/tasks/search', { params: { keyword } })
 export const addTask = (data) => {
@@ -63,43 +52,50 @@ export const addTask = (data) => {
   return api.post('/api/tasks', formData)
 }
 export const getTaskDetail = (taskNo) => api.get('/api/tasks/detail/' + taskNo)
-export const updateTask = (code, no, data) => api.put(`/api/tasks/${code}/${no}`, data)
-export const deleteTask = (code, no) => api.delete(`/api/tasks/${code}/${no}`)
+export const updateTask = (code, no, data) => api.put(`/api/tasks/${code}/${no}`, data, {
+  headers: { 'Content-Type': 'application/json' }
+})
+export const deleteTask = (code, no, confirm) => api.delete(`/api/tasks/${code}/${no}?confirm=${confirm ? 'true' : 'false'}`)
+export const toggleTaskStatus = (code, no, status) => api.put(`/api/tasks/${code}/${no}/status`, { status })
 
-// ============ 任务提交 ============
-export const submitTask = (formData) => api.post(`/api/tasks/${formData.get('taskNo')}/submit`, formData, {
+// ============ 任务提交 (/submission) ============
+export const submitTask = (formData) => api.post('/submission', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 })
-export const getMySubmissions = () => api.get('/api/students/me/submissions')
-export const getSubmissionsByTask = (taskNo) => api.get(`/api/tasks/${taskNo}/submissions`)
-export const getGradeDetail = (submissionId) => api.get(`/api/submissions/${submissionId}/grade`)
-export const gradeSubmission = (id, data) => api.put(`/api/submissions/${id}`, data)
-export const generateAiReview = (id) => api.post(`/api/submissions/${id}/ai-review`)
-export const getAiReview = (id) => api.get(`/api/submissions/${id}/ai-review`)
+export const getMySubmissions = () => api.get('/submission/my')
+export const getSubmissionsByTask = (taskNo) => api.get(`/submission/task/${taskNo}`)
+export const getGradeDetail = (submissionId) => api.get(`/submission/grade/${submissionId}`)
+export const gradeSubmission = (id, data) => api.put(`/submission/${id}`, data)
 
-// ============ 成绩统计 ============
+// ============ 成绩统计 (/api) ============
 export const getStudentStats = (studentNo) => api.get(`/api/students/${studentNo}/stats`)
+export const getStudentCourseStats = (studentNo, courseCode) => api.get(`/api/student/${studentNo}/course/${courseCode}`)
 export const getCourseStats = (courseCode) => api.get(`/api/courses/${courseCode}/stats`)
-export const getStudentWrongQuestions = (studentNo, params) => api.get(`/api/students/${studentNo}/mistakes`, { params })
-export const getCourseWrongQuestions = (courseCode) => api.get(`/api/courses/${courseCode}/mistake-stats`)
 
-// ============ 知识点 / 知识图谱 ============
-export const getKnowledgePoints = (courseCode, params = {}) => api.get('/api/knowledge-points', { params: { ...params, courseCode } })
-export const addKnowledgePoint = (courseCode, data) => api.post('/api/knowledge-points', { ...data, courseCode })
-export const updateKnowledgePoint = (pointId, data) => api.put(`/api/knowledge-points/${pointId}`, data)
-export const deleteKnowledgePoint = (pointId) => api.delete(`/api/knowledge-points/${pointId}`)
+// ============ 学习进度 (/progress) ============
+export const getStudentProgress = (studentNo, courseCode) => api.get('/progress/student/' + studentNo, { params: { courseCode } })
+export const getCourseProgress = (courseCode) => api.get('/progress/course/' + courseCode)
 
-// ============ 题库 / 测验 ============
+// ============ 行为日志 (/learning-logs) ============
+export const reportBehaviorLog = (data) => api.post('/learning-logs', data)
+export const getBehaviorLogs = (params) => api.get('/learning-logs', { params })
+export const getBehaviorLogsByUser = (userId) => api.get('/learning-logs/user/' + userId)
+export const getBehaviorLogsByTask = (taskNo) => api.get('/learning-logs/task/' + taskNo)
+
+// ============ 题库 (/api/questions) ============
 export const getQuestionById = (id) => api.get(`/api/questions/${id}`)
 export const getQuestionsByCourse = (courseCode) => api.get(`/api/questions/course/${courseCode}`)
 export const getQuestionsByLesson = (lessonNo) => api.get(`/api/questions/lesson/${lessonNo}`)
 export const searchQuestion = (keyword) => api.get('/api/questions/search', { params: { keyword } })
-export const filterQuestion = (params) => api.get('/api/questions/filter', { params })
-export const generateExam = (courseCode, data) => api.post('/api/exams/generate', data, { params: { courseCode } })
-export const generateExamVersion = (courseCode, data) => api.post('/api/exams', data, { params: { courseCode } })
-export const bindExamToTask = (examId, taskNo) => api.put(`/api/exams/${examId}/tasks/${taskNo}`)
+export const generatePaper = (courseCode, data) => api.post(`/api/questions/course/${courseCode}/generate`, data)
 export const addQuestion = (data) => api.post('/api/questions', data)
 export const updateQuestion = (id, data) => api.put(`/api/questions/${id}`, data)
 export const deleteQuestion = (id) => api.delete(`/api/questions/${id}`)
 export const getTaskQuestions = (taskNo) => api.get(`/api/questions/task/${taskNo}`)
 export const addQuestionsToTask = (taskNo, questionIds) => api.post(`/api/questions/task/${taskNo}`, questionIds)
+export const getKnowledgePoints = (courseCode) => api.get('/api/questions/knowledge-points', { params: { courseCode } })
+export const filterQuestion = (params) => api.get('/api/questions/filter', { params })
+
+// ============ AI 评阅 ============
+export const generateAiReview = (id) => api.post(`/submission/ai-review/${id}`)
+export const getAiReview = (id) => api.get(`/submission/ai-review/${id}`)

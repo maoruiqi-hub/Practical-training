@@ -28,8 +28,19 @@ public class StatsController {
         if (!auth.isAdmin(session) && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo))) {
             return Result.fail("无权限");
         }
-
         return Result.ok(statsService.buildStudentStats(studentNo));
+    }
+
+    /** 学生在某课程中的统计 | student本人 / admin */
+    @GetMapping("/student/{studentNo}/course/{courseCode}")
+    public Result<Map<String, Object>> studentCourseStats(@PathVariable String studentNo,
+                                                           @PathVariable String courseCode,
+                                                           HttpSession session) {
+        Student loginStudent = (Student) session.getAttribute("student");
+        if (!auth.isAdmin(session) && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo))) {
+            return Result.fail("无权限");
+        }
+        return Result.ok(statsService.buildStudentCourseStats(studentNo, courseCode));
     }
 
     /** 课程成绩总览 | admin/授课教师 */

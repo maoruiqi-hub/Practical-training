@@ -4,18 +4,21 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.neu.CoursePlatform.entity.LearningTask;
 
 import java.util.List;
+import java.util.Map;
 
 public interface LearningTaskService extends IService<LearningTask> {
-
-    String ONLINE_QUIZ_TYPE = "在线测验";
 
     List<LearningTask> listByCourseCode(String courseCode);
 
     List<LearningTask> searchByKeyword(String keyword);
 
+    List<LearningTask> listFiltered(Map<String, String> filters);
+
     void applyDeadline(LearningTask task, String deadline);
 
-    default boolean isQuizTask(LearningTask task) {
-        return task != null && ONLINE_QUIZ_TYPE.equals(task.getTaskType());
-    }
+    /** 检查任务下是否有提交记录 */
+    boolean hasSubmissions(String taskNo);
+
+    /** 判断是否为测验类型任务 */
+    boolean isQuizTask(LearningTask task);
 }

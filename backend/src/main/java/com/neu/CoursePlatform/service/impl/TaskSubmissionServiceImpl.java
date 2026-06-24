@@ -91,6 +91,13 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     }
 
     @Override
+    public int countByStudentAndTask(String taskNo, String studentNo) {
+        Long count = baseMapper.selectCount(new QueryWrapper<TaskSubmission>()
+                .eq("task_no", taskNo).eq("student_no", studentNo));
+        return count != null ? count.intValue() : 0;
+    }
+
+    @Override
     public String getTaskCourseCode(String taskNo) {
         LearningTask task = taskService.getById(taskNo);
         return task != null ? task.getCourseCode() : null;
@@ -120,20 +127,37 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     @Override
     public void applyInitialGrading(TaskSubmission sub) {
         LearningTask task = taskService.getById(sub.getTaskNo());
-        if (!taskService.isQuizTask(task)) {
+        if (task == null) {
             sub.setStatus("submitted");
             return;
         }
 
-        List<Map<String, Object>> answers = parseQuizAnswers(sub);
-        sub.setScore(autoScoreChoices(answers));
-        if (containsManualQuestions(answers)) {
-            sub.setStatus("submitted");
-            sub.setFeedback("系统已自动评阅客观题，主观题/编程题待教师复核");
-        } else {
-            sub.setStatus("graded");
-            sub.setFeedback("系统已自动评阅");
+        String taskType = task.getTaskType();
+
+        // 测验/试卷类：系统自动评阅客观题
+        if (taskService.isQuizTask(task)) {
+            List<Map<String, Object>> answers = parseQuizAnswers(sub);
+            sub.setScore(autoScoreChoices(answers));
+            if (containsManualQuestions(answers)) {
+                sub.setStatus("submitted");
+                sub.setFeedback("客观题已自动评阅，主观题/编程题待教师复核");
+            } else {
+                sub.setStatus("graded");
+                sub.setFeedback("系统已自动评阅");
+            }
+            return;
         }
+
+        // 视频/阅读类：自动完成
+        if ("video".equals(taskType) || "reading".equals(taskType)) {
+            sub.setStatus("graded");
+            sub.setFeedback("系统自动记录完成");
+            return;
+        }
+
+        // 报告/作业/实践类：必须教师人工评阅
+        sub.setStatus("submitted");
+        sub.setFeedback("待教师评阅");
     }
 
     @Override

@@ -21,6 +21,8 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     boolean hasSubmitted(String taskNo, String studentNo);
 
+    int countByStudentAndTask(String taskNo, String studentNo);
+
     Map<String, Object> buildGradeDetail(String submissionId);
 
     void applyInitialGrading(TaskSubmission sub);

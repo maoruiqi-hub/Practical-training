@@ -107,11 +107,19 @@ CREATE TABLE IF NOT EXISTS lesson (
 CREATE TABLE IF NOT EXISTS learning_task (
     task_no INT AUTO_INCREMENT PRIMARY KEY,
     course_code INT,
+    task_name VARCHAR(256),
+    lesson_no INT,
+    knowledge_points TEXT,
     task_type VARCHAR(64),
     description TEXT,
     deadline DATETIME,
     submit_method VARCHAR(64),
     score INT,
+    grading_rule TEXT,
+    status VARCHAR(16) DEFAULT 'published',
+    allow_late TINYINT DEFAULT 0,
+    max_attempts INT DEFAULT 1,
+    attachment_formats VARCHAR(256),
     resource_url VARCHAR(512)
 );
 
@@ -120,9 +128,11 @@ CREATE TABLE IF NOT EXISTS task_submission (
     submission_id INT AUTO_INCREMENT PRIMARY KEY,
     task_no INT,
     student_no INT,
+    attempt_number INT DEFAULT 1,
     content TEXT,
     file_path VARCHAR(512),
     submit_time DATETIME,
+    is_overdue TINYINT DEFAULT 0,
     score INT,
     status VARCHAR(32),
     feedback TEXT
@@ -239,4 +249,24 @@ CREATE TABLE IF NOT EXISTS task_question (
     id INT AUTO_INCREMENT PRIMARY KEY,
     task_no INT,
     question_id INT
+);
+
+-- 学习行为日志表
+CREATE TABLE IF NOT EXISTS learning_behavior_log (
+    log_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    user_type VARCHAR(16) NOT NULL,
+    resource_type VARCHAR(32) NOT NULL,
+    resource_id INT,
+    task_no INT,
+    knowledge_point VARCHAR(128),
+    action_type VARCHAR(32) NOT NULL,
+    start_time DATETIME,
+    duration INT DEFAULT 0,
+    completion_status VARCHAR(32),
+    result TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_time (user_id, created_at),
+    INDEX idx_task (task_no),
+    INDEX idx_action (action_type)
 );

@@ -13,4 +13,23 @@
            OR description LIKE CONCAT('%', #{keyword}, '%')
     </select>
 
+    <select id="selectFiltered" resultType="com.neu.CoursePlatform.entity.LearningTask">
+        SELECT * FROM learning_task
+        <where>
+            <if test="courseCode != null and courseCode != ''">
+                AND course_code = #{courseCode}
+            </if>
+            <if test="taskType != null and taskType != ''">
+                AND task_type = #{taskType}
+            </if>
+            <if test="status != null and status != ''">
+                AND status = #{status}
+            </if>
+            <if test="lessonNo != null and lessonNo != ''">
+                AND lesson_no = #{lessonNo}
+            </if>
+        </where>
+        ORDER BY task_no DESC
+    </select>
+
 </mapper>
