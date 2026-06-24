@@ -26,6 +26,11 @@ public class Auth {
         return t != null && "admin".equals(t.getRole());
     }
 
+    public boolean isTeacher(HttpSession session) {
+        Teacher t = getTeacher(session);
+        return t != null && "teacher".equals(t.getRole());
+    }
+
     public Teacher getTeacher(HttpSession session) {
         return (Teacher) session.getAttribute("teacher");
     }

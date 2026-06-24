@@ -8,6 +8,8 @@ import java.util.Map;
 
 public interface LearningTaskService extends IService<LearningTask> {
 
+    String ONLINE_QUIZ_TYPE = "在线测验";
+
     List<LearningTask> listByCourseCode(String courseCode);
 
     List<LearningTask> searchByKeyword(String keyword);
