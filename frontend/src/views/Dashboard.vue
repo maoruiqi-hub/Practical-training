@@ -49,6 +49,30 @@
         </div>
       </div>
       <div v-if="!gradeDetails.length && !gradeLoading" style="text-align:center;color:#999;padding:20px">非测验提交</div>
+      <div v-if="!gradeDetails.length" class="ai-review-panel">
+        <div class="ai-review-head">
+          <h4>智能辅助评价</h4>
+          <el-button size="small" type="primary" :loading="aiReviewLoading" @click="requestAiReview">请求智能评价</el-button>
+        </div>
+        <template v-if="aiReview">
+          <el-descriptions :column="2" size="small" border>
+            <el-descriptions-item label="建议分数">{{ aiReview.aiScore ?? '-' }} 分</el-descriptions-item>
+            <el-descriptions-item label="风险等级">{{ riskLabel(aiReview.riskLevel) }}</el-descriptions-item>
+            <el-descriptions-item label="评价摘要" :span="2">{{ aiReview.summary || '-' }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="dimension-list">
+            <div v-for="item in reviewDimensions" :key="item.name" class="dimension-item">
+              <span>{{ item.name }}</span>
+              <el-progress :percentage="item.score" :stroke-width="8" />
+            </div>
+          </div>
+          <div v-if="reviewSuggestions.length" class="suggestion-box">
+            <div v-for="(item, index) in reviewSuggestions" :key="index">- {{ item }}</div>
+          </div>
+          <el-button size="small" @click="useAiSuggestions">采用建议到评语</el-button>
+        </template>
+        <el-empty v-else-if="!aiReviewLoading" description="暂无智能评价" :image-size="48" />
+      </div>
       <el-form label-width="60px" style="margin-top:16px">
         <el-form-item label="总分"><el-input-number v-model="gradeForm.score" :min="0" :max="100" /></el-form-item>
         <el-form-item label="评语"><el-input v-model="gradeForm.feedback" type="textarea" :rows="2" /></el-form-item>
@@ -77,7 +101,7 @@
         <el-table-column prop="deadline" label="截止时间" width="170" />
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button v-if="row.status==='未提交'" size="small" type="primary" @click="row.taskType==='quiz' ? $router.push('/quiz/take/' + row.taskNo) : $router.push('/task/' + row.courseCode + '/submit/' + row.taskNo)">{{ row.taskType==='quiz' ? '去答题' : '去提交' }}</el-button>
+            <el-button v-if="row.status==='未提交'" size="small" type="primary" @click="isQuizType(row.taskType) ? $router.push('/quiz/take/' + row.taskNo) : $router.push('/task/' + row.courseCode + '/submit/' + row.taskNo)">{{ isQuizType(row.taskType) ? '去答题' : '去提交' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -88,11 +112,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { searchCourse, getGradeDetail, gradeSubmission, getMySubmissions, getTaskList, getSubmissionsByTask } from '../api'
+import { searchCourse, getGradeDetail, gradeSubmission, getMySubmissions, getTaskList, getSubmissionsByTask, generateAiReview, getAiReview } from '../api'
 import { ElMessage } from 'element-plus'
 
 const user = JSON.parse(localStorage.getItem('user') || '{}')
 const userRole = user.role
+const ONLINE_QUIZ_TYPE = '在线测验'
+const isQuizType = type => type === ONLINE_QUIZ_TYPE
 const courses = ref([])
 const myTasks = ref([])
 const myTasksLoading = ref(false)
@@ -103,20 +129,84 @@ const gradeDialog = ref(false)
 const gradeLoading = ref(false)
 const gradeDetails = ref([])
 const gradeForm = reactive({ submissionId:'', studentName:'', content:'', score:null, feedback:'' })
+const aiReview = ref(null)
+const aiReviewLoading = ref(false)
 
 const unsubmittedCount = computed(() => myTasks.value.filter(t => t.status === '未提交').length)
 
 const openGrade = async (row) => {
   Object.assign(gradeForm, row); gradeDialog.value = true; gradeLoading.value = true
   gradeDetails.value = []
+  aiReview.value = null
   try {
     const res = await getGradeDetail(row.submissionId)
-    if (res.data.code === 200) gradeDetails.value = res.data.data.details || []
+    if (res.data.code === 200) {
+      gradeDetails.value = res.data.data.details || []
+      gradeForm.score = res.data.data.score ?? row.score ?? null
+      gradeForm.feedback = res.data.data.feedback || row.feedback || ''
+      if (!gradeDetails.value.length) loadAiReview(row.submissionId, false)
+    }
     else ElMessage.error(res.data.msg)
   } catch {
     gradeDetails.value = []
     ElMessage.error('评阅详情加载失败')
   } finally { gradeLoading.value = false }
+}
+
+const loadAiReview = async (submissionId, showError = true) => {
+  aiReviewLoading.value = true
+  try {
+    const res = await getAiReview(submissionId)
+    if (res.data.code === 200) aiReview.value = res.data.data
+    else if (showError) ElMessage.warning(res.data.msg || '暂无智能评价')
+  } catch {
+    if (showError) ElMessage.error('智能评价加载失败')
+  } finally {
+    aiReviewLoading.value = false
+  }
+}
+
+const requestAiReview = async () => {
+  if (!gradeForm.submissionId) return
+  aiReviewLoading.value = true
+  try {
+    const res = await generateAiReview(gradeForm.submissionId)
+    if (res.data.code === 200) {
+      aiReview.value = res.data.data
+      if (gradeForm.score == null) gradeForm.score = res.data.data.aiScore
+      ElMessage.success('智能评价已生成')
+    } else ElMessage.error(res.data.msg)
+  } catch {
+    ElMessage.error('智能评价生成失败')
+  } finally {
+    aiReviewLoading.value = false
+  }
+}
+
+const parseJson = (value, fallback) => {
+  if (!value) return fallback
+  try {
+    return JSON.parse(value)
+  } catch {
+    return fallback
+  }
+}
+
+const reviewDimensions = computed(() => {
+  const dimensions = parseJson(aiReview.value?.dimensions, {})
+  return Object.entries(dimensions).map(([name, score]) => ({ name, score: Number(score) || 0 }))
+})
+
+const reviewSuggestions = computed(() => parseJson(aiReview.value?.suggestions, []))
+
+const riskLabel = risk => ({ low: '低风险', medium: '中风险', high: '高风险' }[risk] || risk || '-')
+
+const useAiSuggestions = () => {
+  const lines = []
+  if (aiReview.value?.summary) lines.push(aiReview.value.summary)
+  reviewSuggestions.value.forEach(item => lines.push(item))
+  gradeForm.feedback = lines.join('\n')
+  if (gradeForm.score == null && aiReview.value?.aiScore != null) gradeForm.score = aiReview.value.aiScore
 }
 const doGrade = async () => {
   try {
@@ -219,4 +309,34 @@ onMounted(async () => {
 .welcome-banner h2 { margin: 0 0 4px 0; font-size: 20px; }
 .welcome-banner p { margin: 0; opacity: .85; font-size: 14px; }
 .card-header { display:flex; justify-content:space-between; align-items:center; }
+.ai-review-panel {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafafa;
+}
+.ai-review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.ai-review-head h4 { margin: 0; }
+.dimension-list { margin-top: 10px; }
+.dimension-item {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.suggestion-box {
+  margin: 10px 0;
+  padding: 10px;
+  background: #fff;
+  border-radius: 6px;
+  color: #606266;
+  line-height: 1.7;
+}
 </style>

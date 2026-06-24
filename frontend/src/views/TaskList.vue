@@ -10,7 +10,7 @@
       <el-table-column prop="score" label="分值" width="80" />
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
-            <el-button v-if="userRole==='student'" size="small" type="primary" @click="$router.push(row.taskType==='quiz' ? `/quiz/take/${row.taskNo}` : `/task/${route.params.courseCode}/submit/${row.taskNo}`)">{{ row.taskType==='quiz' ? '答题' : '提交' }}</el-button>
+            <el-button v-if="userRole==='student'" size="small" type="primary" @click="$router.push(isQuizType(row.taskType) ? `/quiz/take/${row.taskNo}` : `/task/${route.params.courseCode}/submit/${row.taskNo}`)">{{ isQuizType(row.taskType) ? '答题' : '提交' }}</el-button>
           <el-button v-else size="small" type="primary" @click="$router.push(`/task/${route.params.courseCode}/submit/${row.taskNo}`)">查看提交</el-button>
         </template>
       </el-table-column>
@@ -38,6 +38,8 @@ import { getTaskList, addTask } from '../api'
 const route = useRoute()
 const user = JSON.parse(localStorage.getItem('user') || '{}')
 const userRole = user.role
+const ONLINE_QUIZ_TYPE = '在线测验'
+const isQuizType = type => type === ONLINE_QUIZ_TYPE
 const tasks = ref([])
 const loading = ref(true)
 const newTask = reactive({ taskType: '', description: '', deadline: '', submitMethod: '', score: 0 })

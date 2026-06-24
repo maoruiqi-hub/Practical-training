@@ -57,6 +57,9 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
         dto.setCredits(course.getCredits());
         dto.setHours(course.getHours());
         dto.setCoverUrl(course.getCoverUrl());
+        dto.setDescription(course.getDescription());
+        dto.setApplicableMajor(course.getApplicableMajor());
+        dto.setCourseObjectives(course.getCourseObjectives());
         dto.setLessonCount(lessonService.listByCourseCode(course.getCourseCode()).size());
         return dto;
     }

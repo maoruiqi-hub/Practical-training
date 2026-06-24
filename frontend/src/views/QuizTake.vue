@@ -14,13 +14,15 @@
         </template>
         <template v-if="q.type==='single'">
           <el-radio-group v-model="getAns[q.questionId]" class="option-list">
-            <el-radio v-for="(o, j) in JSON.parse(q.options||'[]')" :key="j" :value="o" class="option-item">{{ o }}</el-radio>
+            <el-radio v-for="(o, j) in parseOptions(q.options)" :key="j" :value="o" class="option-item">{{ o }}</el-radio>
           </el-radio-group>
+          <el-alert v-if="!parseOptions(q.options).length" type="warning" show-icon :closable="false" title="该题选项格式异常，请联系教师处理" />
         </template>
         <template v-else-if="q.type==='multi'">
           <el-checkbox-group v-model="getAns[q.questionId]" class="option-list">
-            <el-checkbox v-for="(o, j) in JSON.parse(q.options||'[]')" :key="j" :value="o" :label="o" class="option-item" />
+            <el-checkbox v-for="(o, j) in parseOptions(q.options)" :key="j" :value="o" :label="o" class="option-item" />
           </el-checkbox-group>
+          <el-alert v-if="!parseOptions(q.options).length" type="warning" show-icon :closable="false" title="该题选项格式异常，请联系教师处理" />
         </template>
         <template v-else-if="q.type==='fill'">
           <el-input v-model="getAns[q.questionId]" placeholder="请输入答案" />
@@ -49,6 +51,16 @@ const loading = ref(true)
 const submitted = ref(false)
 const getAns = reactive({})
 const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
+
+const parseOptions = (options) => {
+  if (!options) return []
+  try {
+    const parsed = JSON.parse(options)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 onMounted(async () => {
   try {
