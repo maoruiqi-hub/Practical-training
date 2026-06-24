@@ -3,6 +3,7 @@ package com.neu.CoursePlatform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.neu.CoursePlatform.common.GameEventPublisher;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
@@ -32,15 +33,18 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     private final QuestionService questionService;
     private final SubmissionAnswerService answerService;
     private final KnowledgePointService knowledgePointService;
+    private final GameEventPublisher eventPublisher;
 
     public TaskSubmissionServiceImpl(LearningTaskService taskService, StudentService studentService,
                                      QuestionService questionService, SubmissionAnswerService answerService,
-                                     KnowledgePointService knowledgePointService) {
+                                     KnowledgePointService knowledgePointService,
+                                     GameEventPublisher eventPublisher) {
         this.taskService = taskService;
         this.studentService = studentService;
         this.questionService = questionService;
         this.answerService = answerService;
         this.knowledgePointService = knowledgePointService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -142,6 +146,24 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         applyInitialGrading(sub);
         save(sub);
         saveAnswerDetails(sub);
+
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        String courseCode = task != null ? task.getCourseCode() : "";
+        String taskType = task != null && task.getTaskType() != null ? task.getTaskType() : "task";
+
+        if (isQuizSubmission(sub)) {
+            for (Map<String, Object> ans : parseQuizAnswers(sub)) {
+                String questionId = String.valueOf(ans.get("no"));
+                Question q = questionService.getById(questionId);
+                boolean correct = q != null && isAutoGradable(q) && isAnswerCorrect(q, ans.get("response"));
+                String kpId = q != null ? q.getKnowledgePointId() : null;
+                eventPublisher.publishAnswer(sub.getStudentNo(), courseCode, correct, taskType, kpId);
+            }
+        } else {
+            eventPublisher.publishAnswer(sub.getStudentNo(), courseCode,
+                "graded".equals(sub.getStatus()) && sub.getScore() != null && sub.getScore() >= 60,
+                taskType, null);
+        }
     }
 
     @Override

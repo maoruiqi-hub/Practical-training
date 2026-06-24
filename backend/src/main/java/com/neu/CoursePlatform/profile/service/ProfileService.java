@@ -18,4 +18,21 @@ public interface ProfileService {
     List<Map<String, Object>> getCompetencyHistory(Integer studentNo, Integer courseCode, String abilityPointId);
     List<Map<String, Object>> getGrowthHistory(Integer studentNo, Integer courseCode);
     Map<String, Object> generateTestFeedback(Integer studentNo, Integer courseCode);
+
+    // String-based cross-module API (conforms to VARCHAR(36) spec)
+    default StudentProfile getOrCreateProfileStr(String studentNo, String courseCode) {
+        return getOrCreateProfile(Integer.parseInt(studentNo), Integer.parseInt(courseCode));
+    }
+    default Map<String, Object> getProfileSummaryStr(String studentNo, String courseCode) {
+        return getProfileSummary(Integer.parseInt(studentNo), Integer.parseInt(courseCode));
+    }
+    default void addGrowthStr(String studentNo, String courseCode, int amount, String source, String sourceId) {
+        addGrowth(Integer.parseInt(studentNo), Integer.parseInt(courseCode), amount, source, sourceId);
+    }
+    default Map<String, Object> generateTestFeedbackStr(String studentNo, String courseCode) {
+        return generateTestFeedback(Integer.parseInt(studentNo), Integer.parseInt(courseCode));
+    }
+    default List<CompetencyScore> getCompetencyScoresStr(String studentNo, String courseCode) {
+        return getCompetencyScores(Integer.parseInt(studentNo), Integer.parseInt(courseCode));
+    }
 }

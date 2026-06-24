@@ -1,6 +1,7 @@
 package com.neu.CoursePlatform.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.neu.CoursePlatform.common.GameEventPublisher;
 import com.neu.CoursePlatform.profile.entity.*;
 import com.neu.CoursePlatform.profile.mapper.*;
 import com.neu.CoursePlatform.profile.mock.*;
@@ -19,19 +20,22 @@ public class ProfileServiceImpl implements ProfileService {
     private final GrowthHistoryMapper growthHistoryMapper;
     private final MockKnowledgePointService mockKP;
     private final GrowthRuleEngine growthEngine;
+    private final GameEventPublisher eventPublisher;
 
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
                              CompetencyScoreMapper competencyMapper,
                              CompetencyScoreHistoryMapper historyMapper,
                              GrowthHistoryMapper growthHistoryMapper,
                              MockKnowledgePointService mockKP,
-                             GrowthRuleEngine growthEngine) {
+                             GrowthRuleEngine growthEngine,
+                             GameEventPublisher eventPublisher) {
         this.profileMapper = profileMapper;
         this.competencyMapper = competencyMapper;
         this.historyMapper = historyMapper;
         this.growthHistoryMapper = growthHistoryMapper;
         this.mockKP = mockKP;
         this.growthEngine = growthEngine;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -111,6 +115,12 @@ public class ProfileServiceImpl implements ProfileService {
         profile.setLastActivityDate(new Date());
         profile.setUpdatedAt(new Date());
 
+        // 检查点 3.5: HP < 30 → 模块4 → 模块5 发布风险事件
+        if (profile.getHp() < 30) {
+            eventPublisher.publishHpCritical(
+                String.valueOf(studentNo), String.valueOf(courseCode), profile.getHp());
+        }
+
         // 维护最近测验成绩记录 for R3.4/R3.5
         String scores = (profile.getRecentScores() != null ? profile.getRecentScores() : "");
         scores = scores.isEmpty() ? (correct ? "100" : "0")
@@ -135,6 +145,7 @@ public class ProfileServiceImpl implements ProfileService {
 
     /** R3.1-R3.5: 动态评估学习状态 */
     private void evaluateStatus(StudentProfile profile) {
+        String previousStatus = profile.getStatus();
         String recentScores = profile.getRecentScores();
         if (recentScores == null || recentScores.isEmpty()) {
             profile.setStatus("正常学习");
@@ -151,6 +162,12 @@ public class ProfileServiceImpl implements ProfileService {
             }
             if (lowCount == recentCount) {
                 profile.setStatus("存在风险");
+                // 模块4 → 模块5: 发布卡顿风险事件
+                if (!"存在风险".equals(previousStatus)) {
+                    eventPublisher.publishStuckDetected(
+                        String.valueOf(profile.getStudentNo()),
+                        String.valueOf(profile.getCourseCode()), "unknown");
+                }
                 return;
             }
         }

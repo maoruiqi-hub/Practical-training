@@ -226,4 +226,69 @@ public class ProfileController {
         }
         return Result.ok(profileService.generateTestFeedback(studentNo, courseCode));
     }
+
+    // ========== String-based cross-module API (§12.3 VARCHAR(36) compatibility) ==========
+
+    /** 跨模块：接收游戏事件并更新画像（模块1/2/3 → 模块4） */
+    @PostMapping("/event/receive")
+    public Result<Map<String, Object>> receiveGameEvent(@RequestBody Map<String, Object> body) {
+        String studentNo = (String) body.get("studentNo");
+        String courseCode = (String) body.get("courseCode");
+        String eventType = (String) body.get("eventType");
+
+        if (studentNo == null || courseCode == null || eventType == null) {
+            return Result.fail("studentNo, courseCode, eventType 不能为空");
+        }
+
+        Integer sn = Integer.parseInt(studentNo);
+        Integer cc = Integer.parseInt(courseCode);
+
+        switch (eventType) {
+            case "answer_correct" -> {
+                String taskType = (String) body.getOrDefault("taskType", "quiz");
+                String abilityPointId = (String) body.get("abilityPointId");
+                profileService.updateProfileFromSubmission(sn, cc, true, taskType);
+                if (abilityPointId != null && !abilityPointId.isEmpty()) {
+                    profileService.updateCompetencyScores(sn, cc, abilityPointId, true);
+                }
+            }
+            case "answer_wrong" -> {
+                String taskType = (String) body.getOrDefault("taskType", "quiz");
+                String abilityPointId = (String) body.get("abilityPointId");
+                profileService.updateProfileFromSubmission(sn, cc, false, taskType);
+                if (abilityPointId != null && !abilityPointId.isEmpty()) {
+                    profileService.updateCompetencyScores(sn, cc, abilityPointId, false);
+                }
+            }
+            case "floor_cleared" ->
+                profileService.addGrowth(sn, cc, 80, "floor_cleared", (String) body.getOrDefault("floor", ""));
+            case "boss_defeated" ->
+                profileService.addGrowth(sn, cc, 250, "boss_defeated", "");
+            case "supply_used" ->
+                profileService.addGrowth(sn, cc, -10, "supply_used", (String) body.getOrDefault("supplyType", ""));
+            default ->
+                profileService.addGrowth(sn, cc, 5, eventType, "");
+        }
+
+        return Result.ok(profileService.getProfileSummary(sn, cc));
+    }
+
+    /** 跨模块：获取画像摘要（String ID，供模块5等调用） */
+    @GetMapping("/api/profile/{studentNo}/{courseCode}")
+    public Result<Map<String, Object>> summaryStr(@PathVariable String studentNo,
+                                                   @PathVariable String courseCode) {
+        return Result.ok(profileService.getProfileSummaryStr(studentNo, courseCode));
+    }
+
+    /** 跨模块：增加成长值（String ID） */
+    @PostMapping("/api/profile/{studentNo}/{courseCode}/growth")
+    public Result<Void> addGrowthStr(@PathVariable String studentNo,
+                                      @PathVariable String courseCode,
+                                      @RequestBody Map<String, Object> body) {
+        int amount = body.get("amount") != null ? ((Number) body.get("amount")).intValue() : 0;
+        String source = (String) body.getOrDefault("source", "unknown");
+        String sourceId = (String) body.getOrDefault("sourceId", "");
+        profileService.addGrowthStr(studentNo, courseCode, amount, source, sourceId);
+        return Result.ok();
+    }
 }

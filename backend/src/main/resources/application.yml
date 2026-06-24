@@ -36,6 +36,10 @@ agentic:
   api-key: ${AGENTIC_API_KEY:}
   model: ${AGENTIC_MODEL:gpt-4o-mini}
 
+game:
+  mode:
+    enabled: ${GAME_MODE_ENABLED:false}
+
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug
