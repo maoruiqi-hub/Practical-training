@@ -19,6 +19,10 @@ public interface LearningTaskService extends IService<LearningTask> {
     /** 检查任务下是否有提交记录 */
     boolean hasSubmissions(String taskNo);
 
-    /** 判断是否为测验类型任务 */
-    boolean isQuizTask(LearningTask task);
+    /** 判断是否为测验类型任务（含Boss层） */
+    default boolean isQuizTask(LearningTask task) {
+        return task != null && (ONLINE_QUIZ_TYPE.equals(task.getTaskType())
+                || "boss".equalsIgnoreCase(task.getTaskType())
+                || "boss_exam".equalsIgnoreCase(task.getTaskType()));
+    }
 }

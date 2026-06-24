@@ -244,6 +244,27 @@ SET q.knowledge_point_id = kp.knowledge_point_id
 WHERE q.knowledge_point_id IS NULL;
 ALTER TABLE question DROP COLUMN IF EXISTS knowledge_point;
 
+-- 模块一、模块三爬塔集成新增表：UUID 主键，跨模块引用均为 VARCHAR(36)。
+-- 旧教学业务表保持原 INT 主键，避免破坏已导入的历史数据。
+CREATE TABLE IF NOT EXISTS course_game_config (
+    id VARCHAR(36) PRIMARY KEY,
+    course_id VARCHAR(36) NOT NULL UNIQUE,
+    game_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_point_floor_status (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id VARCHAR(36) NOT NULL,
+    course_id VARCHAR(36) NOT NULL,
+    knowledge_point_id VARCHAR(36) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    cleared_at DATETIME,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_kp_floor_status (student_id, course_id, knowledge_point_id)
+);
+
 -- 测验-题目关联表
 CREATE TABLE IF NOT EXISTS task_question (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -251,7 +272,7 @@ CREATE TABLE IF NOT EXISTS task_question (
     question_id INT
 );
 
--- 学习行为日志表
+-- 学习行为日志表（模块2）
 CREATE TABLE IF NOT EXISTS learning_behavior_log (
     log_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -269,4 +290,66 @@ CREATE TABLE IF NOT EXISTS learning_behavior_log (
     INDEX idx_user_time (user_id, created_at),
     INDEX idx_task (task_no),
     INDEX idx_action (action_type)
+);
+
+-- ============================================================
+-- 模块5：学情分析与教学决策
+-- ============================================================
+
+-- 班级表
+CREATE TABLE IF NOT EXISTS analytics_class (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    course_id VARCHAR(36),
+    teacher_id VARCHAR(36),
+    semester VARCHAR(32),
+    created_at DATETIME,
+    updated_at DATETIME
+);
+
+-- 班级-学生关联表
+CREATE TABLE IF NOT EXISTS analytics_class_student (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id VARCHAR(36) NOT NULL,
+    student_id VARCHAR(36) NOT NULL,
+    enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_class_student (class_id, student_id)
+);
+
+-- 学习风险预警表
+CREATE TABLE IF NOT EXISTS analytics_risk_alert (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id VARCHAR(36) NOT NULL,
+    course_id VARCHAR(36),
+    risk_type VARCHAR(32) NOT NULL,
+    risk_level VARCHAR(16) NOT NULL,
+    detail JSON,
+    status VARCHAR(16) DEFAULT 'active',
+    created_at DATETIME,
+    resolved_at DATETIME,
+    resolved_by VARCHAR(36),
+    UNIQUE KEY uk_active_alert (student_id, risk_type, status)
+);
+
+-- 分析报告表
+CREATE TABLE IF NOT EXISTS analytics_report (
+    id VARCHAR(36) PRIMARY KEY,
+    class_id VARCHAR(36) NOT NULL,
+    report_type VARCHAR(32) NOT NULL,
+    data_json JSON,
+    generated_at DATETIME
+);
+
+-- 教学建议表
+CREATE TABLE IF NOT EXISTS analytics_teaching_suggestion (
+    id VARCHAR(36) PRIMARY KEY,
+    class_id VARCHAR(36),
+    course_id VARCHAR(36),
+    suggestion_type VARCHAR(32),
+    content TEXT,
+    target_type VARCHAR(16),
+    target_id VARCHAR(36),
+    urgency VARCHAR(16),
+    based_on JSON,
+    generated_at DATETIME
 );
