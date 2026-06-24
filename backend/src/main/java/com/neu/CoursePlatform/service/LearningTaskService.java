@@ -16,6 +16,8 @@ public interface LearningTaskService extends IService<LearningTask> {
     void applyDeadline(LearningTask task, String deadline);
 
     default boolean isQuizTask(LearningTask task) {
-        return task != null && ONLINE_QUIZ_TYPE.equals(task.getTaskType());
+        return task != null && (ONLINE_QUIZ_TYPE.equals(task.getTaskType())
+                || "boss".equalsIgnoreCase(task.getTaskType())
+                || "boss_exam".equalsIgnoreCase(task.getTaskType()));
     }
 }

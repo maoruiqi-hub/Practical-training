@@ -32,4 +32,12 @@ public class Result<T> {
         r.msg = msg;
         return r;
     }
+
+    /** AI 等可选依赖不可用时的明确降级响应。 */
+    public static <T> Result<T> serviceUnavailable(String msg) {
+        Result<T> r = new Result<>();
+        r.code = 503;
+        r.msg = msg;
+        return r;
+    }
 }

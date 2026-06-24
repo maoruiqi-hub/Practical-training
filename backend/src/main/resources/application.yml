@@ -32,7 +32,9 @@ course-resource:
 
 agentic:
   mode: ${AGENTIC_MODE:mock}
-  base-url: ${AGENTIC_BASE_URL:}
+  base-url: ${AGENTIC_BASE_URL:http://localhost:8081}
+  api-key: ${AGENTIC_API_KEY:}
+  model: ${AGENTIC_MODEL:gpt-4o-mini}
 
 logging:
   level:
@@ -47,7 +49,3 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 # Agentic AI 服务配置
-agentic:
-  api-key: ${AGENTIC_API_KEY:}
-  base-url: ${AGENTIC_BASE_URL:http://localhost:8081}
-  model: ${AGENTIC_MODEL:gpt-4o-mini}

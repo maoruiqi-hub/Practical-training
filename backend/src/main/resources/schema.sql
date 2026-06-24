@@ -234,6 +234,27 @@ SET q.knowledge_point_id = kp.knowledge_point_id
 WHERE q.knowledge_point_id IS NULL;
 ALTER TABLE question DROP COLUMN IF EXISTS knowledge_point;
 
+-- 模块一、模块三爬塔集成新增表：UUID 主键，跨模块引用均为 VARCHAR(36)。
+-- 旧教学业务表保持原 INT 主键，避免破坏已导入的历史数据。
+CREATE TABLE IF NOT EXISTS course_game_config (
+    id VARCHAR(36) PRIMARY KEY,
+    course_id VARCHAR(36) NOT NULL UNIQUE,
+    game_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_point_floor_status (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id VARCHAR(36) NOT NULL,
+    course_id VARCHAR(36) NOT NULL,
+    knowledge_point_id VARCHAR(36) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    cleared_at DATETIME,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_kp_floor_status (student_id, course_id, knowledge_point_id)
+);
+
 -- 测验-题目关联表
 CREATE TABLE IF NOT EXISTS task_question (
     id INT AUTO_INCREMENT PRIMARY KEY,
