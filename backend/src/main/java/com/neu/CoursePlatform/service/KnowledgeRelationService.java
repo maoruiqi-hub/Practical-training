@@ -10,4 +10,12 @@ public interface KnowledgeRelationService extends IService<KnowledgeRelation> {
     List<KnowledgeRelation> listByCourse(String courseCode);
 
     void createRelation(String courseCode, KnowledgeRelation relation);
+
+    List<KnowledgeRelation> listByCourseCode(String courseCode);
+
+    boolean relationExists(String courseCode, String fromKnowledgePointId,
+                           String toKnowledgePointId, String relationType);
+
+    boolean wouldCreateCycle(String courseCode, String fromKnowledgePointId,
+                             String toKnowledgePointId, String relationType);
 }

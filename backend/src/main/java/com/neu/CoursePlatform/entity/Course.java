@@ -21,12 +21,17 @@ public class Course {
     private String courseCode;
     /** 授课教师 */
     private String teacher;
+    /** 授课教师工号；旧数据为空时兼容 teacher 姓名字段。 */
+    private String teacherNo;
     /** 学分 */
     private Integer credits;
     /** 总学时 */
     private Integer hours;
     /** 封面图片URL */
     private String coverUrl;
+    private String description;
+    private String applicableMajor;
+    private String courseObjectives;
     /** 课时列表 */
     @TableField(exist = false)
     private List<Lesson> lessons;

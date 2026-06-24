@@ -32,6 +32,17 @@ export const addCourse = (data) => api.post('/api/courses', data)
 export const updateCourse = (code, data) => api.put(`/api/courses/${code}`, data)
 export const deleteCourse = (code) => api.delete(`/api/courses/${code}`)
 
+// ============ 课程资源 ============
+export const getCourseResources = (courseCode, filters = {}) => api.get('/api/resources', { params: { courseCode, ...filters } })
+export const getCourseResourcePreview = (resourceId) => api.get(`/api/resources/${resourceId}/preview`)
+export const recordCourseResourceView = (resourceId, data) => api.post(`/api/resources/${resourceId}/view-events`, data)
+
+// ============ 知识图谱 ============
+export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
+export const getKnowledgePointDetail = (id) => api.get(`/api/knowledge-points/${id}`)
+export const getKnowledgePointPrerequisites = (id) => api.get(`/api/knowledge-points/${id}/prerequisites`)
+export const getKnowledgeRelations = (courseCode) => api.get('/api/knowledge-relations', { params: { courseCode } })
+
 // ============ 课时 ============
 export const getLessonList = (code) => api.get(`/api/lessons/${code}`)
 export const getLessonDetail = (lessonNo) => api.get(`/api/lessons/detail/${lessonNo}`)
@@ -77,7 +88,6 @@ export const getKnowledgePoints = (courseCode, params = {}) => api.get('/api/kno
 export const addKnowledgePoint = (courseCode, data) => api.post('/api/knowledge-points', { ...data, courseCode })
 export const updateKnowledgePoint = (pointId, data) => api.put(`/api/knowledge-points/${pointId}`, data)
 export const deleteKnowledgePoint = (pointId) => api.delete(`/api/knowledge-points/${pointId}`)
-export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
 
 // ============ 题库 / 测验 ============
 export const getQuestionById = (id) => api.get(`/api/questions/${id}`)

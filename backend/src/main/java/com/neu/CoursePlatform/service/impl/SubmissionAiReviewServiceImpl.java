@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.neu.CoursePlatform.agentic.AgenticClient;
+import com.neu.CoursePlatform.agentic.AgenticRequest;
+import com.neu.CoursePlatform.agentic.AgenticResponse;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.SubmissionAiReview;
 import com.neu.CoursePlatform.entity.TaskSubmission;
@@ -76,8 +78,19 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
 
     private ReviewDraft generateWithAgentic(String content, boolean hasFile, LearningTask task) {
         try {
-            String json = agenticClient.generateAssessmentJson(buildAgenticPrompt(content, hasFile, task));
-            if (json == null || json.isBlank()) return null;
+            AgenticRequest request = new AgenticRequest();
+            request.setCourseCode(task != null ? task.getCourseCode() : null);
+            request.setContent(buildAgenticPrompt(content, hasFile, task));
+            request.setContext(Map.of(
+                    "taskNo", task != null ? task.getTaskNo() : "",
+                    "taskType", task != null ? normalize(task.getTaskType()) : "",
+                    "hasFile", hasFile
+            ));
+            AgenticResponse response = agenticClient.invoke("assessment", request);
+            if (response == null || !response.isSuccess() || response.getData() == null || response.getData().isEmpty()) {
+                return null;
+            }
+            String json = objectMapper.writeValueAsString(response.getData());
             return parseDraft(json);
         } catch (Exception e) {
             log.warn("Agentic assessment failed, fallback to local draft. submission task={}", task != null ? task.getTaskNo() : "", e);

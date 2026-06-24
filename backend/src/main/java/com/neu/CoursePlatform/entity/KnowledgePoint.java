@@ -1,20 +1,28 @@
 package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * 知识点实体
- */
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 public class KnowledgePoint {
-    @TableId(type = IdType.AUTO)
+
+    @TableId(value = "knowledge_point_id", type = IdType.AUTO)
     private String knowledgePointId;
+
     private String courseCode;
     private String lessonNo;
     private String name;
     private String description;
+    private String chapter;
+    private Integer importance;
+    private String generationMethod;
+
+    @TableField(exist = false)
+    private List<KnowledgePoint> children;
 }

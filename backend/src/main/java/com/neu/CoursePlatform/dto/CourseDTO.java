@@ -10,5 +10,8 @@ public class CourseDTO {
     private Integer credits;
     private Integer hours;
     private String coverUrl;
+    private String description;
+    private String applicableMajor;
+    private String courseObjectives;
     private int lessonCount;
 }

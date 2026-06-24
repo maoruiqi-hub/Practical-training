@@ -1,7 +1,13 @@
 <template>
   <div>
     <el-button @click="$router.back()" style="margin-bottom:10px">← 返回</el-button>
-    <h3>{{ courseName }}</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>{{ courseName }}</h3>
+      <div style="display:flex;gap:8px">
+        <el-button type="primary" plain @click="$router.push('/course/' + code + '/resources')">课程资源</el-button>
+        <el-button type="success" plain @click="$router.push('/course/' + code + '/knowledge-graph')">知识图谱</el-button>
+      </div>
+    </div>
     <el-tabs v-model="activeTab" style="margin-top:10px">
       <!-- 课时列表 -->
       <el-tab-pane label="课时列表" name="lessons">

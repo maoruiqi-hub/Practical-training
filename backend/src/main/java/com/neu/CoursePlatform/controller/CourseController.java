@@ -5,8 +5,10 @@ import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.CourseDTO;
 import com.neu.CoursePlatform.entity.Course;
 import com.neu.CoursePlatform.entity.Lesson;
+import com.neu.CoursePlatform.entity.Teacher;
 import com.neu.CoursePlatform.service.CourseService;
 import com.neu.CoursePlatform.service.FileStorageService;
+import com.neu.CoursePlatform.service.TeacherService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,11 +22,16 @@ public class CourseController {
 
     private final CourseService courseService;
     private final FileStorageService fileStorageService;
+    private final TeacherService teacherService;
     private final Auth auth;
 
-    public CourseController(CourseService courseService, FileStorageService fileStorageService, Auth auth) {
+    public CourseController(CourseService courseService,
+                            FileStorageService fileStorageService,
+                            TeacherService teacherService,
+                            Auth auth) {
         this.courseService = courseService;
         this.fileStorageService = fileStorageService;
+        this.teacherService = teacherService;
         this.auth = auth;
     }
 
@@ -52,7 +59,7 @@ public class CourseController {
     /** 按编号查课程 | admin */
     @GetMapping("/{courseCode}")
     public Result<Course> getByCode(@PathVariable String courseCode, HttpSession session) {
-        if (!auth.isAdmin(session)) return Result.fail("无权限");
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         Course c = courseService.getById(courseCode);
         return c != null ? Result.ok(c) : Result.fail("课程不存在");
     }
@@ -60,17 +67,32 @@ public class CourseController {
     /** 新增课程（支持上传封面） | admin */
     @PostMapping
     public Result<String> add(@RequestParam String courseName,
-                              @RequestParam String teacher,
-                              @RequestParam Integer credits,
-                              @RequestParam Integer hours,
-                              @RequestParam(required = false) MultipartFile file,
-                              HttpSession session) {
-        if (!auth.isAdmin(session)) return Result.fail("无权限");
+                               @RequestParam(required = false) String teacher,
+                               @RequestParam(required = false) String teacherNo,
+                               @RequestParam Integer credits,
+                               @RequestParam Integer hours,
+                               @RequestParam(required = false) String description,
+                               @RequestParam(required = false) String applicableMajor,
+                               @RequestParam(required = false) String courseObjectives,
+                               @RequestParam(required = false) MultipartFile file,
+                               HttpSession session) {
+        Teacher currentTeacher = auth.getTeacher(session);
+        if (!auth.isAdmin(session) && currentTeacher == null) return Result.fail("无权限");
+        if (courseName.isBlank() || credits < 0 || hours < 0) return Result.fail("课程名称、学分和学时不合法");
+        Teacher assigned = resolveAssignedTeacher(auth.isAdmin(session), currentTeacher, teacher, teacherNo);
+        if (assigned == null && teacherNo != null && !teacherNo.isBlank()) return Result.fail("授课教师不存在");
+        String assignedTeacher = assigned == null ? teacher : assigned.getName();
+        if (!auth.isAdmin(session)) assignedTeacher = currentTeacher.getName();
+        if (assignedTeacher == null || assignedTeacher.isBlank()) return Result.fail("请填写授课教师");
         Course course = new Course();
         course.setCourseName(courseName);
-        course.setTeacher(teacher);
+        course.setTeacher(assignedTeacher);
+        course.setTeacherNo(assigned == null ? null : assigned.getTeacherNo());
         course.setCredits(credits);
         course.setHours(hours);
+        course.setDescription(description);
+        course.setApplicableMajor(applicableMajor);
+        course.setCourseObjectives(courseObjectives);
         if (file != null && !file.isEmpty()) {
             try {
                 course.setCoverUrl(fileStorageService.store(file, "../resource/CourseResource/"));
@@ -85,7 +107,7 @@ public class CourseController {
     /** 删除课程 | admin */
     @DeleteMapping("/{courseCode}")
     public Result<Void> delete(@PathVariable String courseCode, HttpSession session) {
-        if (!auth.isAdmin(session)) return Result.fail("无权限");
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         courseService.removeById(courseCode);
         return Result.ok();
     }
@@ -93,19 +115,32 @@ public class CourseController {
     /** 修改课程（支持上传封面） | admin/授课教师 */
     @PutMapping("/{courseCode}")
     public Result<String> update(@PathVariable String courseCode,
-                                 @RequestParam String courseName,
-                                 @RequestParam String teacher,
-                                 @RequestParam Integer credits,
-                                 @RequestParam Integer hours,
-                                 @RequestParam(required = false) MultipartFile file,
+                                  @RequestParam String courseName,
+                                  @RequestParam(required = false) String teacher,
+                                  @RequestParam(required = false) String teacherNo,
+                                  @RequestParam Integer credits,
+                                  @RequestParam Integer hours,
+                                  @RequestParam(required = false) String description,
+                                  @RequestParam(required = false) String applicableMajor,
+                                  @RequestParam(required = false) String courseObjectives,
+                                  @RequestParam(required = false) MultipartFile file,
                                  HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         Course course = courseService.getById(courseCode);
         if (course == null) return Result.fail("课程不存在");
+        if (courseName.isBlank() || credits < 0 || hours < 0) return Result.fail("课程名称、学分和学时不合法");
+        Teacher assigned = resolveAssignedTeacher(auth.isAdmin(session), currentTeacher(session), teacher, teacherNo);
+        if (assigned == null && teacherNo != null && !teacherNo.isBlank()) return Result.fail("授课教师不存在");
+        String assignedTeacher = auth.isAdmin(session) ? (assigned == null ? teacher : assigned.getName()) : course.getTeacher();
+        if (assignedTeacher == null || assignedTeacher.isBlank()) return Result.fail("请填写授课教师");
         course.setCourseName(courseName);
-        course.setTeacher(teacher);
+        course.setTeacher(assignedTeacher);
+        if (auth.isAdmin(session) && assigned != null) course.setTeacherNo(assigned.getTeacherNo());
         course.setCredits(credits);
         course.setHours(hours);
+        course.setDescription(description);
+        course.setApplicableMajor(applicableMajor);
+        course.setCourseObjectives(courseObjectives);
         if (file != null && !file.isEmpty()) {
             try {
                 course.setCoverUrl(fileStorageService.store(file, "../resource/CourseResource/"));
@@ -115,5 +150,16 @@ public class CourseController {
         }
         courseService.updateById(course);
         return Result.ok("课程更新成功");
+    }
+
+    private Teacher currentTeacher(HttpSession session) {
+        return auth.getTeacher(session);
+    }
+
+    private Teacher resolveAssignedTeacher(boolean administrator, Teacher currentTeacher,
+                                           String teacherName, String teacherNo) {
+        if (!administrator) return currentTeacher;
+        if (teacherNo == null || teacherNo.isBlank()) return null;
+        return teacherService.getById(teacherNo);
     }
 }

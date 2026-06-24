@@ -6,15 +6,14 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * 知识点关系实体
- */
 @Data
 @NoArgsConstructor
 @TableName("knowledge_relation")
 public class KnowledgeRelation {
-    @TableId(type = IdType.AUTO)
+
+    @TableId(value = "relation_id", type = IdType.AUTO)
     private String relationId;
+
     private String courseCode;
     private String fromKnowledgePointId;
     private String toKnowledgePointId;
