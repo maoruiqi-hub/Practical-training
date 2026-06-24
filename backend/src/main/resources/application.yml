@@ -3,13 +3,10 @@ spring:
     name: practical-training-backend
   sql:
     init:
-      mode: always
-      continue-on-error: true
+      mode: never
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: "${DB_URL:jdbc:mysql://localhost:3306/practical_training?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8}"
-    username: "${DB_USERNAME:root}"
-    password: "${DB_PASSWORD:}"
+    url: jdbc:mysql://6hvKfTDx9562cF6.root:VOPrnl0gCDYLjYhD@gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000/practical_training?useSSL=true&requireSSL=true&serverTimezone=UTC&connectTimeout=30000&socketTimeout=60000
     hikari:
       maximum-pool-size: 20
       minimum-idle: 3
@@ -24,16 +21,6 @@ server:
   servlet:
     context-path: /practical-training
 
-course-resource:
-  office-preview:
-    enabled: ${COURSE_RESOURCE_OFFICE_PREVIEW_ENABLED:false}
-    soffice-path: ${COURSE_RESOURCE_SOFFICE_PATH:C:/Program Files/LibreOffice/program/soffice.exe}
-    timeout-seconds: 60
-
-agentic:
-  mode: ${AGENTIC_MODE:mock}
-  base-url: ${AGENTIC_BASE_URL:}
-
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug
@@ -45,8 +32,3 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-
-agentic:
-  api-key: ${AGENTIC_API_KEY:}
-  base-url: ${AGENTIC_BASE_URL:https://api.openai.com/v1/chat/completions}
-  model: ${AGENTIC_MODEL:gpt-4o-mini}

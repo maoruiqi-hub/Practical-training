@@ -20,7 +20,7 @@
         <el-descriptions-item label="提交方式">{{ task.submitMethod }}</el-descriptions-item>
         <el-descriptions-item label="附件要求">{{ task.attachmentFormats || '不限格式' }}</el-descriptions-item>
         <el-descriptions-item label="提交次数">
-          {{ task.maxAttempts || 1 }}次
+          {{ task.maxAttempts || 3 }}次
           <span v-if="mySubmissions.length" style="color:#909399">（已提交{{ mySubmissions.length }}次）</span>
         </el-descriptions-item>
         <el-descriptions-item v-if="task.gradingRule" label="评分规则" :span="3">{{ task.gradingRule }}</el-descriptions-item>
@@ -41,14 +41,36 @@
 
       <!-- 普通任务类：提交表单 -->
       <el-card v-else v-loading="submitting" style="max-width:700px">
-        <!-- 已提交提示 -->
-        <el-alert v-if="mySubmissions.length && lastSubmission" :title="'最近提交：' + lastSubmission.submitTime + (lastSubmission.score != null ? ' | 得分：' + lastSubmission.score + '分' : '') + ' | 状态：' + statusText(lastSubmission.status)" :type="lastSubmission.status==='graded'?'success':'warning'" :closable="false" style="margin-bottom:16px" />
+        <!-- 提交历史 -->
+        <div v-if="mySubmissions.length" style="margin-bottom:16px">
+          <h4 style="margin-bottom:8px">提交记录</h4>
+          <div v-for="(s, idx) in mySubmissions" :key="s.submissionId"
+            :style="{ opacity: s.status === 'superseded' ? 0.5 : 1, padding: '8px 12px', marginBottom: '6px', borderRadius: '6px', border: '1px solid #ebeef5', background: s.status === 'superseded' ? '#fafafa' : '#f0f9eb' }">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span>
+                <el-tag :type="s.status === 'superseded' ? 'info' : s.status === 'graded' ? 'success' : 'warning'" size="small">
+                  {{ s.status === 'superseded' ? '已覆盖' : s.status === 'graded' ? '已批改' : '待批改' }}
+                </el-tag>
+                <span style="margin-left:8px;font-weight:500">第{{ s.attemptNumber || idx + 1 }}次提交</span>
+                <span style="margin-left:8px;color:#909399;font-size:13px">{{ s.submitTime }}</span>
+              </span>
+              <span>
+                <el-tag v-if="s.status === 'graded' && s.score != null" type="success" size="small">{{ s.score }}分</el-tag>
+                <el-link v-if="s.filePath" :href="'/practical-training/' + s.filePath" target="_blank" type="primary" :underline="false" style="margin-left:6px">📎</el-link>
+                <span v-if="s.status !== 'superseded' && idx === 0" style="color:#e6a23c;font-size:12px;margin-left:6px">← 教师可见</span>
+              </span>
+            </div>
+          </div>
+        </div>
 
         <!-- 逾期警告 -->
         <el-alert v-if="isOverdue && !task?.allowLate" title="任务已截止，不允许逾期提交" type="error" :closable="false" style="margin-bottom:16px" />
 
         <!-- 提交次数达上限 -->
-        <el-alert v-if="mySubmissions.length >= (task?.maxAttempts||1) && !canResubmit" title="已达最大提交次数" type="warning" :closable="false" style="margin-bottom:16px" />
+        <el-alert v-if="!canResubmit" title="已达最大提交次数（{{ task?.maxAttempts || 3 }}次），如需修改请联系教师" type="warning" :closable="false" style="margin-bottom:16px" />
+
+        <!-- 重新提交提示 -->
+        <el-alert v-if="canResubmit && mySubmissions.length > 0" title="您可以重新提交（还有 {{ (task?.maxAttempts || 3) - mySubmissions.length }} 次机会），新提交将覆盖旧提交" type="info" :closable="false" style="margin-bottom:16px" />
 
         <!-- 提交表单 -->
         <el-form v-if="canSubmit" label-width="100px">
@@ -65,7 +87,7 @@
           </el-form-item>
           <el-form-item>
             <el-button type="success" @click="submit" :disabled="!canSubmit" style="width:100%" size="large">
-              {{ isOverdue && task?.allowLate ? '逾期提交' : '提交' }}
+              {{ mySubmissions.length > 0 ? '重新提交（第' + (mySubmissions.length + 1) + '次）' : isOverdue && task?.allowLate ? '逾期提交' : '提交作业' }}
             </el-button>
           </el-form-item>
         </el-form>
@@ -178,10 +200,11 @@ const lastSubmission = computed(() => {
   return mySubmissions.value.length ? mySubmissions.value[0] : null
 })
 
+const maxAttempts = computed(() => task.value?.maxAttempts || 3)
+
 const canResubmit = computed(() => {
   if (!task.value) return false
-  const max = task.value.maxAttempts || 1
-  return mySubmissions.value.length < max
+  return mySubmissions.value.length < maxAttempts.value
 })
 
 const canSubmit = computed(() => {

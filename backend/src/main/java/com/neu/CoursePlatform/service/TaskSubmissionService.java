@@ -30,4 +30,7 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
     void submitWithGrading(TaskSubmission sub);
 
     int autoScoreChoices(TaskSubmission sub);
+
+    /** 将该学生该任务的所有旧提交标记为 superseded */
+    void supersedePrevious(String taskNo, String studentNo);
 }

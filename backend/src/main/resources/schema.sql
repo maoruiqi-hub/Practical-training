@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS learning_task (
     grading_rule TEXT,
     status VARCHAR(16) DEFAULT 'published',
     allow_late TINYINT DEFAULT 0,
-    max_attempts INT DEFAULT 1,
+    max_attempts INT DEFAULT 3,
     attachment_formats VARCHAR(256),
     resource_url VARCHAR(512)
 );

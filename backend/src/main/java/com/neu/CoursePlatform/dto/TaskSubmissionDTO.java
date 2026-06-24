@@ -21,4 +21,5 @@ public class TaskSubmissionDTO {
     private Integer score;
     private String status;
     private String feedback;
+    private Integer attemptNumber;
 }

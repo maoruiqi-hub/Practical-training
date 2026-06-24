@@ -23,14 +23,14 @@ export const getTeacherByNo = (no) => api.get(`/api/teachers/${no}`)
 export const updateTeacher = (no, data) => api.put(`/api/teachers/${no}`, data)
 export const deleteTeacher = (no) => api.delete(`/api/teachers/${no}`)
 
-// ============ 课程 (/course) ============
-export const searchCourse = (keyword) => api.get('/course/search', { params: { keyword } })
-export const getCourseLessons = (code) => api.get(`/course/${code}/lessons`)
-export const getCourseList = () => api.get('/course/list')
-export const getCourseByCode = (code) => api.get(`/course/${code}`)
-export const addCourse = (data) => api.post('/course', data)
-export const updateCourse = (code, data) => api.put(`/course/${code}`, data)
-export const deleteCourse = (code) => api.delete(`/course/${code}`)
+// ============ 课程 (/api/courses) ============
+export const searchCourse = (keyword) => api.get('/api/courses/search', { params: { keyword } })
+export const getCourseLessons = (code) => api.get(`/api/courses/${code}/lessons`)
+export const getCourseList = () => api.get('/api/courses/list')
+export const getCourseByCode = (code) => api.get(`/api/courses/${code}`)
+export const addCourse = (data) => api.post('/api/courses', data)
+export const updateCourse = (code, data) => api.put(`/api/courses/${code}`, data)
+export const deleteCourse = (code) => api.delete(`/api/courses/${code}`)
 
 // ============ 课时 (/api/lessons) ============
 export const getLessonList = (code) => api.get(`/api/lessons/${code}`)
@@ -95,6 +95,10 @@ export const getTaskQuestions = (taskNo) => api.get(`/api/questions/task/${taskN
 export const addQuestionsToTask = (taskNo, questionIds) => api.post(`/api/questions/task/${taskNo}`, questionIds)
 export const getKnowledgePoints = (courseCode) => api.get('/api/questions/knowledge-points', { params: { courseCode } })
 export const filterQuestion = (params) => api.get('/api/questions/filter', { params })
+
+// 兼容旧版课程详情页
+export const generateExamVersion = (courseCode, data) => generatePaper(courseCode, data)
+export const bindExamToTask = (examId, taskNo) => api.post(`/api/exams/${examId}/tasks/${taskNo}`)
 
 // ============ AI 评阅 ============
 export const generateAiReview = (id) => api.post(`/submission/ai-review/${id}`)

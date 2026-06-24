@@ -55,12 +55,15 @@ public class TaskSubmissionController {
             return Result.fail("已超过截止时间，不允许逾期提交");
         }
 
-        // 检查提交次数限制
+        // 检查提交次数限制（默认3次）
         int existingCount = submissionService.countByStudentAndTask(taskNo, student.getStudentNo());
-        int maxAttempts = task.getMaxAttempts() != null ? task.getMaxAttempts() : 1;
+        int maxAttempts = task.getMaxAttempts() != null && task.getMaxAttempts() > 0 ? task.getMaxAttempts() : 3;
         if (existingCount >= maxAttempts) {
-            return Result.fail("已达最大提交次数（" + maxAttempts + "次）");
+            return Result.fail("已达最大提交次数（" + maxAttempts + "次），如需修改请联系教师");
         }
+
+        // 覆盖旧提交：将学生之前对该任务的所有提交标记为 superseded
+        submissionService.supersedePrevious(taskNo, student.getStudentNo());
 
         // 校验附件格式
         if (file != null && !file.isEmpty() && task.getAttachmentFormats() != null

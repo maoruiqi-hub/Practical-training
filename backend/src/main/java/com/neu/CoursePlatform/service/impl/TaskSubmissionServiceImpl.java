@@ -56,9 +56,23 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     @Override
     public List<TaskSubmissionDTO> listDtoByTaskNo(String taskNo) {
         LearningTask task = taskService.getById(taskNo);
+        // 每个学生只取最新一条有效提交（排除 superseded）
         List<TaskSubmission> list = baseMapper.selectByTaskNo(taskNo);
-        List<TaskSubmissionDTO> dtos = new ArrayList<>();
+        // 过滤掉被覆盖的旧提交
+        list = list.stream()
+                .filter(s -> !"superseded".equals(s.getStatus()))
+                .collect(Collectors.toList());
+        // 按学生分组，每个学生只保留 attemptNumber 最大的
+        Map<String, TaskSubmission> latestPerStudent = new LinkedHashMap<>();
         for (TaskSubmission sub : list) {
+            String key = sub.getStudentNo();
+            TaskSubmission existing = latestPerStudent.get(key);
+            if (existing == null || sub.getAttemptNumber() > (existing.getAttemptNumber() != null ? existing.getAttemptNumber() : 0)) {
+                latestPerStudent.put(key, sub);
+            }
+        }
+        List<TaskSubmissionDTO> dtos = new ArrayList<>();
+        for (TaskSubmission sub : latestPerStudent.values()) {
             TaskSubmissionDTO dto = new TaskSubmissionDTO();
             dto.setSubmissionId(sub.getSubmissionId());
             dto.setTaskNo(sub.getTaskNo());
@@ -73,6 +87,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
             dto.setScore(sub.getScore());
             dto.setStatus(sub.getStatus());
             dto.setFeedback(sub.getFeedback());
+            dto.setAttemptNumber(sub.getAttemptNumber());
             dtos.add(dto);
         }
         return dtos;
@@ -172,6 +187,18 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     public int autoScoreChoices(TaskSubmission sub) {
         if (!isQuizSubmission(sub)) return 0;
         return autoScoreChoices(parseQuizAnswers(sub));
+    }
+
+    @Override
+    public void supersedePrevious(String taskNo, String studentNo) {
+        List<TaskSubmission> oldSubs = baseMapper.selectList(new QueryWrapper<TaskSubmission>()
+                .eq("task_no", taskNo)
+                .eq("student_no", studentNo)
+                .ne("status", "superseded"));
+        for (TaskSubmission s : oldSubs) {
+            s.setStatus("superseded");
+            baseMapper.updateById(s);
+        }
     }
 
     private int autoScoreChoices(List<Map<String, Object>> answers) {
