@@ -63,7 +63,7 @@ public class TaskController {
     /** 发布任务（支持全字段+附件上传）| admin/授课教师 */
     @PostMapping
     public Result<String> add(@RequestParam String courseCode,
-                              @RequestParam String taskName,
+                              @RequestParam(required = false) String taskName,
                               @RequestParam(required = false) String lessonNo,
                               @RequestParam(required = false) String knowledgePoints,
                               @RequestParam String taskType,
@@ -81,7 +81,7 @@ public class TaskController {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         LearningTask task = new LearningTask();
         task.setCourseCode(courseCode);
-        task.setTaskName(taskName);
+        task.setTaskName(taskName != null && !taskName.isBlank() ? taskName : description);
         task.setLessonNo(lessonNo);
         task.setKnowledgePoints(knowledgePoints);
         task.setTaskType(taskType);
