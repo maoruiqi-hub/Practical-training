@@ -4,8 +4,10 @@ import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.entity.SubmissionAiReview;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.FileStorageService;
+import com.neu.CoursePlatform.service.SubmissionAiReviewService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
@@ -20,11 +22,14 @@ import java.util.*;
 public class TaskSubmissionController {
 
     private final TaskSubmissionService submissionService;
+    private final SubmissionAiReviewService aiReviewService;
     private final FileStorageService fileStorageService;
     private final Auth auth;
 
-    public TaskSubmissionController(TaskSubmissionService submissionService, FileStorageService fileStorageService, Auth auth) {
+    public TaskSubmissionController(TaskSubmissionService submissionService, SubmissionAiReviewService aiReviewService,
+                                    FileStorageService fileStorageService, Auth auth) {
         this.submissionService = submissionService;
+        this.aiReviewService = aiReviewService;
         this.fileStorageService = fileStorageService;
         this.auth = auth;
     }
@@ -58,9 +63,12 @@ public class TaskSubmissionController {
             }
         }
 
-        submissionService.applyInitialGrading(sub);
-        submissionService.save(sub);
-        return Result.ok("提交成功");
+        try {
+            submissionService.submitWithGrading(sub);
+            return Result.ok("提交成功");
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
     }
 
     /** 查看某任务的所有提交（含学生名、任务类型） | admin/授课教师 */
@@ -109,5 +117,32 @@ public class TaskSubmissionController {
         sub.setStatus("graded");
         submissionService.updateById(sub);
         return Result.ok();
+    }
+
+    /** 触发主观提交 AI 辅助评价 | admin/授课教师 */
+    @PostMapping("/{submissionId}/ai-review")
+    public Result<SubmissionAiReview> generateAiReview(@PathVariable String submissionId, HttpSession session) {
+        TaskSubmission sub = submissionService.getById(submissionId);
+        if (sub == null) return Result.fail("提交记录不存在");
+        String code = submissionService.getTaskCourseCode(sub.getTaskNo());
+        if (code == null || !auth.canModifyCourse(session, code)) return Result.fail("无权限");
+        try {
+            return Result.ok(aiReviewService.generateReview(submissionId));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 查看最新 AI 辅助评价 | student本人/admin/授课教师 */
+    @GetMapping("/{submissionId}/ai-review")
+    public Result<SubmissionAiReview> latestAiReview(@PathVariable String submissionId, HttpSession session) {
+        TaskSubmission sub = submissionService.getById(submissionId);
+        if (sub == null) return Result.fail("提交记录不存在");
+        Student student = (Student) session.getAttribute("student");
+        boolean ownSubmission = student != null && student.getStudentNo().equals(sub.getStudentNo());
+        String code = submissionService.getTaskCourseCode(sub.getTaskNo());
+        if (!ownSubmission && (code == null || !auth.canModifyCourse(session, code))) return Result.fail("无权限");
+        SubmissionAiReview review = aiReviewService.getLatestBySubmissionId(submissionId);
+        return review != null ? Result.ok(review) : Result.fail("暂无 AI 辅助评价");
     }
 }

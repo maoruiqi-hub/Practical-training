@@ -66,6 +66,91 @@ CREATE TABLE IF NOT EXISTS task_submission (
     feedback TEXT
 );
 
+-- 主观提交 AI 辅助评价表
+CREATE TABLE IF NOT EXISTS submission_ai_review (
+    review_id INT AUTO_INCREMENT PRIMARY KEY,
+    submission_id INT,
+    task_no INT,
+    student_no INT,
+    ai_score INT,
+    dimensions TEXT,
+    summary TEXT,
+    suggestions TEXT,
+    risk_level VARCHAR(32),
+    status VARCHAR(32),
+    create_time DATETIME
+);
+
+-- 在线测验逐题作答明细表
+CREATE TABLE IF NOT EXISTS submission_answer (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    submission_id INT,
+    task_no INT,
+    student_no INT,
+    question_id INT,
+    question_stem TEXT,
+    question_type VARCHAR(16),
+    knowledge_point_id INT,
+    student_answer TEXT,
+    correct_answer TEXT,
+    correct BOOLEAN,
+    score INT,
+    max_score INT,
+    auto_gradable BOOLEAN,
+    create_time DATETIME
+);
+
+ALTER TABLE submission_answer ADD COLUMN IF NOT EXISTS question_stem TEXT;
+ALTER TABLE submission_answer ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
+ALTER TABLE submission_answer DROP COLUMN IF EXISTS knowledge_point;
+
+-- 试卷版本表
+CREATE TABLE IF NOT EXISTS paper (
+    paper_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_code INT,
+    task_no INT,
+    title VARCHAR(128),
+    strategy VARCHAR(32),
+    target_count INT,
+    total_score INT,
+    status VARCHAR(32),
+    create_time DATETIME
+);
+
+-- 试卷题目快照表
+CREATE TABLE IF NOT EXISTS paper_question (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    paper_id INT,
+    question_id INT,
+    sort_order INT,
+    score_snapshot INT,
+    question_type VARCHAR(16),
+    knowledge_point_id INT,
+    difficulty INT
+);
+ALTER TABLE paper_question ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
+ALTER TABLE paper_question DROP COLUMN IF EXISTS knowledge_point;
+
+-- 知识点实体表
+CREATE TABLE IF NOT EXISTS knowledge_point (
+    knowledge_point_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_code INT,
+    lesson_no VARCHAR(32),
+    name VARCHAR(128),
+    description TEXT
+);
+ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS lesson_no VARCHAR(32);
+ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS description TEXT;
+
+-- 知识点关系表
+CREATE TABLE IF NOT EXISTS knowledge_edge (
+    edge_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_code INT,
+    source_id INT,
+    target_id INT,
+    relation_type VARCHAR(32)
+);
+
 -- 题库表
 CREATE TABLE IF NOT EXISTS question (
     question_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -76,9 +161,16 @@ CREATE TABLE IF NOT EXISTS question (
     options TEXT,
     answer VARCHAR(512),
     difficulty INT,
-    knowledge_point VARCHAR(128),
+    knowledge_point_id INT,
     score INT
 );
+
+ALTER TABLE question ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
+UPDATE question q
+JOIN knowledge_point kp ON kp.course_code = q.course_code AND kp.name = q.knowledge_point
+SET q.knowledge_point_id = kp.knowledge_point_id
+WHERE q.knowledge_point_id IS NULL;
+ALTER TABLE question DROP COLUMN IF EXISTS knowledge_point;
 
 -- 测验-题目关联表
 CREATE TABLE IF NOT EXISTS task_question (

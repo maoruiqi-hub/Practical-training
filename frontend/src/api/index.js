@@ -63,17 +63,31 @@ export const getMySubmissions = () => api.get('/submission/my')
 export const getSubmissionsByTask = (taskNo) => api.get(`/submission/task/${taskNo}`)
 export const getGradeDetail = (submissionId) => api.get(`/submission/grade/${submissionId}`)
 export const gradeSubmission = (id, data) => api.put(`/submission/${id}`, data)
+export const generateAiReview = (id) => api.post(`/submission/${id}/ai-review`)
+export const getAiReview = (id) => api.get(`/submission/${id}/ai-review`)
 
 // ============ 成绩统计 ============
 export const getStudentStats = (studentNo) => api.get(`/stats/student/${studentNo}`)
 export const getCourseStats = (courseCode) => api.get(`/stats/course/${courseCode}`)
+export const getStudentWrongQuestions = (studentNo, params) => api.get(`/analysis/student/${studentNo}/wrong-questions`, { params })
+export const getCourseWrongQuestions = (courseCode) => api.get(`/analysis/course/${courseCode}/wrong-questions`)
+
+// ============ 知识点 / 知识图谱 ============
+export const getKnowledgePoints = (courseCode, params) => api.get(`/knowledge/course/${courseCode}/points`, { params })
+export const addKnowledgePoint = (courseCode, data) => api.post(`/knowledge/course/${courseCode}/points`, data)
+export const updateKnowledgePoint = (pointId, data) => api.put(`/knowledge/points/${pointId}`, data)
+export const deleteKnowledgePoint = (pointId) => api.delete(`/knowledge/points/${pointId}`)
+export const getKnowledgeGraph = (courseCode) => api.get(`/knowledge/course/${courseCode}/graph`)
 
 // ============ 题库 / 测验 ============
 export const getQuestionById = (id) => api.get(`/question/${id}`)
 export const getQuestionsByCourse = (courseCode) => api.get(`/question/course/${courseCode}`)
 export const getQuestionsByLesson = (lessonNo) => api.get(`/question/lesson/${lessonNo}`)
 export const searchQuestion = (keyword) => api.get('/question/search', { params: { keyword } })
+export const filterQuestion = (params) => api.get('/question/filter', { params })
 export const generatePaper = (courseCode, data) => api.post(`/question/course/${courseCode}/generate`, data)
+export const generatePaperVersion = (courseCode, data) => api.post(`/question/course/${courseCode}/paper`, data)
+export const bindPaperToTask = (paperId, taskNo) => api.put(`/question/paper/${paperId}/task/${taskNo}`)
 export const addQuestion = (data) => api.post('/question', data)
 export const updateQuestion = (id, data) => api.put(`/question/${id}`, data)
 export const deleteQuestion = (id) => api.delete(`/question/${id}`)

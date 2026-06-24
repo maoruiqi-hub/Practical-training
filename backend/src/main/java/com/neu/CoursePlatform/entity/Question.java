@@ -27,8 +27,8 @@ public class Question {
     private String answer;
     /** 难度 1~5 */
     private Integer difficulty;
-    /** 关联知识点 */
-    private String knowledgePoint;
+    /** 关联知识点实体 ID */
+    private String knowledgePointId;
     /** 默认分值 */
     private Integer score;
 }

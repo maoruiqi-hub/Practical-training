@@ -3,10 +3,14 @@ package com.neu.CoursePlatform.controller;
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.PaperGenerateRequest;
+import com.neu.CoursePlatform.dto.PaperGenerateResult;
+import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.TaskQuestion;
+import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.PaperService;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.TaskQuestionService;
 import jakarta.servlet.http.HttpSession;
@@ -21,13 +25,18 @@ public class QuestionController {
     private final QuestionService questionService;
     private final TaskQuestionService taskQuestionService;
     private final LearningTaskService taskService;
+    private final PaperService paperService;
+    private final KnowledgePointService knowledgePointService;
     private final Auth auth;
 
     public QuestionController(QuestionService questionService, TaskQuestionService taskQuestionService,
-                              LearningTaskService taskService, Auth auth) {
+                              LearningTaskService taskService, PaperService paperService,
+                              KnowledgePointService knowledgePointService, Auth auth) {
         this.questionService = questionService;
         this.taskQuestionService = taskQuestionService;
         this.taskService = taskService;
+        this.paperService = paperService;
+        this.knowledgePointService = knowledgePointService;
         this.auth = auth;
     }
 
@@ -62,6 +71,23 @@ public class QuestionController {
         return Result.ok(questionService.searchByKeyword(keyword));
     }
 
+    /** 组合筛选题目 | admin/授课教师 */
+    @GetMapping("/filter")
+    public Result<List<Question>> filter(@RequestParam(required = false) String courseCode,
+                                         @RequestParam(required = false) String lessonNo,
+                                         @RequestParam(required = false) String knowledgePointId,
+                                         @RequestParam(required = false) String type,
+                                         @RequestParam(required = false) Integer difficulty,
+                                         @RequestParam(required = false) String keyword,
+                                         HttpSession session) {
+        if (courseCode != null && !courseCode.isBlank()) {
+            if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        } else if (!auth.isLoggedIn(session)) {
+            return Result.fail("请先登录");
+        }
+        return Result.ok(questionService.filterQuestions(courseCode, lessonNo, knowledgePointId, type, difficulty, keyword));
+    }
+
     /** 按策略生成测验试卷 | admin/授课教师 */
     @PostMapping("/course/{courseCode}/generate")
     public Result<List<Question>> generatePaper(@PathVariable String courseCode,
@@ -75,10 +101,44 @@ public class QuestionController {
         }
     }
 
+    /** 按策略生成并保存试卷版本 | admin/授课教师 */
+    @PostMapping("/course/{courseCode}/paper")
+    public Result<PaperGenerateResult> generateAndSavePaper(@PathVariable String courseCode,
+                                                            @RequestBody PaperGenerateRequest request,
+                                                            HttpSession session) {
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        try {
+            return Result.ok(paperService.generateAndSave(courseCode, request));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 将试卷版本绑定到已发布测验 | admin/授课教师 */
+    @PutMapping("/paper/{paperId}/task/{taskNo}")
+    public Result<Void> bindPaperToTask(@PathVariable String paperId,
+                                        @PathVariable String taskNo,
+                                        HttpSession session) {
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        if (!auth.canModifyCourse(session, task.getCourseCode())) return Result.fail("无权限");
+        try {
+            paperService.bindToTask(paperId, taskNo);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+        return Result.ok();
+    }
+
     /** 新增题目 | admin/授课教师 */
     @PostMapping
     public Result<Void> add(@RequestBody Question question, HttpSession session) {
         if (!auth.canModifyCourse(session, question.getCourseCode())) return Result.fail("无权限");
+        try {
+            syncKnowledgePoint(question);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
         questionService.save(question);
         return Result.ok();
     }
@@ -90,6 +150,12 @@ public class QuestionController {
         if (existing == null) return Result.fail("题目不存在");
         if (!auth.canModifyCourse(session, existing.getCourseCode())) return Result.fail("无权限");
         question.setQuestionId(questionId);
+        question.setCourseCode(existing.getCourseCode());
+        try {
+            syncKnowledgePoint(question);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
         questionService.updateById(question);
         return Result.ok();
     }
@@ -139,5 +205,12 @@ public class QuestionController {
             return Result.fail(e.getMessage());
         }
         return Result.ok();
+    }
+
+    private void syncKnowledgePoint(Question question) {
+        if (question.getKnowledgePointId() == null || question.getKnowledgePointId().isBlank()) return;
+        KnowledgePoint point = knowledgePointService.getById(question.getKnowledgePointId());
+        if (point == null) throw new IllegalArgumentException("知识点不存在");
+        if (!point.getCourseCode().equals(question.getCourseCode())) throw new IllegalArgumentException("知识点不属于当前课程");
     }
 }

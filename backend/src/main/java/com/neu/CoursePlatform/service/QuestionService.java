@@ -14,5 +14,8 @@ public interface QuestionService extends IService<Question> {
 
     List<Question> searchByKeyword(String keyword);
 
+    List<Question> filterQuestions(String courseCode, String lessonNo, String knowledgePointId,
+                                   String type, Integer difficulty, String keyword);
+
     List<Question> generatePaper(String courseCode, PaperGenerateRequest request);
 }
