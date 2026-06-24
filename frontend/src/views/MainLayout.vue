@@ -14,6 +14,7 @@
           <el-menu-item index="/dashboard"><el-icon><HomeFilled /></el-icon>首页</el-menu-item>
           <el-menu-item index="/courses"><el-icon><Reading /></el-icon>课程列表</el-menu-item>
           <el-menu-item index="/stats"><el-icon><TrendCharts /></el-icon>成绩统计</el-menu-item>
+          <el-menu-item index="/profile" v-if="user.role==='student'"><el-icon><User /></el-icon>我的画像</el-menu-item>
           <template v-if="isAdmin">
             <el-sub-menu index="admin">
               <template #title><el-icon><Setting /></el-icon>管理后台</template>

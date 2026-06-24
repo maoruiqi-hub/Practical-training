@@ -4,10 +4,14 @@ import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.service.StudentService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/student")
@@ -74,5 +78,35 @@ public class StudentController {
         if (!auth.isAdmin(session)) return Result.fail("无权限");
         studentService.removeById(studentNo);
         return Result.ok();
+    }
+
+    /** 批量导入学生 | admin */
+    @PostMapping("/import")
+    public Result<Map<String, Object>> importStudents(@RequestParam MultipartFile file, HttpSession session) {
+        if (!auth.isAdmin(session)) return Result.fail("无权限");
+        try {
+            int count = studentService.importFromExcel(file);
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("count", count);
+            result.put("message", "成功导入 " + count + " 名学生");
+            return Result.ok(result);
+        } catch (IOException e) {
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("count", 0);
+            result.put("message", e.getMessage());
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 导出学生 | admin */
+    @GetMapping("/export")
+    public void exportStudents(HttpServletResponse response, HttpSession session) throws IOException {
+        if (!auth.isAdmin(session)) {
+            response.setStatus(403);
+            return;
+        }
+        response.setContentType("application/vnd.ms-excel");
+        response.setHeader("Content-Disposition", "attachment; filename=students.xls");
+        studentService.exportToExcel(response.getOutputStream());
     }
 }

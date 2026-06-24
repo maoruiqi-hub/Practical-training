@@ -17,6 +17,7 @@ const routes = [
       { path: 'task/detail/:taskNo', name: 'TaskDetail', component: () => import('../views/TaskDetail.vue') },
       { path: 'task/:courseCode/submit/:taskNo', name: 'TaskSubmit', component: () => import('../views/TaskSubmit.vue') },
       { path: 'task/:courseCode', name: 'TaskList', component: () => import('../views/TaskList.vue') },
+      { path: 'profile', name: 'StudentProfile', component: () => import('../views/StudentProfile.vue') },
       { path: 'stats', name: 'Stats', component: () => import('../views/StatsView.vue') },
       { path: 'admin/students', name: 'StudentManage', component: () => import('../views/StudentManage.vue') },
       { path: 'admin/teachers', name: 'TeacherManage', component: () => import('../views/TeacherManage.vue') },

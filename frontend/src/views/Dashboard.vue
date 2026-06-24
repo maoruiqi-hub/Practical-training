@@ -56,6 +56,32 @@
       <template #footer><el-button @click="gradeDialog=false">取消</el-button><el-button type="primary" @click="doGrade">确认复核</el-button></template>
     </el-dialog>
 
+    <!-- 学生：今日学习建议 (R7.4) -->
+    <el-card v-if="userRole==='student'" style="margin-bottom:20px" class="suggestion-card">
+      <template #header>
+        <div class="card-header">
+          <span>今日学习建议</span>
+          <el-button size="small" @click="loadSuggestion" :loading="suggestionLoading">刷新</el-button>
+        </div>
+      </template>
+      <div v-if="suggestion">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <div class="stat-item">状态: <el-tag :type="suggestion.status==='正常学习'?'':'warning'">{{ suggestion.status }}</el-tag></div>
+            <div class="stat-item">HP: {{ suggestion.hp }} | ATK: {{ suggestion.atk }} | DEF: {{ suggestion.def }}</div>
+          </el-col>
+          <el-col :span="12">
+            <div v-if="suggestion.weakPoints && suggestion.weakPoints.length">
+              <p style="margin:0;color:#f56c6c">薄弱知识点:</p>
+              <el-tag v-for="wp in suggestion.weakPoints" :key="wp.name" size="small" style="margin:2px">{{ wp.name }}({{ wp.score }})</el-tag>
+            </div>
+          </el-col>
+        </el-row>
+        <el-alert :title="suggestion.nextAction" type="info" :closable="false" style="margin-top:12px" show-icon />
+      </div>
+      <el-empty v-else description="暂无建议数据" :image-size="60" />
+    </el-card>
+
     <!-- 学生：待完成/待评阅 -->
     <el-card v-if="userRole==='student'" style="margin-bottom:20px">
       <template #header>
@@ -89,6 +115,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { searchCourse, getGradeDetail, gradeSubmission, getMySubmissions, getTaskList, getSubmissionsByTask } from '../api'
+import { getProfileSummary, getTestFeedback } from '../api/profile'
 import { ElMessage } from 'element-plus'
 
 const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -105,6 +132,18 @@ const gradeDetails = ref([])
 const gradeForm = reactive({ submissionId:'', studentName:'', content:'', score:null, feedback:'' })
 
 const unsubmittedCount = computed(() => myTasks.value.filter(t => t.status === '未提交').length)
+const suggestion = ref(null)
+const suggestionLoading = ref(false)
+
+const loadSuggestion = async () => {
+  suggestionLoading.value = true
+  try {
+    const studentNo = parseInt(user.studentNo) || 1
+    const { data } = await getTestFeedback(studentNo, 1)
+    if (data.code === 200) suggestion.value = data.data
+  } catch (e) { suggestion.value = null }
+  suggestionLoading.value = false
+}
 
 const openGrade = async (row) => {
   Object.assign(gradeForm, row); gradeDialog.value = true; gradeLoading.value = true
@@ -147,6 +186,7 @@ onMounted(async () => {
   }
 
   if (userRole === 'student') {
+    loadSuggestion()
     // 获取学生已提交记录
     myTasksLoading.value = true
     try {
@@ -219,4 +259,6 @@ onMounted(async () => {
 .welcome-banner h2 { margin: 0 0 4px 0; font-size: 20px; }
 .welcome-banner p { margin: 0; opacity: .85; font-size: 14px; }
 .card-header { display:flex; justify-content:space-between; align-items:center; }
+.suggestion-card .stat-item { margin:4px 0; font-size:14px; }
+.suggestion-card { border-left: 4px solid #409eff; }
 </style>

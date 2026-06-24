@@ -23,4 +23,6 @@ public class Student {
     private String username;
     /** 密码 */
     private String password;
+    /** 联系方式 */
+    private String phone;
 }
