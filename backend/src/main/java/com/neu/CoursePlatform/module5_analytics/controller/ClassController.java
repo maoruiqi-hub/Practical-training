@@ -31,7 +31,7 @@ public class ClassController {
     public Result<ClassInfo> create(@RequestBody ClassInfo classInfo, HttpSession session) {
         Teacher teacher = auth.getTeacher(session);
         if (teacher == null) return Result.fail("请先登录");
-        classInfo.setTeacherId(String.valueOf(teacher.getTeacherNo()));
+        classInfo.setTeacherId(auth.getTeacherId(session));
         ClassInfo created = classInfoService.createClass(classInfo);
         if (created == null) return Result.fail("该课程下班级名称已存在");
         return Result.ok(created);
@@ -54,7 +54,7 @@ public class ClassController {
                                          HttpSession session) {
         Teacher teacher = auth.getTeacher(session);
         if (teacher == null) return Result.fail("请先登录");
-        String tid = teacherId != null ? teacherId : String.valueOf(teacher.getTeacherNo());
+        String tid = teacherId != null ? teacherId : auth.getTeacherId(session);
         return Result.ok(classInfoService.listByTeacher(tid));
     }
 

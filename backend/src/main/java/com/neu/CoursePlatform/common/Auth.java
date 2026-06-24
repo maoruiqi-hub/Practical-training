@@ -47,4 +47,16 @@ public class Auth {
         }
         return t.getName().equals(c.getTeacher());
     }
+
+    /**
+     * 获取当前登录教师的 ID（字符串形式）。
+     * 现在 Teacher 表用 INT，返回 String.valueOf(int)；
+     * 未来迁移 UUID v4 后，返回 UUID 字符串。
+     * 其他模块通过此方法获取教师 ID，不直接依赖 Teacher.getTeacherNo() 的类型。
+     */
+    public String getTeacherId(HttpSession session) {
+        Teacher t = getTeacher(session);
+        if (t == null) return null;
+        return String.valueOf(t.getTeacherNo());
+    }
 }

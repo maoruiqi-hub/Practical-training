@@ -85,7 +85,7 @@ public class RiskAlertController {
     @PutMapping("/api/risk-alerts/{id}/resolve")
     public Result<Void> resolve(@PathVariable String id, HttpSession session) {
         if (auth.getTeacher(session) == null) return Result.fail("请先登录");
-        String teacherNo = String.valueOf(auth.getTeacher(session).getTeacherNo());
+        String teacherNo = auth.getTeacherId(session);
         boolean ok = riskAlertService.resolve(id, teacherNo);
         return ok ? Result.ok() : Result.fail("预警不存在或已处理");
     }
