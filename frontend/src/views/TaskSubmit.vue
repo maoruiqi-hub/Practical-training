@@ -67,27 +67,27 @@
         <el-alert v-if="isOverdue && !task?.allowLate" title="任务已截止，不允许逾期提交" type="error" :closable="false" style="margin-bottom:16px" />
 
         <!-- 提交次数达上限 -->
-        <el-alert v-if="!canResubmit" title="已达最大提交次数（{{ task?.maxAttempts || 3 }}次），如需修改请联系教师" type="warning" :closable="false" style="margin-bottom:16px" />
+        <el-alert v-if="!canResubmit" :title="'已达最大提交次数（' + maxAttempts + '次），如需修改请联系教师'" type="warning" :closable="false" style="margin-bottom:16px" />
 
         <!-- 重新提交提示 -->
-        <el-alert v-if="canResubmit && mySubmissions.length > 0" title="您可以重新提交（还有 {{ (task?.maxAttempts || 3) - mySubmissions.length }} 次机会），新提交将覆盖旧提交" type="info" :closable="false" style="margin-bottom:16px" />
+        <el-alert v-if="canResubmit && mySubmissions.length > 0" :title="'您可以重新提交（还有 ' + (maxAttempts - mySubmissions.length) + ' 次机会），新提交将覆盖旧提交'" type="info" :closable="false" style="margin-bottom:16px" />
 
-        <!-- 提交表单 -->
-        <el-form v-if="canSubmit" label-width="100px">
+        <!-- 提交/修改表单 -->
+        <el-form label-width="100px" style="margin-top:16px">
           <el-form-item label="文字内容">
-            <el-input v-model="content" type="textarea" :rows="5" placeholder="请输入提交内容或说明" />
+            <el-input v-model="content" type="textarea" :rows="5" placeholder="请输入提交内容或说明" :disabled="!canSubmit" />
           </el-form-item>
           <el-form-item :label="'上传文件'">
             <div style="display:flex;flex-direction:column;gap:8px">
-              <el-upload :auto-upload="false" :limit="1" :on-change="handleFile" :accept="task?.attachmentFormats || ''">
-                <el-button type="primary">选择文件</el-button>
+              <el-upload :auto-upload="false" :limit="1" :on-change="handleFile" :accept="task?.attachmentFormats || ''" :disabled="!canSubmit">
+                <el-button type="primary" :disabled="!canSubmit">选择文件</el-button>
               </el-upload>
               <span v-if="task?.attachmentFormats" style="color:#909399;font-size:12px">仅支持：{{ task.attachmentFormats }}</span>
             </div>
           </el-form-item>
           <el-form-item>
             <el-button type="success" @click="submit" :disabled="!canSubmit" style="width:100%" size="large">
-              {{ mySubmissions.length > 0 ? '重新提交（第' + (mySubmissions.length + 1) + '次）' : isOverdue && task?.allowLate ? '逾期提交' : '提交作业' }}
+              {{ !canSubmit ? (isOverdue && !task?.allowLate ? '已截止，不可提交' : '已达最大提交次数') : mySubmissions.length > 0 ? '修改并重新提交（第' + (mySubmissions.length + 1) + '次）' : isOverdue && task?.allowLate ? '逾期提交' : '提交作业' }}
             </el-button>
           </el-form-item>
         </el-form>
