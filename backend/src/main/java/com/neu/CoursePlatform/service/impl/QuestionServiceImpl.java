@@ -1,7 +1,7 @@
 package com.neu.CoursePlatform.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.neu.CoursePlatform.dto.PaperGenerateRequest;
+import com.neu.CoursePlatform.dto.ExamGenerateRequest;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.mapper.QuestionMapper;
 import com.neu.CoursePlatform.service.QuestionService;
@@ -44,7 +44,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
     }
 
     @Override
-    public List<Question> generatePaper(String courseCode, PaperGenerateRequest request) {
+    public List<Question> generateExam(String courseCode, ExamGenerateRequest request) {
         if (request == null) throw new IllegalArgumentException("组卷参数不能为空");
         int totalCount = request.getCount() == null ? 10 : request.getCount();
         if (totalCount <= 0) throw new IllegalArgumentException("题目数量必须大于 0");
@@ -60,7 +60,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return selected;
     }
 
-    private List<Question> selectQuestions(List<Question> candidates, PaperGenerateRequest request, int totalCount) {
+    private List<Question> selectQuestions(List<Question> candidates, ExamGenerateRequest request, int totalCount) {
         Map<String, Integer> knowledgeCounts = request.getKnowledgePointIdCounts();
         if (knowledgeCounts != null && !knowledgeCounts.isEmpty()) {
             return generateByKnowledgePointCounts(candidates, request, knowledgeCounts);
@@ -74,7 +74,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return selectByStrategy(candidates, request.getStrategy(), totalCount, request.getKnowledgePointIds());
     }
 
-    private List<Question> filterCandidates(List<Question> all, PaperGenerateRequest request) {
+    private List<Question> filterCandidates(List<Question> all, ExamGenerateRequest request) {
         Set<String> types = toSet(request.getTypes());
         Set<String> knowledgePointIds = toSet(request.getKnowledgePointIds());
         int min = request.getDifficultyMin() == null ? 1 : request.getDifficultyMin();
@@ -86,7 +86,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 .collect(Collectors.toList());
     }
 
-    private List<Question> generateByTypeCounts(List<Question> candidates, PaperGenerateRequest request) {
+    private List<Question> generateByTypeCounts(List<Question> candidates, ExamGenerateRequest request) {
         LinkedHashSet<Question> selected = new LinkedHashSet<>();
         int targetCount = request.getTypeCounts().values().stream()
                 .filter(Objects::nonNull)
@@ -107,7 +107,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return new ArrayList<>(selected);
     }
 
-    private List<Question> generateByKnowledgePointCounts(List<Question> candidates, PaperGenerateRequest request, Map<String, Integer> knowledgeCounts) {
+    private List<Question> generateByKnowledgePointCounts(List<Question> candidates, ExamGenerateRequest request, Map<String, Integer> knowledgeCounts) {
         LinkedHashSet<Question> selected = new LinkedHashSet<>();
         int targetCount = knowledgeCounts.values().stream()
                 .filter(Objects::nonNull)
@@ -129,7 +129,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return new ArrayList<>(selected);
     }
 
-    private List<Question> generateByDifficultyRatios(List<Question> candidates, PaperGenerateRequest request, int totalCount) {
+    private List<Question> generateByDifficultyRatios(List<Question> candidates, ExamGenerateRequest request, int totalCount) {
         LinkedHashSet<Question> selected = new LinkedHashSet<>();
         Map<Integer, Integer> counts = toCounts(request.getDifficultyRatios(), totalCount);
         counts.forEach((difficulty, count) -> {

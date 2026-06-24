@@ -109,7 +109,7 @@
               <span class="mini-field"><span>中等</span><el-input-number v-model="paperForm.difficultyRatios[3]" :min="0" :max="100" size="small" controls-position="right" /></span>
               <span class="mini-field"><span>综合</span><el-input-number v-model="paperForm.difficultyRatios[5]" :min="0" :max="100" size="small" controls-position="right" /></span>
             </template>
-            <el-button size="small" type="primary" :loading="paperLoading" @click="generatePaperQuestions">生成试卷</el-button>
+            <el-button size="small" type="primary" :loading="paperLoading" @click="generateExamQuestions">生成试卷</el-button>
           </div>
           <div v-if="paperForm.strategy === 'type'" class="count-panel">
             <span v-for="item in typeOptions" :key="item.value" class="count-item">
@@ -123,7 +123,7 @@
               <el-input-number v-model="paperForm.knowledgePointIdCounts[kpId]" :min="0" :max="50" size="small" controls-position="right" />
             </span>
           </div>
-          <div v-if="paperVersionId" class="paper-version-tip">已生成试卷版本 #{{ paperVersionId }}，发布任务后会自动绑定。</div>
+          <div v-if="examVersionId" class="paper-version-tip">已生成试卷版本 #{{ examVersionId }}，发布任务后会自动绑定。</div>
           <div v-loading="qLoading" style="max-height:320px;overflow-y:auto;width:100%;border:1px solid #eee;border-radius:6px;padding:12px">
             <div style="color:#999;font-size:12px;margin-bottom:8px">已选 {{ selectedQuestions.length }} 题，共 {{ filteredQuestions.length }} 题</div>
             <el-checkbox-group v-model="selectedQuestions">
@@ -178,7 +178,7 @@ import {
   searchQuestion,
   getQuestionsByCourse,
   getKnowledgePoints,
-  generatePaperVersion,
+  generateExamVersion,
   updateLesson,
   addLesson,
   deleteLesson as deleteLessonApi,
@@ -186,7 +186,7 @@ import {
   updateTask,
   deleteTask as deleteTaskApi,
   addQuestionsToTask,
-  bindPaperToTask
+  bindExamToTask
 } from '../api'
 
 const route = useRoute()
@@ -219,7 +219,7 @@ const qLoading = ref(false)
 const qKeyword = ref('')
 const qLesson = ref('')
 const paperLoading = ref(false)
-const paperVersionId = ref('')
+const examVersionId = ref('')
 const paperForm = reactive({
   strategy: 'random',
   count: 10,
@@ -276,7 +276,7 @@ const loadKnowledgePoints = async () => {
   }
 }
 
-const generatePaperQuestions = async () => {
+const generateExamQuestions = async () => {
   paperLoading.value = true
   try {
     const [difficultyMin, difficultyMax] = paperForm.difficultyRange || [1, 5]
@@ -300,10 +300,10 @@ const generatePaperQuestions = async () => {
       knowledgePointIdCounts: paperForm.strategy === 'knowledge' ? knowledgePointIdCounts : undefined,
       difficultyRatios: paperForm.strategy === 'difficulty' ? difficultyRatios : undefined
     }
-    const res = await generatePaperVersion(code, payload)
+    const res = await generateExamVersion(code, payload)
     if (res.data.code === 200) {
       const generated = res.data.data?.questions || []
-      paperVersionId.value = res.data.data?.paper?.paperId || ''
+      examVersionId.value = res.data.data?.exam?.examId || ''
       questionBank.value = mergeQuestions(questionBank.value, generated)
       selectedQuestions.value = generated.map(q => q.questionId)
       ElMessage.success(`已生成 ${generated.length} 道题，试卷版本已保存`)
@@ -407,7 +407,7 @@ const reloadTasks = async () => {
 }
 
 const openTaskAdd = () => {
-  isTaskEdit.value = false; taskFile.value = null; paperVersionId.value = ''
+  isTaskEdit.value = false; taskFile.value = null; examVersionId.value = ''
   Object.assign(taskForm, { taskNo: '', taskType: '', description: '', deadline: '', submitMethod: '', score: 0 })
   Object.assign(paperForm, {
     strategy: 'random',
@@ -456,8 +456,8 @@ const saveTask = async () => {
           ElMessage.error(bindRes.data.msg || '试卷题目绑定失败')
           return
         }
-        if (paperVersionId.value) {
-          const paperBindRes = await bindPaperToTask(paperVersionId.value, created.data.data)
+        if (examVersionId.value) {
+          const paperBindRes = await bindExamToTask(examVersionId.value, created.data.data)
           if (paperBindRes.data.code !== 200) {
             ElMessage.error(paperBindRes.data.msg || '试卷版本绑定失败')
             return
@@ -466,7 +466,7 @@ const saveTask = async () => {
       }
       ElMessage.success(isQuizType(taskForm.taskType) ? `发布成功，已绑定 ${selectedQuestions.value.length} 道题` : '发布成功')
     }
-    taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; paperVersionId.value = ''; reloadTasks()
+    taskDialog.value = false; taskFile.value = null; selectedQuestions.value = []; examVersionId.value = ''; reloadTasks()
   } catch {
     ElMessage.error(isTaskEdit.value ? '任务更新失败，请稍后重试' : '任务发布失败，请稍后重试')
   }

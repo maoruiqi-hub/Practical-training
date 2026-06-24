@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.List;
 
 @RestController
-@RequestMapping("/course")
+@RequestMapping("/api/courses")
 public class CourseController {
 
     private final CourseService courseService;

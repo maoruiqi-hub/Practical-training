@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,10 +11,11 @@ import lombok.NoArgsConstructor;
  */
 @Data
 @NoArgsConstructor
-public class PaperQuestion {
+@TableName("exam_question")
+public class ExamQuestion {
     @TableId(type = IdType.AUTO)
     private String id;
-    private String paperId;
+    private String examId;
     private String questionId;
     private Integer sortOrder;
     private Integer scoreSnapshot;

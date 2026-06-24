@@ -71,7 +71,7 @@ UPDATE knowledge_point SET lesson_no = '6' WHERE knowledge_point_id = 10;
 UPDATE knowledge_point SET lesson_no = '6' WHERE knowledge_point_id = 11;
 UPDATE knowledge_point SET lesson_no = '5' WHERE knowledge_point_id = 12;
 
-INSERT IGNORE INTO knowledge_edge (edge_id, course_code, source_id, target_id, relation_type) VALUES
+INSERT IGNORE INTO knowledge_relation (relation_id, course_code, from_knowledge_point_id, to_knowledge_point_id, relation_type) VALUES
 (1, 1, 1, 2, 'prerequisite'),
 (2, 1, 2, 4, 'prerequisite'),
 (3, 1, 2, 5, 'prerequisite'),

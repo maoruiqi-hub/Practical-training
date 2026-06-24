@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,11 +11,12 @@ import lombok.NoArgsConstructor;
  */
 @Data
 @NoArgsConstructor
-public class KnowledgeEdge {
+@TableName("knowledge_relation")
+public class KnowledgeRelation {
     @TableId(type = IdType.AUTO)
-    private String edgeId;
+    private String relationId;
     private String courseCode;
-    private String sourceId;
-    private String targetId;
+    private String fromKnowledgePointId;
+    private String toKnowledgePointId;
     private String relationType;
 }

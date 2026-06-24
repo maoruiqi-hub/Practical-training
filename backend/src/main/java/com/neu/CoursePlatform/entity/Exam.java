@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -12,13 +13,14 @@ import java.time.LocalDateTime;
  */
 @Data
 @NoArgsConstructor
-public class Paper {
+@TableName("exam")
+public class Exam {
     @TableId(type = IdType.AUTO)
-    private String paperId;
+    private String examId;
     private String courseCode;
     private String taskNo;
     private String title;
-    private String strategy;
+    private String generateType;
     private Integer targetCount;
     private Integer totalScore;
     private String status;

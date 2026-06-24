@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/analysis")
+@RequestMapping("/api")
 public class AnalysisController {
 
     private final AnalysisService analysisService;
@@ -26,7 +26,7 @@ public class AnalysisController {
     }
 
     /** 学生个人错题统计 */
-    @GetMapping("/student/{studentNo}/wrong-questions")
+    @GetMapping("/students/{studentNo}/mistakes")
     public Result<Map<String, Object>> studentWrongQuestions(@PathVariable String studentNo,
                                                              @RequestParam(required = false) String taskNo,
                                                              @RequestParam(required = false) String knowledgePointId,
@@ -39,7 +39,7 @@ public class AnalysisController {
     }
 
     /** 单个测验错题统计 */
-    @GetMapping("/task/{taskNo}/wrong-questions")
+    @GetMapping("/tasks/{taskNo}/mistakes")
     public Result<Map<String, Object>> taskWrongQuestions(@PathVariable String taskNo, HttpSession session) {
         LearningTask task = taskService.getById(taskNo);
         if (task == null) return Result.fail("任务不存在");
@@ -48,7 +48,7 @@ public class AnalysisController {
     }
 
     /** 课程维度班级错题与薄弱知识点统计 */
-    @GetMapping("/course/{courseCode}/wrong-questions")
+    @GetMapping("/courses/{courseCode}/mistake-stats")
     public Result<Map<String, Object>> courseWrongQuestions(@PathVariable String courseCode, HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         return Result.ok(analysisService.buildCourseWrongStats(courseCode));

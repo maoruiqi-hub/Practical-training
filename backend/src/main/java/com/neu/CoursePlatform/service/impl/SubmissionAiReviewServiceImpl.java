@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.SubmissionAiReview;
 import com.neu.CoursePlatform.entity.TaskSubmission;
@@ -11,10 +12,9 @@ import com.neu.CoursePlatform.mapper.SubmissionAiReviewMapper;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.SubmissionAiReviewService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -25,23 +25,18 @@ import java.util.Map;
 @Service
 public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiReviewMapper, SubmissionAiReview> implements SubmissionAiReviewService {
 
+    private static final Logger log = LoggerFactory.getLogger(SubmissionAiReviewServiceImpl.class);
+
     private final TaskSubmissionService submissionService;
     private final LearningTaskService taskService;
+    private final AgenticClient agenticClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient = RestClient.create();
 
-    @Value("${agentic.api-key:}")
-    private String agenticApiKey;
-
-    @Value("${agentic.base-url:}")
-    private String agenticBaseUrl;
-
-    @Value("${agentic.model:gpt-4o-mini}")
-    private String agenticModel;
-
-    public SubmissionAiReviewServiceImpl(TaskSubmissionService submissionService, LearningTaskService taskService) {
+    public SubmissionAiReviewServiceImpl(TaskSubmissionService submissionService, LearningTaskService taskService,
+                                         AgenticClient agenticClient) {
         this.submissionService = submissionService;
         this.taskService = taskService;
+        this.agenticClient = agenticClient;
     }
 
     @Override
@@ -80,25 +75,12 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
     }
 
     private ReviewDraft generateWithAgentic(String content, boolean hasFile, LearningTask task) {
-        if (agenticApiKey == null || agenticApiKey.isBlank() || agenticBaseUrl == null || agenticBaseUrl.isBlank()) return null;
         try {
-            Map<String, Object> request = new LinkedHashMap<>();
-            request.put("model", agenticModel);
-            request.put("temperature", 0.2);
-            request.put("messages", List.of(
-                    Map.of("role", "system", "content", "你是课程平台的学习成果评价助手。只返回严格 JSON，不要使用 Markdown。"),
-                    Map.of("role", "user", "content", buildAgenticPrompt(content, hasFile, task))
-            ));
-            String response = restClient.post()
-                    .uri(agenticBaseUrl)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + agenticApiKey)
-                    .body(request)
-                    .retrieve()
-                    .body(String.class);
-            String json = extractModelContent(response);
+            String json = agenticClient.generateAssessmentJson(buildAgenticPrompt(content, hasFile, task));
+            if (json == null || json.isBlank()) return null;
             return parseDraft(json);
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("Agentic assessment failed, fallback to local draft. submission task={}", task != null ? task.getTaskNo() : "", e);
             return null;
         }
     }
@@ -132,17 +114,6 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 hasFile ? "是" : "否",
                 content.isBlank() ? "（无文字提交）" : content
         );
-    }
-
-    private String extractModelContent(String response) throws Exception {
-        JsonNode root = objectMapper.readTree(response);
-        JsonNode choices = root.path("choices");
-        if (choices.isArray() && !choices.isEmpty()) {
-            return choices.get(0).path("message").path("content").asText();
-        }
-        JsonNode outputText = root.path("output_text");
-        if (!outputText.isMissingNode()) return outputText.asText();
-        return response;
     }
 
     private ReviewDraft parseDraft(String json) throws Exception {

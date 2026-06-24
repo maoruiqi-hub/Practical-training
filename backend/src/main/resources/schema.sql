@@ -105,12 +105,12 @@ ALTER TABLE submission_answer ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
 ALTER TABLE submission_answer DROP COLUMN IF EXISTS knowledge_point;
 
 -- 试卷版本表
-CREATE TABLE IF NOT EXISTS paper (
-    paper_id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS exam (
+    exam_id INT AUTO_INCREMENT PRIMARY KEY,
     course_code INT,
     task_no INT,
     title VARCHAR(128),
-    strategy VARCHAR(32),
+    generate_type VARCHAR(32),
     target_count INT,
     total_score INT,
     status VARCHAR(32),
@@ -118,9 +118,9 @@ CREATE TABLE IF NOT EXISTS paper (
 );
 
 -- 试卷题目快照表
-CREATE TABLE IF NOT EXISTS paper_question (
+CREATE TABLE IF NOT EXISTS exam_question (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    paper_id INT,
+    exam_id INT,
     question_id INT,
     sort_order INT,
     score_snapshot INT,
@@ -128,8 +128,8 @@ CREATE TABLE IF NOT EXISTS paper_question (
     knowledge_point_id INT,
     difficulty INT
 );
-ALTER TABLE paper_question ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
-ALTER TABLE paper_question DROP COLUMN IF EXISTS knowledge_point;
+ALTER TABLE exam_question ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
+ALTER TABLE exam_question DROP COLUMN IF EXISTS knowledge_point;
 
 -- 知识点实体表
 CREATE TABLE IF NOT EXISTS knowledge_point (
@@ -143,11 +143,11 @@ ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS lesson_no VARCHAR(32);
 ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS description TEXT;
 
 -- 知识点关系表
-CREATE TABLE IF NOT EXISTS knowledge_edge (
-    edge_id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS knowledge_relation (
+    relation_id INT AUTO_INCREMENT PRIMARY KEY,
     course_code INT,
-    source_id INT,
-    target_id INT,
+    from_knowledge_point_id INT,
+    to_knowledge_point_id INT,
     relation_type VARCHAR(32)
 );
 
