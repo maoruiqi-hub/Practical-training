@@ -2,7 +2,7 @@ package com.neu.CoursePlatform.service;
 
 import java.util.Map;
 
-public interface ProgressService {
+public interface LearningProgressService {
 
     /** 学生课程进度 */
     Map<String, Object> buildStudentProgress(String studentNo, String courseCode);

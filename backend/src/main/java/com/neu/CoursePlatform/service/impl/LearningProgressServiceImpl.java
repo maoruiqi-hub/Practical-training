@@ -12,14 +12,14 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-public class ProgressServiceImpl implements ProgressService {
+public class LearningProgressServiceImpl implements LearningProgressService {
 
     private final LearningTaskService taskService;
     private final TaskSubmissionService submissionService;
     private final BehaviorLogService behaviorLogService;
     private final StudentService studentService;
 
-    public ProgressServiceImpl(LearningTaskService taskService, TaskSubmissionService submissionService,
+    public LearningProgressServiceImpl(LearningTaskService taskService, TaskSubmissionService submissionService,
                                 BehaviorLogService behaviorLogService, StudentService studentService) {
         this.taskService = taskService;
         this.submissionService = submissionService;

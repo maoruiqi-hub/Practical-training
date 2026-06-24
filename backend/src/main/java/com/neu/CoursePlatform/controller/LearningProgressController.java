@@ -3,19 +3,19 @@ package com.neu.CoursePlatform.controller;
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.entity.Student;
-import com.neu.CoursePlatform.service.ProgressService;
+import com.neu.CoursePlatform.service.LearningProgressService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
-public class ProgressController {
+public class LearningProgressController {
 
-    private final ProgressService progressService;
+    private final LearningProgressService progressService;
     private final Auth auth;
 
-    public ProgressController(ProgressService progressService, Auth auth) {
+    public LearningProgressController(LearningProgressService progressService, Auth auth) {
         this.progressService = progressService;
         this.auth = auth;
     }
