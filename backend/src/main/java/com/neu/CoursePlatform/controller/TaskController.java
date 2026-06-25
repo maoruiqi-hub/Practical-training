@@ -36,6 +36,17 @@ public class TaskController {
     }
 
     /** 查看某课程的任务列表（支持筛选）| 登录用户 */
+    @GetMapping
+    public Result<List<LearningTask>> listByContract(@RequestParam("course_id") String courseId,
+                                                     @RequestParam(required = false) String student_id,
+                                                     @RequestParam(required = false) String taskType,
+                                                     @RequestParam(required = false) String status,
+                                                     @RequestParam(required = false) String lessonNo,
+                                                     HttpSession session) {
+        return list(courseId, taskType, status, lessonNo, session);
+    }
+
+    /** 查看某课程的任务列表（支持筛选）| 登录用户 */
     @GetMapping("/{courseCode}")
     public Result<List<LearningTask>> list(@PathVariable String courseCode,
                                            @RequestParam(required = false) String taskType,
@@ -144,6 +155,17 @@ public class TaskController {
         return Result.ok("任务更新成功");
     }
 
+    /** 修改任务（契约路由）| admin/授课教师
+     *  PUT /api/tasks/{taskNo} */
+    @PutMapping("/{taskNo}")
+    public Result<String> updateByContract(@PathVariable String taskNo,
+                                           @RequestBody TaskUpdateRequest req,
+                                           HttpSession session) {
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        return update(task.getCourseCode(), taskNo, req, session);
+    }
+
     /** 切换任务状态 | admin/授课教师 */
     @PutMapping("/{courseCode}/{taskNo}/status")
     public Result<String> toggleStatus(@PathVariable String courseCode, @PathVariable String taskNo,
@@ -179,6 +201,17 @@ public class TaskController {
         return Result.ok(result);
     }
 
+    /** 删除任务（契约路由）| admin/授课教师
+     *  DELETE /api/tasks/{taskNo} */
+    @DeleteMapping("/{taskNo}")
+    public Result<Map<String, Object>> deleteByContract(@PathVariable String taskNo,
+                                                        @RequestParam(required = false, defaultValue = "false") boolean confirm,
+                                                        HttpSession session) {
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        return delete(task.getCourseCode(), taskNo, confirm, session);
+    }
+
     /** 任务完成统计 | admin/授课教师
      *  GET /api/tasks/{taskNo}/stats */
     @GetMapping("/{courseCode}/{taskNo}/stats")
@@ -200,5 +233,15 @@ public class TaskController {
         stats.put("averageScore", Math.round(avgScore * 10) / 10.0);
         stats.put("completionRate", taskService.getById(taskNo) != null ? 100 : 0); // placeholder
         return Result.ok(stats);
+    }
+
+    /** 任务完成统计（契约路由）| admin/授课教师
+     *  GET /api/tasks/{taskNo}/stats */
+    @GetMapping("/{taskNo}/stats")
+    public Result<Map<String, Object>> taskStatsByContract(@PathVariable String taskNo,
+                                                           HttpSession session) {
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        return taskStats(task.getCourseCode(), taskNo, session);
     }
 }

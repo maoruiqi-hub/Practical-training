@@ -36,23 +36,29 @@ public class BehaviorLogController {
     @GetMapping({"/api/learning-logs", "/learning-logs"})
     public Result<List<LearningBehaviorLog>> query(@RequestParam(required = false) String student_id,
                                                     @RequestParam(required = false) String course_id,
+                                                    @RequestParam(required = false) String action_type,
                                                     @RequestParam(required = false) String actionType,
                                                     @RequestParam(required = false) String resourceType,
+                                                    @RequestParam(required = false) String start_time,
                                                     @RequestParam(required = false) String startTime,
+                                                    @RequestParam(required = false) String end_time,
                                                     @RequestParam(required = false) String endTime,
                                                     @RequestParam(required = false) String userId,
                                                     @RequestParam(required = false) String userType,
                                                     HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         Map<String, String> filters = new HashMap<>();
-        if (student_id != null) filters.put("student_id", student_id);
+        if (student_id != null) filters.put("userId", student_id);
         if (course_id != null) filters.put("course_id", course_id);
         if (userId != null) filters.put("userId", userId);
         if (userType != null) filters.put("userType", userType);
-        if (actionType != null) filters.put("actionType", actionType);
+        String resolvedActionType = actionType != null ? actionType : action_type;
+        if (resolvedActionType != null) filters.put("actionType", resolvedActionType);
         if (resourceType != null) filters.put("resourceType", resourceType);
-        if (startTime != null) filters.put("startTime", startTime);
-        if (endTime != null) filters.put("endTime", endTime);
+        String resolvedStartTime = startTime != null ? startTime : start_time;
+        String resolvedEndTime = endTime != null ? endTime : end_time;
+        if (resolvedStartTime != null) filters.put("startTime", resolvedStartTime);
+        if (resolvedEndTime != null) filters.put("endTime", resolvedEndTime);
         return Result.ok(behaviorLogService.query(filters));
     }
 

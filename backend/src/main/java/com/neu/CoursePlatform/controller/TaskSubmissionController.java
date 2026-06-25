@@ -104,8 +104,7 @@ public class TaskSubmissionController {
             }
         }
 
-        submissionService.applyInitialGrading(sub);
-        submissionService.save(sub);
+        submissionService.submitWithGrading(sub);
         return Result.ok("提交成功");
     }
 

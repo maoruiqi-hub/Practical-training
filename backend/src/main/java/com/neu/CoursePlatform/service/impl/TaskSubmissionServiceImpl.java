@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
-import com.neu.CoursePlatform.dto.KnowledgeMasteryUpdateRequest;
 import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
@@ -16,7 +15,6 @@ import com.neu.CoursePlatform.entity.SubmissionAnswer;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.mapper.TaskSubmissionMapper;
 import com.neu.CoursePlatform.service.KnowledgePointService;
-import com.neu.CoursePlatform.service.KnowledgeMasteryService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.FloorProgressService;
 import com.neu.CoursePlatform.service.LearningTaskService;
@@ -40,7 +38,6 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     private final QuestionService questionService;
     private final SubmissionAnswerService answerService;
     private final KnowledgePointService knowledgePointService;
-    private final KnowledgeMasteryService knowledgeMasteryService;
     private final CourseGameConfigService gameConfigService;
     private final FloorProgressService floorProgressService;
     private final GameEventPublisher gameEventPublisher;
@@ -48,7 +45,6 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     public TaskSubmissionServiceImpl(LearningTaskService taskService, StudentService studentService,
                                      QuestionService questionService, SubmissionAnswerService answerService,
                                      KnowledgePointService knowledgePointService,
-                                     KnowledgeMasteryService knowledgeMasteryService,
                                      CourseGameConfigService gameConfigService,
                                      FloorProgressService floorProgressService,
                                      GameEventPublisher gameEventPublisher) {
@@ -57,7 +53,6 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         this.questionService = questionService;
         this.answerService = answerService;
         this.knowledgePointService = knowledgePointService;
-        this.knowledgeMasteryService = knowledgeMasteryService;
         this.gameConfigService = gameConfigService;
         this.floorProgressService = floorProgressService;
         this.gameEventPublisher = gameEventPublisher;
@@ -201,7 +196,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         applyInitialGrading(sub);
         save(sub);
         saveAnswerDetails(sub);
-        publishAssessmentIntegrationEvents(sub);
+        publishAssessmentResultEvents(sub);
     }
 
     @Override
@@ -287,28 +282,27 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     }
 
     /**
-     * 模块三判分结果的唯一游戏出口。关闭 game_mode 时不发布任何事件；
+     * 模块三只发布判分结果事件；掌握度等下游数据由对应模块订阅事件后自行维护。
      * 楼层事件委托模块一的 FloorProgressService 产生，避免模块三写模块一表。
      */
-    private void publishAssessmentIntegrationEvents(TaskSubmission sub) {
+    @Override
+    public void publishAssessmentResultEvents(TaskSubmission sub) {
         LearningTask task = taskService.getById(sub.getTaskNo());
         if (task == null || !taskService.isQuizTask(task)) return;
         List<SubmissionAnswer> answers = answerService.listBySubmissionId(sub.getSubmissionId());
         for (SubmissionAnswer answer : answers) {
             if (!Boolean.TRUE.equals(answer.getAutoGradable()) || answer.getCorrect() == null) continue;
-            updateKnowledgeMastery(sub, task, answer);
-            if (gameConfigService.isEnabled(task.getCourseCode())) {
-                gameEventPublisher.publish(GameEvent.builder().eventId(SharedIds.newId())
-                        .eventType(Boolean.TRUE.equals(answer.getCorrect())
-                                ? GameEventTypes.ANSWER_CORRECT : GameEventTypes.ANSWER_WRONG)
-                        .studentId(sub.getStudentNo()).courseId(task.getCourseCode())
-                        .sourceId(answer.getId()).occurredAt(LocalDateTime.now())
-                        .payload(Map.of("question_id", answer.getQuestionId(),
-                                "knowledge_point_id", answer.getKnowledgePointId() == null ? "" : answer.getKnowledgePointId(),
-                                "difficulty", questionDifficulty(answer.getQuestionId()),
-                                "is_first_attempt", isFirstAttempt(answer), "attempt_count", attemptCount(answer),
-                                "time_spent_ms", 0, "error_type", Boolean.TRUE.equals(answer.getCorrect()) ? "" : "wrong_answer")).build());
-            }
+            GameEvent answerEvent = GameEvent.builder().eventId(SharedIds.newId())
+                    .eventType(Boolean.TRUE.equals(answer.getCorrect())
+                            ? GameEventTypes.ANSWER_CORRECT : GameEventTypes.ANSWER_WRONG)
+                    .studentId(sub.getStudentNo()).courseId(task.getCourseCode())
+                    .sourceId(answer.getId()).occurredAt(LocalDateTime.now())
+                    .payload(Map.of("question_id", answer.getQuestionId(),
+                            "knowledge_point_id", answer.getKnowledgePointId() == null ? "" : answer.getKnowledgePointId(),
+                            "difficulty", questionDifficulty(answer.getQuestionId()),
+                            "is_first_attempt", isFirstAttempt(answer), "attempt_count", attemptCount(answer),
+                            "time_spent_ms", 0, "error_type", Boolean.TRUE.equals(answer.getCorrect()) ? "" : "wrong_answer")).build();
+            gameEventPublisher.publish(answerEvent);
         }
         answers.stream().filter(answer -> Boolean.TRUE.equals(answer.getAutoGradable()) && answer.getKnowledgePointId() != null && !answer.getKnowledgePointId().isBlank())
                 .collect(Collectors.groupingBy(SubmissionAnswer::getKnowledgePointId)).forEach((knowledgePointId, pointAnswers) -> {
@@ -326,18 +320,6 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                     .courseId(task.getCourseCode()).sourceId(sub.getSubmissionId()).occurredAt(LocalDateTime.now())
                     .payload(Map.of("taskId", task.getTaskNo())).build());
         }
-    }
-
-    private void updateKnowledgeMastery(TaskSubmission sub, LearningTask task, SubmissionAnswer answer) {
-        if (answer.getKnowledgePointId() == null || answer.getKnowledgePointId().isBlank()) return;
-        KnowledgeMasteryUpdateRequest request = new KnowledgeMasteryUpdateRequest();
-        request.setStudentNo(sub.getStudentNo());
-        request.setCourseCode(task.getCourseCode());
-        request.setKnowledgePointId(answer.getKnowledgePointId());
-        request.setMasteryScore(Boolean.TRUE.equals(answer.getCorrect()) ? 100 : 0);
-        request.setSourceType("assessment");
-        request.setSourceId(answer.getId());
-        knowledgeMasteryService.upsert(request);
     }
 
     private boolean isBossTask(LearningTask task) {

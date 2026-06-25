@@ -6,17 +6,17 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
 import com.neu.CoursePlatform.entity.CourseResource;
-import com.neu.CoursePlatform.entity.KnowledgeMastery;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.KnowledgeRelation;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.mapper.AbilityKnowledgePointMapper;
 import com.neu.CoursePlatform.mapper.CourseResourceMapper;
-import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.mapper.KnowledgePointMapper;
 import com.neu.CoursePlatform.mapper.KnowledgeRelationMapper;
+import com.neu.CoursePlatform.service.KnowledgeMasteryService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.QuestionService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,18 +29,18 @@ public class KnowledgePointServiceImpl extends ServiceImpl<KnowledgePointMapper,
     private final KnowledgeRelationMapper knowledgeRelationMapper;
     private final CourseResourceMapper courseResourceMapper;
     private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
-    private final KnowledgeMasteryMapper knowledgeMasteryMapper;
+    private final KnowledgeMasteryService knowledgeMasteryService;
     private final QuestionService questionService;
 
     public KnowledgePointServiceImpl(KnowledgeRelationMapper knowledgeRelationMapper,
                                      CourseResourceMapper courseResourceMapper,
                                      AbilityKnowledgePointMapper abilityKnowledgePointMapper,
-                                     KnowledgeMasteryMapper knowledgeMasteryMapper,
+                                     @Lazy KnowledgeMasteryService knowledgeMasteryService,
                                      QuestionService questionService) {
         this.knowledgeRelationMapper = knowledgeRelationMapper;
         this.courseResourceMapper = courseResourceMapper;
         this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
-        this.knowledgeMasteryMapper = knowledgeMasteryMapper;
+        this.knowledgeMasteryService = knowledgeMasteryService;
         this.questionService = questionService;
     }
 
@@ -100,8 +100,7 @@ public class KnowledgePointServiceImpl extends ServiceImpl<KnowledgePointMapper,
                 .set(CourseResource::getKnowledgePointId, null));
         abilityKnowledgePointMapper.delete(new LambdaQueryWrapper<AbilityKnowledgePoint>()
                 .eq(AbilityKnowledgePoint::getKnowledgePointId, knowledgePointId));
-        knowledgeMasteryMapper.delete(new LambdaQueryWrapper<KnowledgeMastery>()
-                .eq(KnowledgeMastery::getKnowledgePointId, knowledgePointId));
+        knowledgeMasteryService.removeByKnowledgePoint(knowledgePointId);
         return removeById(knowledgePointId);
     }
 

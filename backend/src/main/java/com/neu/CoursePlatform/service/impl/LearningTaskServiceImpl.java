@@ -64,6 +64,7 @@ public class LearningTaskServiceImpl extends ServiceImpl<LearningTaskMapper, Lea
 
     @Override
     public boolean isQuizTask(LearningTask task) {
-        return task != null && "quiz".equals(task.getTaskType());
+        return LearningTaskService.super.isQuizTask(task)
+                || (task != null && "quiz".equalsIgnoreCase(task.getTaskType()));
     }
 }

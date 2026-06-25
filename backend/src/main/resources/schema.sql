@@ -89,7 +89,7 @@ ALTER TABLE course_resource ADD COLUMN IF NOT EXISTS preview_error VARCHAR(512);
 
 CREATE TABLE IF NOT EXISTS ability_point (ability_point_id INT AUTO_INCREMENT PRIMARY KEY, course_code INT NOT NULL, name VARCHAR(128) NOT NULL, description TEXT, INDEX idx_ability_point_course(course_code));
 CREATE TABLE IF NOT EXISTS ability_knowledge_point (id INT AUTO_INCREMENT PRIMARY KEY, ability_point_id INT NOT NULL, knowledge_point_id INT NOT NULL, UNIQUE KEY uk_ability_knowledge_point(ability_point_id, knowledge_point_id));
-CREATE TABLE IF NOT EXISTS knowledge_mastery (mastery_id INT AUTO_INCREMENT PRIMARY KEY, student_no INT NOT NULL, course_code INT NOT NULL, knowledge_point_id INT NOT NULL, mastery_score INT NOT NULL, source_type VARCHAR(32), source_id VARCHAR(64), updated_at DATETIME NOT NULL, UNIQUE KEY uk_knowledge_mastery(student_no,course_code,knowledge_point_id));
+CREATE TABLE IF NOT EXISTS knowledge_mastery (mastery_id VARCHAR(36) PRIMARY KEY, student_no INT NOT NULL, course_code INT NOT NULL, knowledge_point_id INT NOT NULL, mastery_score INT NOT NULL, source_type VARCHAR(32), source_id VARCHAR(64), updated_at DATETIME NOT NULL, UNIQUE KEY uk_knowledge_mastery(student_no,course_code,knowledge_point_id));
 CREATE TABLE IF NOT EXISTS knowledge_extraction_candidate (candidate_id INT AUTO_INCREMENT PRIMARY KEY, course_code INT NOT NULL, resource_id INT NOT NULL, name VARCHAR(256) NOT NULL, description TEXT, chapter VARCHAR(256), importance INT, status VARCHAR(32) NOT NULL, created_at DATETIME NOT NULL, INDEX idx_extraction_candidate_course(course_code));
 ALTER TABLE knowledge_extraction_candidate ADD COLUMN IF NOT EXISTS importance INT;
 
