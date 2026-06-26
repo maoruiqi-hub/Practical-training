@@ -3,7 +3,6 @@ package com.neu.CoursePlatform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.neu.CoursePlatform.common.GameEventPublisher;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.SharedIds;
