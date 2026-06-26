@@ -9,8 +9,8 @@ import java.util.Date;
 @Data
 @NoArgsConstructor
 public class GrowthHistory {
-    @TableId(type = IdType.AUTO)
-    private Integer id;
+    @TableId(type = IdType.ASSIGN_UUID)
+    private String id;
     private Integer studentNo;
     private Integer courseCode;
     private Integer amount;

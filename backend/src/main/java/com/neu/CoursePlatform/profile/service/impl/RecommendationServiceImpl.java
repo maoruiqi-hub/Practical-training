@@ -78,7 +78,7 @@ public class RecommendationServiceImpl implements RecommendationService {
     }
 
     @Override
-    public void recordFeedback(Integer recommendationId, String feedback) {
+    public void recordFeedback(String recommendationId, String feedback) {
         Recommendation rec = recommendationMapper.selectById(recommendationId);
         if (rec != null) {
             rec.setFeedback(feedback);

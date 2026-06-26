@@ -38,3 +38,7 @@ export const getGrowthHistory = (studentNo, courseCode) =>
 
 export const getTestFeedback = (studentNo, courseCode) =>
     api.post(`/profile/${studentNo}/${courseCode}/feedback`)
+
+// 教师端：获取课程下所有学生画像摘要
+export const getCourseStudentProfiles = (courseCode) =>
+    api.get(`/profile/teacher/course/${courseCode}/students`)

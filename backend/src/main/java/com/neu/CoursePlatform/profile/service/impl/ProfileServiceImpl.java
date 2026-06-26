@@ -2,6 +2,8 @@ package com.neu.CoursePlatform.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.neu.CoursePlatform.common.GameEventPublisher;
+import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.profile.entity.*;
 import com.neu.CoursePlatform.profile.mapper.*;
 import com.neu.CoursePlatform.profile.mock.*;
@@ -18,6 +20,8 @@ public class ProfileServiceImpl implements ProfileService {
     private final CompetencyScoreMapper competencyMapper;
     private final CompetencyScoreHistoryMapper historyMapper;
     private final GrowthHistoryMapper growthHistoryMapper;
+    private final AchievementMapper achievementMapper;
+    private final StudentMapper studentMapper;
     private final MockKnowledgePointService mockKP;
     private final GrowthRuleEngine growthEngine;
     private final GameEventPublisher eventPublisher;
@@ -26,6 +30,8 @@ public class ProfileServiceImpl implements ProfileService {
                              CompetencyScoreMapper competencyMapper,
                              CompetencyScoreHistoryMapper historyMapper,
                              GrowthHistoryMapper growthHistoryMapper,
+                             AchievementMapper achievementMapper,
+                             StudentMapper studentMapper,
                              MockKnowledgePointService mockKP,
                              GrowthRuleEngine growthEngine,
                              GameEventPublisher eventPublisher) {
@@ -33,6 +39,8 @@ public class ProfileServiceImpl implements ProfileService {
         this.competencyMapper = competencyMapper;
         this.historyMapper = historyMapper;
         this.growthHistoryMapper = growthHistoryMapper;
+        this.achievementMapper = achievementMapper;
+        this.studentMapper = studentMapper;
         this.mockKP = mockKP;
         this.growthEngine = growthEngine;
         this.eventPublisher = eventPublisher;
@@ -455,5 +463,126 @@ public class ProfileServiceImpl implements ProfileService {
         feedback.put("nextAction", nextAction);
         feedback.put("generatedAt", new Date());
         return feedback;
+    }
+
+    @Override
+    public List<Map<String, Object>> listCourseStudentProfiles(Integer courseCode) {
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        // 查询所有学生
+        List<Student> students = studentMapper.selectList(null);
+
+        for (Student s : students) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("studentNo", s.getStudentNo());
+            entry.put("name", s.getName());
+            entry.put("className", s.getClassName());
+            entry.put("college", s.getCollege());
+            entry.put("phone", s.getPhone());
+
+            // 查询画像
+            LambdaQueryWrapper<StudentProfile> pq = new LambdaQueryWrapper<>();
+            pq.eq(StudentProfile::getStudentNo, Integer.parseInt(s.getStudentNo()))
+              .eq(StudentProfile::getCourseCode, courseCode);
+            StudentProfile profile = profileMapper.selectOne(pq);
+            if (profile != null) {
+                entry.put("hasProfile", true);
+                entry.put("hp", profile.getHp());
+                entry.put("atk", profile.getAtk());
+                entry.put("def", profile.getDef());
+                entry.put("exp", profile.getExp());
+                entry.put("level", profile.getLevel());
+                entry.put("coins", profile.getCoins());
+                entry.put("status", profile.getStatus());
+                entry.put("lastActivityDate", profile.getLastActivityDate());
+
+                // 徽章数量
+                LambdaQueryWrapper<Achievement> aq = new LambdaQueryWrapper<>();
+                aq.eq(Achievement::getStudentNo, Integer.parseInt(s.getStudentNo()))
+                  .eq(Achievement::getCourseCode, courseCode)
+                  .eq(Achievement::getAchievementType, "badge");
+                entry.put("badgeCount", achievementMapper.selectCount(aq));
+            } else {
+                entry.put("hasProfile", false);
+                entry.put("hp", 0);
+                entry.put("atk", 0);
+                entry.put("def", 0);
+                entry.put("exp", 0);
+                entry.put("level", 1);
+                entry.put("coins", 0);
+                entry.put("status", "未激活");
+                entry.put("badgeCount", 0);
+            }
+            result.add(entry);
+        }
+
+        // 按经验值降序排序
+        result.sort((a, b) -> Integer.compare(
+            (Integer) b.getOrDefault("exp", 0),
+            (Integer) a.getOrDefault("exp", 0)));
+        return result;
+    }
+
+    @Override
+    public List<Map<String, Object>> getTowerMap(Integer studentNo, Integer courseCode) {
+        // 确画像已初始化
+        getOrCreateProfile(studentNo, courseCode);
+        List<CompetencyScore> scores = getCompetencyScores(studentNo, courseCode);
+        List<Map<String, Object>> abilityMap = mockKP.getAbilityMap(courseCode);
+        List<Map<String, Object>> towerMap = new ArrayList<>();
+
+        // 构建 competency score 索引
+        Map<String, Integer> scoreIndex = new HashMap<>();
+        for (CompetencyScore cs : scores) {
+            scoreIndex.put(cs.getAbilityPointId(), cs.getScore());
+        }
+
+        // 按 level 排序构建楼层顺序（模拟前置依赖：低level在前）
+        abilityMap.sort(Comparator.comparingInt(ap -> (int) ap.getOrDefault("level", 1)));
+
+        Set<String> clearedIds = new HashSet<>();
+        for (int i = 0; i < abilityMap.size(); i++) {
+            Map<String, Object> ap = abilityMap.get(i);
+            String apId = (String) ap.get("id");
+            int mastery = scoreIndex.getOrDefault(apId, 50);
+            int level = (int) ap.getOrDefault("level", 1);
+
+            // 判定楼层状态（§14.6 四色规则）
+            String floorStatus;
+            boolean isAccessible = false;
+
+            if (mastery >= 85) {
+                floorStatus = "cleared";   // ✅ 灰色：已掌握
+                clearedIds.add(apId);
+            } else if (mastery < 40) {
+                // 检查前置是否已通
+                if (i == 0 || clearedIds.size() >= level - 1) {
+                    floorStatus = "weak";     // 🔥 橙色：薄弱
+                    isAccessible = true;
+                } else {
+                    floorStatus = "locked";   // 🔒 暗色：前置未通过
+                }
+            } else {
+                // mastery 40-84
+                if (i == 0 || clearedIds.size() >= level - 1) {
+                    floorStatus = "available"; // 🔓 亮色：可挑战
+                    isAccessible = true;
+                } else {
+                    floorStatus = "locked";    // 🔒 暗色：前置未通过
+                }
+            }
+
+            Map<String, Object> floor = new LinkedHashMap<>();
+            floor.put("kpId", apId);
+            floor.put("kpName", ap.get("name"));
+            floor.put("description", ap.getOrDefault("description", ""));
+            floor.put("level", level);
+            floor.put("floorStatus", floorStatus);
+            floor.put("masteryRate", mastery);
+            floor.put("isAccessible", isAccessible);
+            towerMap.add(floor);
+        }
+
+        return towerMap;
     }
 }

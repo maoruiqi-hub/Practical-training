@@ -10,11 +10,14 @@ import com.neu.CoursePlatform.service.CourseService;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.TeacherService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/courses")
@@ -25,6 +28,9 @@ public class CourseController {
     private final TeacherService teacherService;
     private final Auth auth;
 
+    @Value("${game.mode.enabled:false}")
+    private boolean gameModeEnabled;
+
     public CourseController(CourseService courseService,
                             FileStorageService fileStorageService,
                             TeacherService teacherService,
@@ -33,6 +39,19 @@ public class CourseController {
         this.fileStorageService = fileStorageService;
         this.teacherService = teacherService;
         this.auth = auth;
+    }
+
+    /** 课程配置（含游戏模式开关 §14.7） | 登录用户 */
+    @GetMapping("/{courseCode}/config")
+    public Result<Map<String, Object>> config(@PathVariable String courseCode, HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Course c = courseService.getById(courseCode);
+        if (c == null) return Result.fail("课程不存在");
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("courseCode", c.getCourseCode());
+        config.put("courseName", c.getCourseName());
+        config.put("game_mode_enabled", gameModeEnabled);
+        return Result.ok(config);
     }
 
     /** 模糊搜索课程 | 登录用户 */

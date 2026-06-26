@@ -1,6 +1,7 @@
 package com.neu.CoursePlatform.profile.controller;
 
 import com.neu.CoursePlatform.common.Auth;
+import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.profile.entity.*;
@@ -28,15 +29,43 @@ public class ProfileController {
         this.auth = auth;
     }
 
+    /** 判断当前用户是否有权查看指定学生的画像 */
+    private boolean canViewStudentProfile(Integer studentNo, Integer courseCode, HttpSession session) {
+        // 学生本人
+        Student login = (Student) session.getAttribute("student");
+        if (login != null && login.getStudentNo().equals(studentNo.toString())) return true;
+        // 管理员
+        if (auth.isAdmin(session)) return true;
+        // 教师（教授该课程）
+        return auth.canModifyCourse(session, courseCode.toString());
+    }
+
+    /** 教师端：获取课程下所有学生的画像摘要列表 */
+    @GetMapping("/teacher/course/{courseCode}/students")
+    public Result<List<Map<String, Object>>> courseStudents(@PathVariable Integer courseCode,
+                                                             HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!auth.isAdmin(session) && !auth.canModifyCourse(session, courseCode.toString())) {
+            return Result.fail("无权限查看该课程的学生画像");
+        }
+        return Result.ok(profileService.listCourseStudentProfiles(courseCode));
+    }
+
+    /** 爬塔地图：学生视角的知识点楼层状态（§14.6） */
+    @GetMapping("/{studentNo}/{courseCode}/tower-map")
+    public Result<List<Map<String, Object>>> towerMap(@PathVariable Integer studentNo,
+                                                       @PathVariable Integer courseCode,
+                                                       HttpSession session) {
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
+        return Result.ok(profileService.getTowerMap(studentNo, courseCode));
+    }
+
     /** 获取画像总览 | 学生本人 */
     @GetMapping("/{studentNo}/{courseCode}")
     public Result<Map<String, Object>> summary(@PathVariable Integer studentNo,
                                               @PathVariable Integer courseCode,
                                               HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(profileService.getProfileSummary(studentNo, courseCode));
     }
 
@@ -45,10 +74,7 @@ public class ProfileController {
     public Result<List<CompetencyScore>> competency(@PathVariable Integer studentNo,
                                                    @PathVariable Integer courseCode,
                                                    HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(profileService.getCompetencyScores(studentNo, courseCode));
     }
 
@@ -57,10 +83,7 @@ public class ProfileController {
     public Result<List<Recommendation>> recommendations(@PathVariable Integer studentNo,
                                                        @PathVariable Integer courseCode,
                                                        HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         List<Recommendation> recs = recommendationService.getRecommendations(studentNo, courseCode);
         if (recs.isEmpty()) recs = recommendationService.generateRecommendations(studentNo, courseCode);
         return Result.ok(recs);
@@ -71,16 +94,13 @@ public class ProfileController {
     public Result<List<Recommendation>> generateRecommendations(@PathVariable Integer studentNo,
                                                                 @PathVariable Integer courseCode,
                                                                 HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(recommendationService.generateRecommendations(studentNo, courseCode));
     }
 
     /** 推荐反馈 | 学生本人 */
     @PutMapping("/recommendations/{id}/feedback")
-    public Result<Void> feedback(@PathVariable Integer id, @RequestParam String feedback,
+    public Result<Void> feedback(@PathVariable String id, @RequestParam String feedback,
                                 HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         recommendationService.recordFeedback(id, feedback);
@@ -92,10 +112,7 @@ public class ProfileController {
     public Result<List<Achievement>> achievements(@PathVariable Integer studentNo,
                                                  @PathVariable Integer courseCode,
                                                  HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(incentiveService.getAchievements(studentNo, courseCode));
     }
 
@@ -104,10 +121,7 @@ public class ProfileController {
     public Result<String> title(@PathVariable Integer studentNo,
                                @PathVariable Integer courseCode,
                                HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(incentiveService.getTitle(studentNo, courseCode));
     }
 
@@ -196,10 +210,7 @@ public class ProfileController {
                                                                 @PathVariable Integer courseCode,
                                                                 @RequestParam(required = false) String abilityPointId,
                                                                 HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(profileService.getCompetencyHistory(studentNo, courseCode, abilityPointId));
     }
 
@@ -208,10 +219,7 @@ public class ProfileController {
     public Result<List<Map<String, Object>>> growthHistory(@PathVariable Integer studentNo,
                                                             @PathVariable Integer courseCode,
                                                             HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(profileService.getGrowthHistory(studentNo, courseCode));
     }
 
@@ -220,10 +228,7 @@ public class ProfileController {
     public Result<Map<String, Object>> testFeedback(@PathVariable Integer studentNo,
                                                      @PathVariable Integer courseCode,
                                                      HttpSession session) {
-        Student login = (Student) session.getAttribute("student");
-        if (login == null || !login.getStudentNo().equals(studentNo.toString())) {
-            if (!auth.isAdmin(session)) return Result.fail("无权限");
-        }
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
         return Result.ok(profileService.generateTestFeedback(studentNo, courseCode));
     }
 
@@ -244,7 +249,7 @@ public class ProfileController {
         Integer cc = Integer.parseInt(courseCode);
 
         switch (eventType) {
-            case "answer_correct" -> {
+            case GameEventTypes.ANSWER_CORRECT -> {
                 String taskType = (String) body.getOrDefault("taskType", "quiz");
                 String abilityPointId = (String) body.get("abilityPointId");
                 profileService.updateProfileFromSubmission(sn, cc, true, taskType);
@@ -252,7 +257,7 @@ public class ProfileController {
                     profileService.updateCompetencyScores(sn, cc, abilityPointId, true);
                 }
             }
-            case "answer_wrong" -> {
+            case GameEventTypes.ANSWER_WRONG -> {
                 String taskType = (String) body.getOrDefault("taskType", "quiz");
                 String abilityPointId = (String) body.get("abilityPointId");
                 profileService.updateProfileFromSubmission(sn, cc, false, taskType);
@@ -260,12 +265,12 @@ public class ProfileController {
                     profileService.updateCompetencyScores(sn, cc, abilityPointId, false);
                 }
             }
-            case "floor_cleared" ->
-                profileService.addGrowth(sn, cc, 80, "floor_cleared", (String) body.getOrDefault("floor", ""));
-            case "boss_defeated" ->
-                profileService.addGrowth(sn, cc, 250, "boss_defeated", "");
-            case "supply_used" ->
-                profileService.addGrowth(sn, cc, -10, "supply_used", (String) body.getOrDefault("supplyType", ""));
+            case GameEventTypes.FLOOR_CLEARED ->
+                profileService.addGrowth(sn, cc, 80, GameEventTypes.FLOOR_CLEARED, (String) body.getOrDefault("floor", ""));
+            case GameEventTypes.BOSS_DEFEATED ->
+                profileService.addGrowth(sn, cc, 250, GameEventTypes.BOSS_DEFEATED, "");
+            case GameEventTypes.SUPPLY_USED ->
+                profileService.addGrowth(sn, cc, -10, GameEventTypes.SUPPLY_USED, (String) body.getOrDefault("supplyType", ""));
             default ->
                 profileService.addGrowth(sn, cc, 5, eventType, "");
         }

@@ -247,10 +247,16 @@ CREATE TABLE IF NOT EXISTS task_question (
 -- ============================================================
 
 -- 学生画像表
+-- ============================================================
+-- 模块4：学生画像与个性化学习（§7.1，表前缀：profile_/competency_score_/recommendation_/achievement_）
+-- 所有新表主键使用 VARCHAR(36) + ASSIGN_UUID，跨模块引用字段使用 VARCHAR(36)
+-- 迁移说明：已有 INT AUTO_INCREMENT 表暂不强制迁移，新部署将使用 VARCHAR(36)
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS student_profile (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     hp INT DEFAULT 100,
     atk INT DEFAULT 50,
     def INT DEFAULT 50,
@@ -261,25 +267,28 @@ CREATE TABLE IF NOT EXISTS student_profile (
     status VARCHAR(32) DEFAULT '正常学习',
     consecutive_correct INT DEFAULT 0,
     recent_answers VARCHAR(255) DEFAULT '',
+    last_activity_date DATETIME,
+    recent_scores VARCHAR(255) DEFAULT '',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 能力评分表
 CREATE TABLE IF NOT EXISTS competency_score (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     ability_point_id VARCHAR(64),
     ability_point_name VARCHAR(128),
     score INT DEFAULT 50,
-    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+    last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_competency_student_ability (student_no, course_code, ability_point_id)
 );
 
 -- 推荐记录表
 CREATE TABLE IF NOT EXISTS recommendation (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     type VARCHAR(32),
     target_id VARCHAR(64),
     target_name VARCHAR(256),
@@ -291,9 +300,9 @@ CREATE TABLE IF NOT EXISTS recommendation (
 
 -- 成就记录表
 CREATE TABLE IF NOT EXISTS achievement (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     achievement_type VARCHAR(32),
     name VARCHAR(128),
     description VARCHAR(512),
@@ -303,9 +312,9 @@ CREATE TABLE IF NOT EXISTS achievement (
 
 -- 能力评分变更历史表
 CREATE TABLE IF NOT EXISTS competency_score_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     ability_point_id VARCHAR(64),
     old_score INT,
     new_score INT,
@@ -313,17 +322,11 @@ CREATE TABLE IF NOT EXISTS competency_score_history (
     changed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 为已存在的student_profile表补充新列
-ALTER TABLE student_profile ADD COLUMN IF NOT EXISTS consecutive_correct INT DEFAULT 0;
-ALTER TABLE student_profile ADD COLUMN IF NOT EXISTS recent_answers VARCHAR(255) DEFAULT '';
-ALTER TABLE student_profile ADD COLUMN IF NOT EXISTS last_activity_date DATETIME;
-ALTER TABLE student_profile ADD COLUMN IF NOT EXISTS recent_scores VARCHAR(255) DEFAULT '';
-
 -- 成长值变更明细表
 CREATE TABLE IF NOT EXISTS growth_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_no INT,
-    course_code INT,
+    id VARCHAR(36) PRIMARY KEY,
+    student_no VARCHAR(36) NOT NULL,
+    course_code VARCHAR(36) NOT NULL,
     amount INT,
     type VARCHAR(32),
     source VARCHAR(64),

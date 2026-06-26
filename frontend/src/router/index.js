@@ -28,7 +28,8 @@ const routes = [
       { path: 'admin/students', name: 'StudentManage', component: () => import('../views/StudentManage.vue') },
       { path: 'admin/teachers', name: 'TeacherManage', component: () => import('../views/TeacherManage.vue') },
       { path: 'admin/courses', name: 'CourseManage', component: () => import('../views/CourseManage.vue') },
-      { path: 'admin/questions', name: 'QuestionManage', component: () => import('../views/QuestionManage.vue') }
+      { path: 'admin/questions', name: 'QuestionManage', component: () => import('../views/QuestionManage.vue') },
+      { path: 'teacher/student-profiles', name: 'TeacherStudentProfile', component: () => import('../views/TeacherStudentProfile.vue') }
     ]
   }
 ]

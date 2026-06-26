@@ -16,6 +16,7 @@
           <el-menu-item index="/stats"><el-icon><TrendCharts /></el-icon>成绩统计</el-menu-item>
           <el-menu-item index="/profile" v-if="user.role==='student'"><el-icon><User /></el-icon>我的画像</el-menu-item>
           <el-menu-item v-if="!isStudent" index="/learning-analysis"><el-icon><TrendCharts /></el-icon>学情分析</el-menu-item>
+          <el-menu-item v-if="!isStudent" index="/teacher/student-profiles"><el-icon><User /></el-icon>学生画像</el-menu-item>
           <el-menu-item v-if="isStudent" index="/wrong-book"><el-icon><DocumentChecked /></el-icon>错题本</el-menu-item>
           <template v-if="isAdmin">
             <el-sub-menu index="admin">
@@ -39,7 +40,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DocumentChecked, HomeFilled, Reading, Setting, TrendCharts } from '@element-plus/icons-vue'
+import { DocumentChecked, HomeFilled, Reading, Setting, TrendCharts, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

@@ -19,6 +19,12 @@ public interface ProfileService {
     List<Map<String, Object>> getGrowthHistory(Integer studentNo, Integer courseCode);
     Map<String, Object> generateTestFeedback(Integer studentNo, Integer courseCode);
 
+    /** 教师端：获取课程下所有学生的画像摘要列表 */
+    List<Map<String, Object>> listCourseStudentProfiles(Integer courseCode);
+
+    /** 爬塔地图：获取学生视角的知识点楼层状态（§14.6） */
+    List<Map<String, Object>> getTowerMap(Integer studentNo, Integer courseCode);
+
     // String-based cross-module API (conforms to VARCHAR(36) spec)
     default StudentProfile getOrCreateProfileStr(String studentNo, String courseCode) {
         return getOrCreateProfile(Integer.parseInt(studentNo), Integer.parseInt(courseCode));
