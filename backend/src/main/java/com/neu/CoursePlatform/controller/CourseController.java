@@ -7,6 +7,7 @@ import com.neu.CoursePlatform.entity.Course;
 import com.neu.CoursePlatform.entity.Lesson;
 import com.neu.CoursePlatform.entity.Teacher;
 import com.neu.CoursePlatform.service.CourseService;
+import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.TeacherService;
 import jakarta.servlet.http.HttpSession;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +26,7 @@ public class CourseController {
     private final CourseService courseService;
     private final FileStorageService fileStorageService;
     private final TeacherService teacherService;
+    private final CourseGameConfigService courseGameConfigService;
     private final Auth auth;
 
     @Value("${game.mode.enabled:false}")
@@ -34,24 +35,32 @@ public class CourseController {
     public CourseController(CourseService courseService,
                             FileStorageService fileStorageService,
                             TeacherService teacherService,
+                            CourseGameConfigService courseGameConfigService,
                             Auth auth) {
         this.courseService = courseService;
         this.fileStorageService = fileStorageService;
         this.teacherService = teacherService;
+        this.courseGameConfigService = courseGameConfigService;
         this.auth = auth;
     }
 
-    /** 课程配置（含游戏模式开关 §14.7） | 登录用户 */
+    /** 爬塔模式开关：读取时默认关闭，避免未配置课程误发游戏事件。 */
     @GetMapping("/{courseCode}/config")
-    public Result<Map<String, Object>> config(@PathVariable String courseCode, HttpSession session) {
+    public Result<Map<String, Object>> gameConfig(@PathVariable String courseCode, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        Course c = courseService.getById(courseCode);
-        if (c == null) return Result.fail("课程不存在");
-        Map<String, Object> config = new LinkedHashMap<>();
-        config.put("courseCode", c.getCourseCode());
-        config.put("courseName", c.getCourseName());
-        config.put("game_mode_enabled", gameModeEnabled);
-        return Result.ok(config);
+        if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
+        return Result.ok(Map.of("courseId", courseCode,
+                "game_mode_enabled", courseGameConfigService.isEnabled(courseCode)));
+    }
+
+    @PutMapping("/{courseCode}/config")
+    public Result<Void> updateGameConfig(@PathVariable String courseCode,
+                                         @RequestBody Map<String, Boolean> body,
+                                         HttpSession session) {
+        if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        Boolean enabled = body == null ? null : body.get("game_mode_enabled");
+        if (enabled == null) return Result.fail("缺少 game_mode_enabled");
+        return courseGameConfigService.updateEnabled(courseCode, enabled) ? Result.ok() : Result.fail("课程游戏配置保存失败");
     }
 
     /** 模糊搜索课程 | 登录用户 */

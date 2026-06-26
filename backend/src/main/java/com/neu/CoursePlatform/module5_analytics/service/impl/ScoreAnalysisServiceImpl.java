@@ -91,14 +91,13 @@ public class ScoreAnalysisServiceImpl implements ScoreAnalysisService {
 
         List<ScoreTrendDTO.TrendPoint> points = new ArrayList<>();
         for (int w = 1; w <= 6; w++) {
+            final int weekIndex = w - 1;
             ScoreTrendDTO.TrendPoint pt = new ScoreTrendDTO.TrendPoint();
             pt.setLabel("W" + w);
-            // 聚合所有学生第w周的成绩
-            final int weekIdx = w;
             double weekAvg = studentIds.stream()
                     .mapToDouble(sid -> {
                         List<StudentScoreDTO> scores = dataProvider.getStudentScores(sid, courseId);
-                        int idx = Math.min(weekIdx - 1, scores.size() - 1);
+                        int idx = Math.min(weekIndex, scores.size() - 1);
                         return idx >= 0 ? scores.get(idx).getScore() : 0;
                     })
                     .average().orElse(0);

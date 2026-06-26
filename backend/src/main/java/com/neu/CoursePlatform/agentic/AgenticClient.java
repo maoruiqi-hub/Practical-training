@@ -25,8 +25,28 @@ public class AgenticClient {
     @Value("${agentic.base-url:http://localhost:8081}")
     private String baseUrl;
 
+    @Value("${agentic.mode:mock}")
+    private String mode;
+
     public AgenticClient() {
         this.restTemplate = new RestTemplate();
+    }
+
+    /** 供模块一、三使用的统一 Agentic 调用入口；不可用时只返回降级结果。 */
+    public AgenticResponse invoke(String capability, AgenticRequest request) {
+        if ("mock".equalsIgnoreCase(mode)) {
+            return new AgenticResponse(true, Map.of("mock", true, "capability", capability), "Mock agentic response");
+        }
+        if (!"http".equalsIgnoreCase(mode) || baseUrl == null || baseUrl.isBlank()) {
+            return AgenticResponse.unavailable();
+        }
+        try {
+            ResponseEntity<AgenticResponse> response = restTemplate.postForEntity(
+                    baseUrl + "/" + capability, request, AgenticResponse.class);
+            return response.getBody() == null ? AgenticResponse.unavailable() : response.getBody();
+        } catch (RestClientException e) {
+            return AgenticResponse.unavailable();
+        }
     }
 
     /**

@@ -9,6 +9,8 @@ public interface KnowledgeMasteryService extends IService<KnowledgeMastery> {
 
     List<KnowledgeMastery> listByStudentAndCourse(String studentNo, String courseCode);
 
+    int removeByKnowledgePoint(String knowledgePointId);
+
     /** Returns a user-facing validation message, or {@code null} when valid. */
     String validateForUpsert(KnowledgeMasteryUpdateRequest request);
 }

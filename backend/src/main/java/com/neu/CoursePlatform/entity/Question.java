@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -31,4 +32,8 @@ public class Question {
     private String knowledgePointId;
     /** 默认分值 */
     private Integer score;
+
+    /** 查询题目详情时由模块一接口服务补全，不落库。 */
+    @TableField(exist = false)
+    private KnowledgePoint knowledgePoint;
 }

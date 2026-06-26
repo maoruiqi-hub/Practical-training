@@ -2,10 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.neu.CoursePlatform.mapper.KnowledgeRelationMapper">
-
     <select id="selectByCourse" resultType="com.neu.CoursePlatform.entity.KnowledgeRelation">
-        SELECT * FROM knowledge_relation
-        WHERE course_code = #{courseCode}
-        ORDER BY relation_id
+        SELECT * FROM knowledge_relation WHERE course_code = #{courseCode} ORDER BY relation_id
     </select>
 </mapper>

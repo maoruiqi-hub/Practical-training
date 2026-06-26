@@ -9,6 +9,7 @@ import com.neu.CoursePlatform.entity.KnowledgeRelation;
 import com.neu.CoursePlatform.service.CourseService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.KnowledgeRelationService;
+import com.neu.CoursePlatform.service.FloorProgressService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,16 +37,36 @@ public class KnowledgePointController {
     private final KnowledgePointService knowledgePointService;
     private final KnowledgeRelationService knowledgeRelationService;
     private final CourseService courseService;
+    private final FloorProgressService floorProgressService;
     private final Auth auth;
 
     public KnowledgePointController(KnowledgePointService knowledgePointService,
                                     KnowledgeRelationService knowledgeRelationService,
                                     CourseService courseService,
+                                    FloorProgressService floorProgressService,
                                     Auth auth) {
         this.knowledgePointService = knowledgePointService;
         this.knowledgeRelationService = knowledgeRelationService;
         this.courseService = courseService;
+        this.floorProgressService = floorProgressService;
         this.auth = auth;
+    }
+
+    /** 模块四在解锁下一层后回写楼层状态；不直接操作模块一数据表。 */
+    @PutMapping("/knowledge-points/{knowledgePointId}/floor-status")
+    public Result<Void> updateFloorStatus(@PathVariable String knowledgePointId,
+                                          @RequestBody Map<String, String> body,
+                                          HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        KnowledgePoint point = knowledgePointService.getById(knowledgePointId);
+        if (point == null) return Result.fail("知识点不存在");
+        String studentId = body == null ? null : body.get("student_id");
+        if (studentId == null && body != null) studentId = body.get("studentId"); // 兼容旧前端
+        String courseId = point.getCourseCode();
+        String status = body == null ? null : body.get("status");
+        if (!java.util.Set.of("locked", "available", "cleared", "weak").contains(status)) return Result.fail("楼层状态不合法");
+        return floorProgressService.updateFloorStatus(studentId, courseId, knowledgePointId, status)
+                ? Result.ok() : Result.fail("楼层状态更新失败");
     }
 
     @GetMapping("/knowledge-points")

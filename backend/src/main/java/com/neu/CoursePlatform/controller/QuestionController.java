@@ -40,6 +40,9 @@ public class QuestionController {
     public Result<Question> detail(@PathVariable String questionId, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         Question q = questionService.getById(questionId);
+        if (q != null && q.getKnowledgePointId() != null && !q.getKnowledgePointId().isBlank()) {
+            q.setKnowledgePoint(knowledgePointService.getById(q.getKnowledgePointId()));
+        }
         return q != null ? Result.ok(q) : Result.fail("题目不存在");
     }
 
@@ -111,6 +114,29 @@ public class QuestionController {
         }
         questionService.updateById(question);
         return Result.ok();
+    }
+
+    /**
+     * 模块一 -> 模块三：将已有题目关联到课程知识点。
+     * 关联前校验知识点存在且归属同一课程，避免跨课程脏引用。
+     */
+    @PostMapping("/{questionId}/link-kp")
+    public Result<Question> linkKnowledgePoint(@PathVariable String questionId,
+                                               @RequestBody java.util.Map<String, String> body,
+                                               HttpSession session) {
+        Question question = questionService.getById(questionId);
+        if (question == null) return Result.fail("题目不存在");
+        if (!auth.canModifyCourse(session, question.getCourseCode())) return Result.fail("无权限");
+        String knowledgePointId = body == null ? null : body.get("knowledge_point_id");
+        if (knowledgePointId == null && body != null) knowledgePointId = body.get("knowledgePointId");
+        if (knowledgePointId == null || knowledgePointId.isBlank()) return Result.fail("缺少 knowledgePointId");
+        KnowledgePoint point = knowledgePointService.getById(knowledgePointId);
+        if (point == null) return Result.fail("知识点不存在");
+        if (!question.getCourseCode().equals(point.getCourseCode())) return Result.fail("知识点不属于当前课程");
+        question.setKnowledgePointId(knowledgePointId);
+        question.setKnowledgePoint(point);
+        questionService.updateById(question);
+        return Result.ok(question);
     }
 
     /** 删除题目 | admin/授课教师 */

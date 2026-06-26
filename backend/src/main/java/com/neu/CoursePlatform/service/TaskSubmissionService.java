@@ -21,11 +21,18 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     boolean hasSubmitted(String taskNo, String studentNo);
 
+    int countByStudentAndTask(String taskNo, String studentNo);
+
     Map<String, Object> buildGradeDetail(String submissionId);
 
     void applyInitialGrading(TaskSubmission sub);
 
     void submitWithGrading(TaskSubmission sub);
 
+    void publishAssessmentResultEvents(TaskSubmission sub);
+
     int autoScoreChoices(TaskSubmission sub);
+
+    /** 将该学生该任务的所有旧提交标记为 superseded */
+    void supersedePrevious(String taskNo, String studentNo);
 }

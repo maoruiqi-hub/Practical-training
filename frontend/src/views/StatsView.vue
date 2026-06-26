@@ -4,9 +4,14 @@
       <h3>我的成绩</h3>
       <div v-loading="loading" style="min-height:200px">
         <el-row :gutter="20" v-if="stats">
-          <el-col :span="8"><el-statistic title="提交数" :value="stats.totalSubmissions" /></el-col>
-          <el-col :span="8"><el-statistic title="已评阅" :value="stats.gradedCount" /></el-col>
-          <el-col :span="8"><el-statistic title="平均分" :value="stats.averageScore" :precision="1" /></el-col>
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="总提交数" :value="stats.totalSubmissions" /></el-card></el-col>
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="已完成" :value="stats.completedCount || 0" /></el-card></el-col>
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="逾期次数" :value="stats.overdueCount || 0" :value-style="{ color: (stats.overdueCount||0) > 0 ? '#f56c6c' : '' }" /></el-card></el-col>
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="平均分" :value="stats.averageScore" :precision="1" suffix="分" /></el-card></el-col>
+        </el-row>
+        <el-row :gutter="20" style="margin-top:16px" v-if="stats">
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="总学习时长" :value="formatDuration(stats.totalStudyDuration || 0)" /></el-card></el-col>
+          <el-col :span="6"><el-card shadow="hover"><el-statistic title="已批改" :value="stats.gradedCount" /></el-card></el-col>
         </el-row>
         <el-divider />
         <h4>成绩趋势</h4>
@@ -22,6 +27,9 @@
               <template #default="{ row }">{{ row.score ?? '-' }}</template>
             </el-table-column>
           <el-table-column prop="status" label="状态" width="100" />
+          <el-table-column label="逾期" width="80">
+            <template #default="{ row }"><el-tag v-if="row.isOverdue" type="danger" size="small">逾期</el-tag><span v-else>-</span></template>
+          </el-table-column>
           <el-table-column prop="submitTime" label="提交时间" width="180" />
         </el-table>
       </div>
@@ -35,7 +43,9 @@
       <div v-loading="courseLoading" style="min-height:200px">
         <template v-if="courseStats">
           <el-row :gutter="20" style="margin-bottom:20px">
-            <el-col :span="12"><el-statistic title="任务数" :value="courseStats.taskCount" /></el-col>
+            <el-col :span="6"><el-statistic title="任务数" :value="courseStats.taskCount" /></el-col>
+            <el-col :span="6"><el-statistic title="总提交" :value="courseStats.totalSubmissions || 0" /></el-col>
+            <el-col :span="6"><el-statistic title="总逾期" :value="courseStats.totalOverdue || 0" :value-style="{ color: (courseStats.totalOverdue||0) > 0 ? '#f56c6c' : '' }" /></el-col>
           </el-row>
           <div ref="courseChartRef" style="width:100%;height:350px;margin-bottom:20px"></div>
           <el-table :data="courseStats.taskStats" style="width:100%">
@@ -45,6 +55,9 @@
             <el-table-column prop="taskType" label="任务类型" width="120" />
             <el-table-column prop="submittedCount" label="提交人数" width="100" />
             <el-table-column prop="gradedCount" label="已评阅" width="100" />
+            <el-table-column prop="overdueCount" label="逾期" width="80">
+              <template #default="{ row }"><el-tag v-if="row.overdueCount > 0" type="danger" size="small">{{ row.overdueCount }}</el-tag><span v-else>0</span></template>
+            </el-table-column>
             <el-table-column label="平均分" width="100">
               <template #default="{ row }">{{ row.averageScore }}</template>
             </el-table-column>
@@ -75,6 +88,13 @@ const courseLoading = ref(false)
 
 let chartInstance = null
 let courseChartInstance = null
+
+const formatDuration = (sec) => {
+  if (!sec) return '0分钟'
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return h > 0 ? `${h}小时${m}分钟` : `${m}分钟`
+}
 
 const drawChart = (details) => {
   if (!chartRef.value) return

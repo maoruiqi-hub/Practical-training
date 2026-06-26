@@ -3,8 +3,7 @@ spring:
     name: practical-training-backend
   sql:
     init:
-      mode: always
-      continue-on-error: true
+      mode: never
   datasource:
     driver-class-name: org.h2.Driver
     url: "${DB_URL:jdbc:h2:mem:practical_training;MODE=MySQL;DB_CLOSE_DELAY=-1}"
@@ -39,11 +38,6 @@ agentic:
   base-url: ${AGENTIC_BASE_URL:http://localhost:8081}
   api-key: ${AGENTIC_API_KEY:}
   model: ${AGENTIC_MODEL:gpt-4o-mini}
-
-game:
-  mode:
-    enabled: ${GAME_MODE_ENABLED:false}
-
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug
@@ -55,3 +49,4 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+# Agentic AI 服务配置
