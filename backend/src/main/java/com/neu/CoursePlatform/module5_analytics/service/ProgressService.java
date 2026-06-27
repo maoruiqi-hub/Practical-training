@@ -28,7 +28,7 @@ public class ProgressService {
      * 班级整体学习进度（R3.1）
      */
     public ClassProgressDTO getClassProgress(String classId, String courseId) {
-        List<StudentProgressDTO> all = dataProvider.getClassProgressList(courseId);
+        List<StudentProgressDTO> all = dataProvider.getClassProgressList(classId, courseId);
         double avgRate = all.stream().mapToDouble(StudentProgressDTO::getCompletionRate).average().orElse(0);
         int totalTasks = all.isEmpty() ? 0 : all.get(0).getTotalTasks();
         double avgCompleted = all.stream().mapToInt(StudentProgressDTO::getCompletedTasks).average().orElse(0);
@@ -59,17 +59,7 @@ public class ProgressService {
      * 任务完成率详情（R3.2）
      */
     public TaskCompletionDTO getTaskCompletion(String classId, String taskId) {
-        // Phase 2 Mock：生成模拟完成率数据
-        TaskCompletionDTO dto = new TaskCompletionDTO();
-        dto.setTaskId(taskId);
-        dto.setTaskName("任务-" + taskId);
-        dto.setTotalStudents(15);
-        dto.setSubmittedCount(12);
-        dto.setNotSubmittedCount(3);
-        dto.setLateSubmittedCount(2);
-        dto.setSubmissionRate(round2(12.0 / 15.0));
-        dto.setNotSubmittedStudentIds(List.of("student-5", "student-9", "student-13"));
-        return dto;
+        return dataProvider.getTaskCompletion(classId, taskId);
     }
 
     private static double round2(double v) {

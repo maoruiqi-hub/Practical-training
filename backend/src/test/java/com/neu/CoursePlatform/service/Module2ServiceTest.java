@@ -6,6 +6,8 @@ import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.common.event.GameEventPublisher;
 import com.neu.CoursePlatform.controller.BehaviorLogController;
+import com.neu.CoursePlatform.controller.TaskController;
+import com.neu.CoursePlatform.controller.TaskSubmissionController;
 import com.neu.CoursePlatform.entity.LearningBehaviorLog;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
@@ -82,6 +84,59 @@ class Module2ServiceTest {
         assertEquals("video_play", queryService.filters.get("actionType"));
         assertEquals("2026-06-25T10:00:00", queryService.filters.get("startTime"));
         assertEquals("2026-06-25T11:00:00", queryService.filters.get("endTime"));
+    }
+
+    @Test
+    void taskStatsCalculatesCompletionRateFromUniqueSubmittedStudents() {
+        LearningTask task = task("task-1", "course-1", "homework");
+        LearningTaskService taskService = proxy(LearningTaskService.class, (method, args) -> {
+            if ("getById".equals(method)) return task;
+            return defaultValue(method);
+        });
+        TaskSubmission submitted = submission("task-1", "student-1", "answer");
+        submitted.setStatus("graded");
+        submitted.setScore(80);
+        TaskSubmission duplicate = submission("task-1", "student-1", "answer again");
+        duplicate.setStatus("submitted");
+        TaskSubmission superseded = submission("task-1", "student-2", "old answer");
+        superseded.setStatus("superseded");
+        TaskSubmissionService submissionService = proxy(TaskSubmissionService.class, (method, args) -> {
+            if ("listByTaskNo".equals(method)) return List.of(submitted, duplicate, superseded);
+            return defaultValue(method);
+        });
+        StudentService studentService = proxy(StudentService.class, (method, args) -> {
+            if ("count".equals(method)) return 4L;
+            return defaultValue(method);
+        });
+        TaskController controller = new TaskController(taskService, null, submissionService, studentService, new Auth(null));
+        MockHttpSession session = adminSession();
+
+        Result<Map<String, Object>> result = controller.taskStats("course-1", "task-1", session);
+
+        assertEquals(200, result.getCode());
+        assertEquals(4L, result.getData().get("totalStudents"));
+        assertEquals(1L, result.getData().get("submittedStudents"));
+        assertEquals(2, result.getData().get("totalSubmissions"));
+        assertEquals(25.0, result.getData().get("completionRate"));
+    }
+
+    @Test
+    void studentSubmissionsQueryAcceptsContractCourseIdParameter() {
+        TaskSubmission courseOne = submission("task-1", "student-1", "answer");
+        TaskSubmission courseTwo = submission("task-2", "student-1", "answer");
+        TaskSubmissionService submissionService = proxy(TaskSubmissionService.class, (method, args) -> switch (method) {
+            case "listByStudentNo" -> List.of(courseOne, courseTwo);
+            case "getTaskCourseCode" -> "task-1".equals(args[0]) ? "course-1" : "course-2";
+            default -> defaultValue(method);
+        });
+        TaskSubmissionController controller = new TaskSubmissionController(submissionService, null, null, new Auth(null));
+        MockHttpSession session = adminSession();
+
+        Result<List<TaskSubmission>> result = controller.listByStudent("student-1", null, "course-1", session);
+
+        assertEquals(200, result.getCode());
+        assertEquals(1, result.getData().size());
+        assertEquals("task-1", result.getData().get(0).getTaskNo());
     }
 
     @Test
@@ -224,6 +279,14 @@ class Module2ServiceTest {
         question.setScore(score);
         question.setKnowledgePointId(knowledgePointId);
         return question;
+    }
+
+    private static MockHttpSession adminSession() {
+        MockHttpSession session = new MockHttpSession();
+        Teacher teacher = new Teacher();
+        teacher.setRole("admin");
+        session.setAttribute("teacher", teacher);
+        return session;
     }
 
     @SuppressWarnings("unchecked")

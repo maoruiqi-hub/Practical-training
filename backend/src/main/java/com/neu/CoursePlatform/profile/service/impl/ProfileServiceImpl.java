@@ -5,18 +5,18 @@ import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.common.event.GameEventPublisher;
+import com.neu.CoursePlatform.entity.AbilityPoint;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.profile.entity.*;
 import com.neu.CoursePlatform.profile.mapper.*;
-import com.neu.CoursePlatform.profile.mock.*;
 import com.neu.CoursePlatform.profile.rule.GrowthRuleEngine;
 import com.neu.CoursePlatform.profile.service.ProfileService;
+import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class ProfileServiceImpl implements ProfileService {
@@ -27,7 +27,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final GrowthHistoryMapper growthHistoryMapper;
     private final AchievementMapper achievementMapper;
     private final StudentMapper studentMapper;
-    private final MockKnowledgePointService mockKP;
+    private final AbilityPointService abilityPointService;
     private final GrowthRuleEngine growthEngine;
     private final GameEventPublisher eventPublisher;
     private final CourseGameConfigService gameConfigService;
@@ -38,7 +38,7 @@ public class ProfileServiceImpl implements ProfileService {
                              GrowthHistoryMapper growthHistoryMapper,
                              AchievementMapper achievementMapper,
                              StudentMapper studentMapper,
-                             MockKnowledgePointService mockKP,
+                             AbilityPointService abilityPointService,
                              GrowthRuleEngine growthEngine,
                              GameEventPublisher eventPublisher,
                              CourseGameConfigService gameConfigService) {
@@ -48,7 +48,7 @@ public class ProfileServiceImpl implements ProfileService {
         this.growthHistoryMapper = growthHistoryMapper;
         this.achievementMapper = achievementMapper;
         this.studentMapper = studentMapper;
-        this.mockKP = mockKP;
+        this.abilityPointService = abilityPointService;
         this.growthEngine = growthEngine;
         this.eventPublisher = eventPublisher;
         this.gameConfigService = gameConfigService;
@@ -78,13 +78,13 @@ public class ProfileServiceImpl implements ProfileService {
         profileMapper.insert(profile);
 
         // 初始化能力评分
-        List<Map<String, Object>> abilityMap = mockKP.getAbilityMap(courseCode);
-        for (Map<String, Object> ap : abilityMap) {
+        List<AbilityPoint> abilityPoints = abilityPointService.listByCourseCode(String.valueOf(courseCode));
+        for (AbilityPoint ap : abilityPoints) {
             CompetencyScore cs = new CompetencyScore();
             cs.setStudentNo(studentNo);
             cs.setCourseCode(courseCode);
-            cs.setAbilityPointId((String) ap.get("id"));
-            cs.setAbilityPointName((String) ap.get("name"));
+            cs.setAbilityPointId(ap.getAbilityPointId());
+            cs.setAbilityPointName(ap.getName());
             cs.setScore(50);
             competencyMapper.insert(cs);
         }
@@ -286,15 +286,8 @@ public class ProfileServiceImpl implements ProfileService {
 
     /** 重新计算DEF = 基础层级(level 1)能力点的平均分 */
     private void recomputeDef(Integer studentNo, Integer courseCode) {
-        List<Map<String, Object>> abilityMap = mockKP.getAbilityMap(courseCode);
-        Set<String> foundationalIds = abilityMap.stream()
-            .filter(ap -> (int) ap.getOrDefault("level", 4) <= 2)
-            .map(ap -> (String) ap.get("id"))
-            .collect(Collectors.toSet());
-
         List<CompetencyScore> allScores = getCompetencyScores(studentNo, courseCode);
         double avgDef = allScores.stream()
-            .filter(s -> foundationalIds.contains(s.getAbilityPointId()))
             .mapToInt(CompetencyScore::getScore)
             .average()
             .orElse(50);
@@ -338,7 +331,7 @@ public class ProfileServiceImpl implements ProfileService {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("profile", profile);
         summary.put("competencyScores", scores);
-        summary.put("abilityMap", mockKP.getAbilityMap(courseCode));
+        summary.put("abilityMap", getCourseAbilityMap(courseCode));
         return summary;
     }
 
@@ -550,7 +543,7 @@ public class ProfileServiceImpl implements ProfileService {
         // 确画像已初始化
         getOrCreateProfile(studentNo, courseCode);
         List<CompetencyScore> scores = getCompetencyScores(studentNo, courseCode);
-        List<Map<String, Object>> abilityMap = mockKP.getAbilityMap(courseCode);
+        List<Map<String, Object>> abilityMap = getCourseAbilityMap(courseCode);
         List<Map<String, Object>> towerMap = new ArrayList<>();
 
         // 构建 competency score 索引
@@ -606,5 +599,19 @@ public class ProfileServiceImpl implements ProfileService {
         }
 
         return towerMap;
+    }
+
+    private List<Map<String, Object>> getCourseAbilityMap(Integer courseCode) {
+        List<AbilityPoint> abilityPoints = abilityPointService.listByCourseCode(String.valueOf(courseCode));
+        List<Map<String, Object>> abilityMap = new ArrayList<>();
+        for (AbilityPoint ap : abilityPoints) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", ap.getAbilityPointId());
+            item.put("name", ap.getName());
+            item.put("description", ap.getDescription() != null ? ap.getDescription() : "");
+            item.put("level", 1);
+            abilityMap.add(item);
+        }
+        return abilityMap;
     }
 }

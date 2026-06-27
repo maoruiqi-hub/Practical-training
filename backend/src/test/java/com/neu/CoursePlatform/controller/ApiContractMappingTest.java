@@ -56,11 +56,13 @@ class ApiContractMappingTest {
         assertMapping(RequestMethod.GET, "/api/courses/{courseCode}/mistake-stats");
         assertMapping(RequestMethod.GET, "/api/exams");
         assertMapping(RequestMethod.GET, "/api/exams/{examId}");
+        assertMapping(RequestMethod.POST, "/api/exams/generate");
     }
 
     @Test
     void profileModuleExposesDesignContractRoutes() {
         assertMapping(RequestMethod.GET, "/api/students/{studentId}/profile");
+        assertMapping(RequestMethod.GET, "/api/students");
         assertMapping(RequestMethod.GET, "/api/students/{studentId}/competency");
         assertMapping(RequestMethod.GET, "/api/students/{studentId}/recommendations");
         assertMapping(RequestMethod.POST, "/api/students/{studentId}/profile/generate");

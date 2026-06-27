@@ -43,7 +43,7 @@ public class TeachingSuggestionService {
     public List<Map<String, Object>> generateForClass(String classId, String courseId) {
         // 汇聚数据
         List<WeakPointDTO> weakPoints = scoreAnalysisService.getWeakPoints(courseId);
-        var progressList = dataProvider.getClassProgressList(courseId);
+        var progressList = dataProvider.getClassProgressList(classId, courseId);
         double avgRate = progressList.stream()
                 .mapToDouble(p -> p.getCompletionRate()).average().orElse(0);
         List<String> studentIds = dataProvider.getStudentIdsByClass(classId);

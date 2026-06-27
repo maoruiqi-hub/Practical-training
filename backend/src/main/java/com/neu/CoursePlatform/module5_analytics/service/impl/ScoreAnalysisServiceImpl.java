@@ -54,6 +54,17 @@ public class ScoreAnalysisServiceImpl implements ScoreAnalysisService {
         long passCount = allScores.stream().filter(s -> s >= 60).count();
 
         ScoreOverviewDTO dto = new ScoreOverviewDTO();
+        if (allScores.isEmpty()) {
+            dto.setAvgScore(0);
+            dto.setMaxScore(0);
+            dto.setMinScore(0);
+            dto.setStdDev(0);
+            dto.setPassRate(0);
+            dto.setDistribution(List.of());
+            dto.setRankings(rankings);
+            return dto;
+        }
+
         dto.setAvgScore(round2(avg));
         dto.setMaxScore(round2(max));
         dto.setMinScore(round2(min));
@@ -136,6 +147,10 @@ public class ScoreAnalysisServiceImpl implements ScoreAnalysisService {
     }
 
     private List<ScoreDistributionDTO> buildDistribution(List<Double> scores) {
+        if (scores.isEmpty()) {
+            return List.of();
+        }
+
         int[] counts = new int[5];
         String[] ranges = {"0-59", "60-69", "70-79", "80-89", "90-100"};
         for (double s : scores) {

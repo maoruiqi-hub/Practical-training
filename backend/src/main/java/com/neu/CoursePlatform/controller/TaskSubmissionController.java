@@ -123,15 +123,17 @@ public class TaskSubmissionController {
     @GetMapping("/api/students/{studentNo}/submissions")
     public Result<List<TaskSubmission>> listByStudent(@PathVariable String studentNo,
                                                        @RequestParam(required = false) String courseCode,
+                                                       @RequestParam(name = "course_id", required = false) String courseId,
                                                        HttpSession session) {
         Student loginStudent = (Student) session.getAttribute("student");
         if (!auth.isAdmin(session) && !auth.isTeacher(session)
                 && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo)))
             return Result.fail("无权限");
         List<TaskSubmission> subs = submissionService.listByStudentNo(studentNo);
-        if (courseCode != null && !courseCode.isEmpty()) {
+        String resolvedCourseCode = firstNonBlank(courseCode, courseId);
+        if (resolvedCourseCode != null) {
             subs = subs.stream()
-                    .filter(s -> courseCode.equals(submissionService.getTaskCourseCode(s.getTaskNo())))
+                    .filter(s -> resolvedCourseCode.equals(submissionService.getTaskCourseCode(s.getTaskNo())))
                     .collect(java.util.stream.Collectors.toList());
         }
         return Result.ok(subs);
@@ -177,5 +179,12 @@ public class TaskSubmissionController {
         sub.setStatus("graded");
         submissionService.updateById(sub);
         return Result.ok();
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 }

@@ -16,6 +16,8 @@ public interface StudentService extends IService<Student> {
 
     List<Student> searchByKeyword(String keyword);
 
+    List<Student> listByClassId(String classId);
+
     int importFromExcel(MultipartFile file) throws IOException;
 
     void exportToExcel(OutputStream out) throws IOException;

@@ -1,3 +1,33 @@
 package com.neu.CoursePlatform.controller;
-import com.neu.CoursePlatform.agentic.*; import com.neu.CoursePlatform.common.Auth; import com.neu.CoursePlatform.common.Result; import com.neu.CoursePlatform.dto.CourseQaRequest; import com.neu.CoursePlatform.entity.*; import com.neu.CoursePlatform.service.*; import jakarta.servlet.http.HttpSession; import org.springframework.web.bind.annotation.*; import java.util.Map;
-@RestController @RequestMapping("/api/knowledge-points") public class CourseQaController { private final AgenticClient agent; private final KnowledgePointService points; private final CourseResourceService resources; private final Auth auth; public CourseQaController(AgenticClient agent,KnowledgePointService points,CourseResourceService resources,Auth auth){this.agent=agent;this.points=points;this.resources=resources;this.auth=auth;} @PostMapping("/{knowledgePointId}/qa") public Result<AgenticResponse> ask(@PathVariable String knowledgePointId,@RequestBody CourseQaRequest request,HttpSession session){if(!auth.isLoggedIn(session))return Result.fail("请先登录");KnowledgePoint point=points.getById(knowledgePointId);if(point==null)return Result.fail("知识点不存在");if(request==null||request.getQuestion()==null||request.getQuestion().isBlank())return Result.fail("问题不能为空");CourseResource resource=null;if(request.getResourceId()!=null&&!request.getResourceId().isBlank()){resource=resources.getById(request.getResourceId());if(resource==null||!point.getCourseCode().equals(resource.getCourseCode()))return Result.fail("课程资料不属于当前课程");} AgenticRequest input=new AgenticRequest();input.setCourseCode(point.getCourseCode());input.setKnowledgePointId(knowledgePointId);input.setResourceId(resource==null?null:resource.getResourceId());input.setContent(request.getQuestion());input.setContext(Map.of("knowledgePoint",point.getName(),"resourceTitle",resource==null?"课程知识图谱":resource.getTitle(),"previousMessages",request.getPreviousMessages()==null?java.util.List.of():request.getPreviousMessages()));AgenticResponse response=agent.invoke("qa",input);return response.isSuccess()?Result.ok(response):Result.serviceUnavailable("AI 服务暂不可用");} }
+
+import com.neu.CoursePlatform.agentic.AgenticResponse;
+import com.neu.CoursePlatform.common.Auth;
+import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.dto.CourseQaRequest;
+import com.neu.CoursePlatform.service.CourseAiService;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/knowledge-points")
+public class CourseQaController {
+    private final CourseAiService courseAiService;
+    private final Auth auth;
+
+    public CourseQaController(CourseAiService courseAiService, Auth auth) {
+        this.courseAiService = courseAiService;
+        this.auth = auth;
+    }
+
+    @PostMapping("/{knowledgePointId}/qa")
+    public Result<AgenticResponse> ask(@PathVariable String knowledgePointId,
+                                       @RequestBody CourseQaRequest request,
+                                       HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        return courseAiService.answerKnowledgePointQuestion(knowledgePointId, request);
+    }
+}

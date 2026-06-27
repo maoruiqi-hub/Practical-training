@@ -19,6 +19,7 @@ public interface BehaviorLogMapper extends BaseMapper<LearningBehaviorLog> {
                                                @Param("userType") String userType,
                                                @Param("actionType") String actionType,
                                                @Param("resourceType") String resourceType,
+                                               @Param("courseId") String courseId,
                                                @Param("startTime") String startTime,
                                                @Param("endTime") String endTime);
 }

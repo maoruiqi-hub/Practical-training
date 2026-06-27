@@ -13,4 +13,6 @@ public interface StudentMapper extends BaseMapper<Student> {
     Student selectByUsername(@Param("username") String username);
 
     List<Student> selectByKeyword(@Param("keyword") String keyword);
+
+    List<Student> selectByClassId(@Param("classId") String classId);
 }

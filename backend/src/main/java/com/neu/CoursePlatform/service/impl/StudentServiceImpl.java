@@ -36,6 +36,14 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
     }
 
     @Override
+    public List<Student> listByClassId(String classId) {
+        if (classId == null || classId.isBlank()) {
+            return list();
+        }
+        return baseMapper.selectByClassId(classId);
+    }
+
+    @Override
     public int importFromExcel(MultipartFile file) throws IOException {
         int count = 0;
         StringBuilder errors = new StringBuilder();

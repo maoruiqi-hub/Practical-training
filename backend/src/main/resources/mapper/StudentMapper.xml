@@ -13,4 +13,8 @@
            OR student_no LIKE CONCAT('%', #{keyword}, '%')
     </select>
 
+    <select id="selectByClassId" resultType="com.neu.CoursePlatform.entity.Student">
+        SELECT * FROM student WHERE class_name = #{classId}
+    </select>
+
 </mapper>

@@ -12,28 +12,34 @@
     </select>
 
     <select id="selectByFilters" resultType="com.neu.CoursePlatform.entity.LearningBehaviorLog">
-        SELECT * FROM learning_behavior_log
+        SELECT l.* FROM learning_behavior_log l
+        <if test="courseId != null and courseId != ''">
+            INNER JOIN learning_task t ON l.task_no = t.task_no
+        </if>
         <where>
             <if test="userId != null and userId != ''">
-                AND user_id = #{userId}
+                AND l.user_id = #{userId}
             </if>
             <if test="userType != null and userType != ''">
-                AND user_type = #{userType}
+                AND l.user_type = #{userType}
             </if>
             <if test="actionType != null and actionType != ''">
-                AND action_type = #{actionType}
+                AND l.action_type = #{actionType}
             </if>
             <if test="resourceType != null and resourceType != ''">
-                AND resource_type = #{resourceType}
+                AND l.resource_type = #{resourceType}
+            </if>
+            <if test="courseId != null and courseId != ''">
+                AND t.course_code = #{courseId}
             </if>
             <if test="startTime != null and startTime != ''">
-                AND created_at &gt;= #{startTime}
+                AND l.created_at &gt;= #{startTime}
             </if>
             <if test="endTime != null and endTime != ''">
-                AND created_at &lt;= #{endTime}
+                AND l.created_at &lt;= #{endTime}
             </if>
         </where>
-        ORDER BY created_at DESC
+        ORDER BY l.created_at DESC
     </select>
 
 </mapper>

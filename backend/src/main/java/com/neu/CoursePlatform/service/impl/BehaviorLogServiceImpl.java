@@ -41,6 +41,7 @@ public class BehaviorLogServiceImpl extends ServiceImpl<BehaviorLogMapper, Learn
                 filters.get("userType"),
                 filters.get("actionType"),
                 filters.get("resourceType"),
+                filters.get("course_id"),
                 filters.get("startTime"),
                 filters.get("endTime")
         );

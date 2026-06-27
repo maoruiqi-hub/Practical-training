@@ -4,6 +4,7 @@ import com.neu.CoursePlatform.module5_analytics.dto.external.KnowledgePointDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.MistakeStatsDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentScoreDTO;
+import com.neu.CoursePlatform.module5_analytics.dto.TaskCompletionDTO;
 
 import java.util.List;
 
@@ -23,7 +24,10 @@ public interface ExternalDataProvider {
     StudentProgressDTO getStudentProgress(String studentId, String courseId);
 
     /** 模块2：获取班级任务完成统计 */
-    List<StudentProgressDTO> getClassProgressList(String courseId);
+    List<StudentProgressDTO> getClassProgressList(String classId, String courseId);
+
+    /** 模块2：获取班级内某任务完成统计 */
+    TaskCompletionDTO getTaskCompletion(String classId, String taskId);
 
     /** 模块1：获取课程知识点列表 */
     List<KnowledgePointDTO> getKnowledgePointsByCourse(String courseId);

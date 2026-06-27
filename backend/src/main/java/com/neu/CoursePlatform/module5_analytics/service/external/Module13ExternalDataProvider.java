@@ -1,11 +1,17 @@
 package com.neu.CoursePlatform.module5_analytics.service.external;
 
 import com.neu.CoursePlatform.entity.KnowledgePoint;
+import com.neu.CoursePlatform.entity.LearningBehaviorLog;
+import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.entity.TaskSubmission;
+import com.neu.CoursePlatform.module5_analytics.dto.TaskCompletionDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.KnowledgePointDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.MistakeStatsDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentScoreDTO;
+import com.neu.CoursePlatform.module5_analytics.service.ClassInfoService;
+import com.neu.CoursePlatform.service.BehaviorLogService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.AssessmentDataService;
 import com.neu.CoursePlatform.service.LearningTaskService;
@@ -15,8 +21,10 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 模块五消费模块一、三公开服务的真实适配器。
@@ -30,16 +38,22 @@ public class Module13ExternalDataProvider implements ExternalDataProvider {
     private final LearningTaskService taskService;
     private final StudentService studentService;
     private final KnowledgePointService knowledgePointService;
+    private final ClassInfoService classInfoService;
+    private final BehaviorLogService behaviorLogService;
 
     public Module13ExternalDataProvider(AssessmentDataService assessmentDataService, TaskSubmissionService submissionService,
                                         LearningTaskService taskService,
                                         StudentService studentService,
-                                        KnowledgePointService knowledgePointService) {
+                                        KnowledgePointService knowledgePointService,
+                                        ClassInfoService classInfoService,
+                                        BehaviorLogService behaviorLogService) {
         this.assessmentDataService = assessmentDataService;
         this.submissionService = submissionService;
         this.taskService = taskService;
         this.studentService = studentService;
         this.knowledgePointService = knowledgePointService;
+        this.classInfoService = classInfoService;
+        this.behaviorLogService = behaviorLogService;
     }
 
     @Override
@@ -70,7 +84,12 @@ public class Module13ExternalDataProvider implements ExternalDataProvider {
         result.setStudentName(student == null ? "" : student.getName());
         int total = taskService.listByCourseCode(courseId).size();
         int submitted = (int) submissionService.listByStudentNo(studentId).stream()
-                .filter(item -> courseId.equals(submissionService.getTaskCourseCode(item.getTaskNo()))).count();
+                .filter(item -> !"superseded".equals(item.getStatus()))
+                .filter(item -> courseId.equals(submissionService.getTaskCourseCode(item.getTaskNo())))
+                .map(TaskSubmission::getTaskNo)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
         result.setTotalTasks(total);
         result.setSubmittedTasks(submitted);
         result.setCompletedTasks(submitted);
@@ -78,7 +97,50 @@ public class Module13ExternalDataProvider implements ExternalDataProvider {
         return result;
     }
 
-    @Override public List<StudentProgressDTO> getClassProgressList(String courseId) { return List.of(); }
+    @Override
+    public List<StudentProgressDTO> getClassProgressList(String classId, String courseId) {
+        return classInfoService.getStudentIds(classId).stream()
+                .map(studentId -> getStudentProgress(studentId, courseId))
+                .toList();
+    }
+
+    @Override
+    public TaskCompletionDTO getTaskCompletion(String classId, String taskId) {
+        List<String> classStudentIds = classInfoService.getStudentIds(classId);
+        Set<String> classStudentIdSet = new HashSet<>(classStudentIds);
+        List<TaskSubmission> activeSubmissions = submissionService.listByTaskNo(taskId).stream()
+                .filter(item -> !"superseded".equals(item.getStatus()))
+                .filter(item -> item.getStudentNo() != null && classStudentIdSet.contains(item.getStudentNo()))
+                .toList();
+
+        Set<String> submittedStudentIds = new HashSet<>();
+        Set<String> lateSubmittedStudentIds = new HashSet<>();
+        for (TaskSubmission submission : activeSubmissions) {
+            submittedStudentIds.add(submission.getStudentNo());
+            if (submission.getIsOverdue() != null && submission.getIsOverdue() == 1) {
+                lateSubmittedStudentIds.add(submission.getStudentNo());
+            }
+        }
+
+        List<String> notSubmittedStudentIds = classStudentIds.stream()
+                .filter(studentId -> !submittedStudentIds.contains(studentId))
+                .toList();
+
+        LearningTask task = taskService.getById(taskId);
+        TaskCompletionDTO dto = new TaskCompletionDTO();
+        dto.setTaskId(taskId);
+        dto.setTaskName(task == null ? "任务-" + taskId
+                : firstNonBlank(task.getTaskName(), task.getDescription(), "任务-" + taskId));
+        dto.setTotalStudents(classStudentIds.size());
+        dto.setSubmittedCount(submittedStudentIds.size());
+        dto.setNotSubmittedCount(notSubmittedStudentIds.size());
+        dto.setLateSubmittedCount(lateSubmittedStudentIds.size());
+        dto.setSubmissionRate(classStudentIds.isEmpty()
+                ? 0D
+                : Math.round(submittedStudentIds.size() * 10000.0D / classStudentIds.size()) / 10000.0D);
+        dto.setNotSubmittedStudentIds(notSubmittedStudentIds);
+        return dto;
+    }
 
     @Override
     public List<KnowledgePointDTO> getKnowledgePointsByCourse(String courseId) {
@@ -92,7 +154,25 @@ public class Module13ExternalDataProvider implements ExternalDataProvider {
         }).toList();
     }
 
-    @Override public List<String> getStudentIdsByClass(String classId) { return List.of(); }
-    @Override public LocalDateTime getLastActiveTime(String studentId) { return null; }
+    @Override
+    public List<String> getStudentIdsByClass(String classId) {
+        return classInfoService.getStudentIds(classId);
+    }
+
+    @Override
+    public LocalDateTime getLastActiveTime(String studentId) {
+        return behaviorLogService.listByUserId(studentId).stream()
+                .map(LearningBehaviorLog::getCreatedAt)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
 
 }

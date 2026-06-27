@@ -49,6 +49,14 @@ public class StudentController {
     }
 
     /** 全部学生列表 | admin */
+    @GetMapping
+    public Result<List<Student>> listByContract(@RequestParam(name = "class_id", required = false) String classId,
+                                                HttpSession session) {
+        if (!auth.isAdmin(session) && !auth.isTeacher(session)) return Result.fail("无权限");
+        return Result.ok(studentService.listByClassId(classId));
+    }
+
+    /** 全部学生列表 | admin */
     @GetMapping("/list")
     public Result<List<Student>> list(HttpSession session) {
         if (!auth.isAdmin(session)) return Result.fail("无权限");

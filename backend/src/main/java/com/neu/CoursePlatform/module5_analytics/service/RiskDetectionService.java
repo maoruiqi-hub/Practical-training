@@ -41,7 +41,7 @@ public class RiskDetectionService {
     public List<RiskAlert> detectForClass(String classId, String courseId) {
         List<String> studentIds = dataProvider.getStudentIdsByClass(classId);
         // 计算班级平均完成率（用于 progress_lag 判定）
-        List<StudentProgressDTO> allProgress = dataProvider.getClassProgressList(courseId);
+        List<StudentProgressDTO> allProgress = dataProvider.getClassProgressList(classId, courseId);
         double avgRate = allProgress.stream()
                 .mapToDouble(StudentProgressDTO::getCompletionRate).average().orElse(0);
 

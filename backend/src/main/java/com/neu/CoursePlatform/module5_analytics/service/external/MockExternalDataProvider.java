@@ -1,5 +1,6 @@
 package com.neu.CoursePlatform.module5_analytics.service.external;
 
+import com.neu.CoursePlatform.module5_analytics.dto.TaskCompletionDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.KnowledgePointDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.MistakeStatsDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
@@ -79,18 +80,34 @@ public class MockExternalDataProvider implements ExternalDataProvider {
     }
 
     @Override
-    public List<StudentProgressDTO> getClassProgressList(String courseId) {
+    public List<StudentProgressDTO> getClassProgressList(String classId, String courseId) {
         List<StudentProgressDTO> list = new ArrayList<>();
-        for (int i = 1; i <= 15; i++) {
+        for (String studentId : getStudentIdsByClass(classId)) {
             StudentProgressDTO p = new StudentProgressDTO();
-            p.setStudentId("student-" + i);
-            p.setStudentName("学生" + i);
+            p.setStudentId(studentId);
+            p.setStudentName(studentId);
             p.setTotalTasks(12);
             p.setCompletedTasks(rng.nextInt(13));
             p.setCompletionRate((double) p.getCompletedTasks() / p.getTotalTasks());
             list.add(p);
         }
         return list;
+    }
+
+    @Override
+    public TaskCompletionDTO getTaskCompletion(String classId, String taskId) {
+        List<String> studentIds = getStudentIdsByClass(classId);
+        int submitted = Math.max(0, studentIds.size() - 3);
+        TaskCompletionDTO dto = new TaskCompletionDTO();
+        dto.setTaskId(taskId);
+        dto.setTaskName("任务-" + taskId);
+        dto.setTotalStudents(studentIds.size());
+        dto.setSubmittedCount(submitted);
+        dto.setNotSubmittedCount(studentIds.size() - submitted);
+        dto.setLateSubmittedCount(Math.min(2, submitted));
+        dto.setSubmissionRate(studentIds.isEmpty() ? 0D : (double) submitted / studentIds.size());
+        dto.setNotSubmittedStudentIds(studentIds.subList(submitted, studentIds.size()));
+        return dto;
     }
 
     @Override

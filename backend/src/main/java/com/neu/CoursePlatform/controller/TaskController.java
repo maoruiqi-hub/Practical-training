@@ -6,6 +6,7 @@ import com.neu.CoursePlatform.dto.TaskUpdateRequest;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.StudentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import jakarta.servlet.http.HttpSession;
@@ -25,13 +26,15 @@ public class TaskController {
     private final LearningTaskService taskService;
     private final FileStorageService fileStorageService;
     private final TaskSubmissionService submissionService;
+    private final StudentService studentService;
     private final Auth auth;
 
     public TaskController(LearningTaskService taskService, FileStorageService fileStorageService,
-                          TaskSubmissionService submissionService, Auth auth) {
+                          TaskSubmissionService submissionService, StudentService studentService, Auth auth) {
         this.taskService = taskService;
         this.fileStorageService = fileStorageService;
         this.submissionService = submissionService;
+        this.studentService = studentService;
         this.auth = auth;
     }
 
@@ -219,19 +222,32 @@ public class TaskController {
                                                   HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         List<TaskSubmission> subs = submissionService.listByTaskNo(taskNo);
-        int total = subs.size();
-        int graded = (int) subs.stream().filter(s -> "graded".equals(s.getStatus())).count();
-        int overdue = (int) subs.stream().filter(s -> s.getIsOverdue() != null && s.getIsOverdue() == 1).count();
-        double avgScore = subs.stream()
+        List<TaskSubmission> activeSubs = subs.stream()
+                .filter(s -> !"superseded".equals(s.getStatus()))
+                .toList();
+        int totalSubmissions = activeSubs.size();
+        long totalStudents = studentService.count();
+        long submittedStudents = activeSubs.stream()
+                .map(TaskSubmission::getStudentNo)
+                .filter(studentNo -> studentNo != null && !studentNo.isBlank())
+                .distinct()
+                .count();
+        int graded = (int) activeSubs.stream().filter(s -> "graded".equals(s.getStatus())).count();
+        int overdue = (int) activeSubs.stream().filter(s -> s.getIsOverdue() != null && s.getIsOverdue() == 1).count();
+        double avgScore = activeSubs.stream()
                 .filter(s -> "graded".equals(s.getStatus()) && s.getScore() != null)
                 .mapToInt(TaskSubmission::getScore).average().orElse(0);
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("taskNo", taskNo);
-        stats.put("totalSubmissions", total);
+        stats.put("totalStudents", totalStudents);
+        stats.put("submittedStudents", submittedStudents);
+        stats.put("totalSubmissions", totalSubmissions);
         stats.put("gradedCount", graded);
         stats.put("overdueCount", overdue);
         stats.put("averageScore", Math.round(avgScore * 10) / 10.0);
-        stats.put("completionRate", taskService.getById(taskNo) != null ? 100 : 0); // placeholder
+        stats.put("completionRate", totalStudents > 0
+                ? Math.round(submittedStudents * 1000.0 / totalStudents) / 10.0
+                : 0);
         return Result.ok(stats);
     }
 
