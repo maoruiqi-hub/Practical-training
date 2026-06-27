@@ -10,6 +10,7 @@ import com.neu.CoursePlatform.entity.LearningBehaviorLog;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.SubmissionAnswer;
+import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.entity.Teacher;
 import com.neu.CoursePlatform.service.impl.BehaviorLogServiceImpl;
@@ -81,6 +82,41 @@ class Module2ServiceTest {
         assertEquals("video_play", queryService.filters.get("actionType"));
         assertEquals("2026-06-25T10:00:00", queryService.filters.get("startTime"));
         assertEquals("2026-06-25T11:00:00", queryService.filters.get("endTime"));
+    }
+
+    @Test
+    void behaviorLogControllerPublishesSupplyAndHintEventsWhenGameModeEnabled() {
+        CapturingBehaviorLogService logService = new CapturingBehaviorLogService();
+        List<GameEvent> events = new ArrayList<>();
+        CourseGameConfigService gameConfigService = proxy(CourseGameConfigService.class, (method, args) -> switch (method) {
+            case "isEnabled" -> true;
+            default -> defaultValue(method);
+        });
+        BehaviorLogController controller = new BehaviorLogController(logService, events::add, gameConfigService, new Auth(null));
+        MockHttpSession session = new MockHttpSession();
+        Student student = new Student();
+        student.setStudentNo("student-1");
+        session.setAttribute("student", student);
+
+        LearningBehaviorLog supplyLog = new LearningBehaviorLog();
+        supplyLog.setUserId("student-1");
+        supplyLog.setActionType("use_supply");
+        supplyLog.setResourceType("energy");
+        supplyLog.setResourceId("supply-1");
+        controller.record(supplyLog, "course-1", null, session);
+
+        LearningBehaviorLog hintLog = new LearningBehaviorLog();
+        hintLog.setUserId("student-1");
+        hintLog.setActionType("hint_used");
+        hintLog.setResourceId("question-1");
+        controller.record(hintLog, "course-1", null, session);
+
+        assertEquals(2, events.size());
+        assertEquals(GameEventTypes.SUPPLY_USED, events.get(0).getEventType());
+        assertEquals("course-1", events.get(0).getCourseId());
+        assertEquals("energy", events.get(0).getPayload().get("supply_type"));
+        assertEquals(GameEventTypes.HINT_USED, events.get(1).getEventType());
+        assertEquals("question-1", events.get(1).getPayload().get("question_id"));
     }
 
     @Test

@@ -1,12 +1,15 @@
 package com.neu.CoursePlatform.module5_analytics.controller;
 
 import com.neu.CoursePlatform.common.Auth;
+import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.module5_analytics.entity.RiskAlert;
 import com.neu.CoursePlatform.module5_analytics.service.ClassInfoService;
 import com.neu.CoursePlatform.module5_analytics.service.RiskAlertService;
 import com.neu.CoursePlatform.module5_analytics.service.RiskDetectionService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.context.event.EventListener;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,6 +19,7 @@ import java.util.Map;
  * 风险预警 Controller（R4 组 + R8 组需求）
  */
 @RestController
+@RequestMapping("/api")
 public class RiskAlertController {
 
     private final RiskAlertService riskAlertService;
@@ -34,7 +38,7 @@ public class RiskAlertController {
     }
 
     /** R4.9 / R8.1 接收模块4游戏风险事件 */
-    @PostMapping("/api/risk-alerts")
+    @PostMapping("/risk-alerts")
     public Result<RiskAlert> receiveEvent(@RequestBody Map<String, Object> body) {
         String studentId = (String) body.get("student_id");
         String courseId = (String) body.get("course_id");
@@ -53,14 +57,23 @@ public class RiskAlertController {
         return Result.ok(alert);
     }
 
+    /** 模块4 通过 Spring 事件发布 HP/卡顿风险，避免模块间 HTTP 回调。 */
+    @EventListener
+    public void receiveGameEvent(GameEvent event) {
+        if (event == null || !isRiskEvent(event.getEventType())) return;
+        String detail = event.getPayload() == null ? "{}" : event.getPayload().toString();
+        riskAlertService.receiveEvent(event.getStudentId(), event.getCourseId(),
+                event.getEventType(), mapRiskLevel(event.getEventType()), detail);
+    }
+
     /** R8.5 查询学生当前风险状态（供模块4调用） */
-    @GetMapping("/api/students/{id}/risk-status")
+    @GetMapping("/students/{id}/risk-status")
     public Result<RiskAlertService.RiskStatus> getStudentRiskStatus(@PathVariable String id) {
         return Result.ok(riskAlertService.getStudentRiskStatus(id));
     }
 
     /** R4.5 查询班级活跃预警列表（教师端） */
-    @GetMapping("/api/classes/{id}/risk-alerts")
+    @GetMapping("/classes/{id}/risk-alerts")
     public Result<List<RiskAlert>> getClassRiskAlerts(
             @PathVariable String id,
             @RequestParam(required = false, defaultValue = "active") String status,
@@ -72,7 +85,7 @@ public class RiskAlertController {
     }
 
     /** R4.2 手动触发风险检测（教师端） */
-    @PostMapping("/api/classes/{id}/risk-detect")
+    @PostMapping("/classes/{id}/risk-detect")
     public Result<List<RiskAlert>> detectRisks(@PathVariable String id,
                                                 @RequestParam String courseId,
                                                 HttpSession session) {
@@ -82,7 +95,7 @@ public class RiskAlertController {
     }
 
     /** R4.7 标记预警为已处理 */
-    @PutMapping("/api/risk-alerts/{id}/resolve")
+    @PutMapping("/risk-alerts/{id}/resolve")
     public Result<Void> resolve(@PathVariable String id, HttpSession session) {
         if (auth.getTeacher(session) == null) return Result.fail("请先登录");
         String teacherNo = auth.getTeacherId(session);
@@ -97,10 +110,16 @@ public class RiskAlertController {
      */
     private String mapRiskLevel(String riskType) {
         return switch (riskType) {
-            case com.neu.CoursePlatform.common.GameEventTypes.HP_CRITICAL, "low_score" -> "high";
-            case "procrastination", com.neu.CoursePlatform.common.GameEventTypes.STUCK_DETECTED,
-                 com.neu.CoursePlatform.common.GameEventTypes.INACTIVE, "stuck" -> "medium";
+            case GameEventTypes.HP_CRITICAL, "low_score" -> "high";
+            case "procrastination", GameEventTypes.STUCK_DETECTED,
+                 GameEventTypes.INACTIVE, "stuck" -> "medium";
             default -> "low";
         };
+    }
+
+    private boolean isRiskEvent(String eventType) {
+        return GameEventTypes.HP_CRITICAL.equals(eventType)
+                || GameEventTypes.STUCK_DETECTED.equals(eventType)
+                || GameEventTypes.INACTIVE.equals(eventType);
     }
 }

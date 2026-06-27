@@ -46,8 +46,8 @@ public class TaskController {
         return list(courseId, taskType, status, lessonNo, session);
     }
 
-    /** 查看某课程的任务列表（支持筛选）| 登录用户 */
-    @GetMapping("/{courseCode}")
+    /** 查看某课程的任务列表（兼容旧前端路径）| 登录用户 */
+    @GetMapping("/course/{courseCode}")
     public Result<List<LearningTask>> list(@PathVariable String courseCode,
                                            @RequestParam(required = false) String taskType,
                                            @RequestParam(required = false) String status,
@@ -63,7 +63,7 @@ public class TaskController {
     }
 
     /** 查看任务详情 | 登录用户 */
-    @GetMapping("/detail/{taskNo}")
+    @GetMapping({"/{taskNo}", "/detail/{taskNo}"})
     public Result<LearningTask> detail(@PathVariable String taskNo, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         LearningTask t = taskService.getById(taskNo);

@@ -204,25 +204,8 @@ CREATE TABLE IF NOT EXISTS exam_question (
 ALTER TABLE exam_question ADD COLUMN IF NOT EXISTS knowledge_point_id INT;
 ALTER TABLE exam_question DROP COLUMN IF EXISTS knowledge_point;
 
--- 知识点实体表
-CREATE TABLE IF NOT EXISTS knowledge_point (
-    knowledge_point_id INT AUTO_INCREMENT PRIMARY KEY,
-    course_code INT,
-    lesson_no VARCHAR(32),
-    name VARCHAR(128),
-    description TEXT
-);
 ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS lesson_no VARCHAR(32);
 ALTER TABLE knowledge_point ADD COLUMN IF NOT EXISTS description TEXT;
-
--- 知识点关系表
-CREATE TABLE IF NOT EXISTS knowledge_relation (
-    relation_id INT AUTO_INCREMENT PRIMARY KEY,
-    course_code INT,
-    from_knowledge_point_id INT,
-    to_knowledge_point_id INT,
-    relation_type VARCHAR(32)
-);
 
 -- 题库表
 CREATE TABLE IF NOT EXISTS question (

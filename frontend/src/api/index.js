@@ -43,7 +43,7 @@ export const updateLesson = (code, lessonNo, formData) => api.put(`/api/lessons/
 export const deleteLesson = (code, lessonNo) => api.delete(`/api/lessons/${code}/${lessonNo}`)
 
 // ============ 学习任务 (/api/tasks) ============
-export const getTaskList = (code) => api.get(`/api/tasks/${code}`)
+export const getTaskList = (code) => api.get('/api/tasks', { params: { course_id: code } })
 export const searchTask = (keyword) => api.get('/api/tasks/search', { params: { keyword } })
 export const addTask = (data) => {
   if (data instanceof FormData) return api.post('/api/tasks', data)
@@ -51,7 +51,7 @@ export const addTask = (data) => {
   Object.entries(data).forEach(([key, value]) => formData.append(key, value ?? ''))
   return api.post('/api/tasks', formData)
 }
-export const getTaskDetail = (taskNo) => api.get('/api/tasks/detail/' + taskNo)
+export const getTaskDetail = (taskNo) => api.get('/api/tasks/' + taskNo)
 export const updateTask = (code, no, data) => api.put(`/api/tasks/${code}/${no}`, data, {
   headers: { 'Content-Type': 'application/json' }
 })
@@ -103,3 +103,19 @@ export const bindExamToTask = (examId, taskNo) => api.post(`/api/exams/${examId}
 // ============ AI 评阅 ============
 export const generateAiReview = (id) => api.post(`/submission/ai-review/${id}`)
 export const getAiReview = (id) => api.get(`/submission/ai-review/${id}`)
+
+// ============ 课程资源与知识图谱 (/api/resources, /api/knowledge-*) ============
+export const getCourseResources = (courseCode, params = {}) => api.get('/api/resources', {
+  params: { ...params, courseCode }
+})
+export const getCourseResourcePreview = (resourceId) => api.get(`/api/resources/${resourceId}/preview`)
+export const recordCourseResourceView = (resourceId, data) => api.post(`/api/resources/${resourceId}/view-events`, data)
+export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
+export const getKnowledgePointDetail = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}`)
+export const getKnowledgePointPrerequisites = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}/prerequisites`)
+
+// ============ 错题本与学情分析 (/api/*/mistakes) ============
+export const getStudentWrongQuestions = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/mistakes`, { params })
+export const getCourseWrongQuestions = (courseCode) => api.get(`/api/courses/${courseCode}/mistake-stats`)
+
+export default api

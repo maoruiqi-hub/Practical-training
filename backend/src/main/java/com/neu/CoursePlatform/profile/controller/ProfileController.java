@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
 @RestController
-@RequestMapping("/profile")
+@RequestMapping("/api/profile")
 public class ProfileController {
 
     private final ProfileService profileService;
@@ -279,14 +279,14 @@ public class ProfileController {
     }
 
     /** 跨模块：获取画像摘要（String ID，供模块5等调用） */
-    @GetMapping("/api/profile/{studentNo}/{courseCode}")
+    @GetMapping("/string/{studentNo}/{courseCode}")
     public Result<Map<String, Object>> summaryStr(@PathVariable String studentNo,
                                                    @PathVariable String courseCode) {
         return Result.ok(profileService.getProfileSummaryStr(studentNo, courseCode));
     }
 
     /** 跨模块：增加成长值（String ID） */
-    @PostMapping("/api/profile/{studentNo}/{courseCode}/growth")
+    @PostMapping("/string/{studentNo}/{courseCode}/growth")
     public Result<Void> addGrowthStr(@PathVariable String studentNo,
                                       @PathVariable String courseCode,
                                       @RequestBody Map<String, Object> body) {

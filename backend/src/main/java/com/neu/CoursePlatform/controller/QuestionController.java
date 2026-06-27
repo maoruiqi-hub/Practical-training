@@ -11,9 +11,18 @@ import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.TaskQuestionService;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/questions")
@@ -25,9 +34,11 @@ public class QuestionController {
     private final KnowledgePointService knowledgePointService;
     private final Auth auth;
 
-    public QuestionController(QuestionService questionService, TaskQuestionService taskQuestionService,
+    public QuestionController(QuestionService questionService,
+                              TaskQuestionService taskQuestionService,
                               LearningTaskService taskService,
-                              KnowledgePointService knowledgePointService, Auth auth) {
+                              KnowledgePointService knowledgePointService,
+                              Auth auth) {
         this.questionService = questionService;
         this.taskQuestionService = taskQuestionService;
         this.taskService = taskService;
@@ -35,41 +46,62 @@ public class QuestionController {
         this.auth = auth;
     }
 
-    /** 查看单个题目 | 登录用户 */
+    /**
+     * 规范接口：GET /api/questions?course_id=&knowledge_point_id=&difficulty=
+     * 兼容现有前端的 courseCode / lessonNo / knowledgePointId 参数。
+     */
+    @GetMapping
+    public Result<List<Question>> list(@RequestParam Map<String, String> params, HttpSession session) {
+        String courseCode = firstNonBlank(params.get("course_id"), params.get("courseCode"));
+        String lessonNo = firstNonBlank(params.get("lesson_id"), params.get("lessonNo"));
+        String knowledgePointId = firstNonBlank(params.get("knowledge_point_id"), params.get("knowledgePointId"));
+        String type = firstNonBlank(params.get("type"), params.get("question_type"), params.get("questionType"));
+        String keyword = params.get("keyword");
+
+        Integer difficulty;
+        try {
+            difficulty = parseInteger(params.get("difficulty"));
+        } catch (NumberFormatException e) {
+            return Result.fail("difficulty 必须是整数");
+        }
+
+        if (courseCode != null && !courseCode.isBlank()) {
+            if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
+        } else if (!auth.isLoggedIn(session)) {
+            return Result.fail("请先登录");
+        }
+
+        return Result.ok(questionService.filterQuestions(courseCode, lessonNo, knowledgePointId, type, difficulty, keyword));
+    }
+
     @GetMapping("/{questionId}")
     public Result<Question> detail(@PathVariable String questionId, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        Question q = questionService.getById(questionId);
-        if (q != null && q.getKnowledgePointId() != null && !q.getKnowledgePointId().isBlank()) {
-            q.setKnowledgePoint(knowledgePointService.getById(q.getKnowledgePointId()));
+        Question question = questionService.getById(questionId);
+        if (question != null && question.getKnowledgePointId() != null && !question.getKnowledgePointId().isBlank()) {
+            question.setKnowledgePoint(knowledgePointService.getById(question.getKnowledgePointId()));
         }
-        return q != null ? Result.ok(q) : Result.fail("题目不存在");
+        return question != null ? Result.ok(question) : Result.fail("题目不存在");
     }
 
-    // ==================== 题库 CRUD（教师） ====================
-
-    /** 按课程查题目 | admin/授课教师 */
     @GetMapping("/course/{courseCode}")
     public Result<List<Question>> listByCourse(@PathVariable String courseCode, HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         return Result.ok(questionService.listByCourseCode(courseCode));
     }
 
-    /** 按课时查题目 | admin/授课教师 */
     @GetMapping("/lesson/{lessonNo}")
     public Result<List<Question>> listByLesson(@PathVariable String lessonNo, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         return Result.ok(questionService.listByLessonNo(lessonNo));
     }
 
-    /** 模糊搜索题目 | admin/授课教师 */
     @GetMapping("/search")
     public Result<List<Question>> search(@RequestParam String keyword, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         return Result.ok(questionService.searchByKeyword(keyword));
     }
 
-    /** 组合筛选题目 | admin/授课教师 */
     @GetMapping("/filter")
     public Result<List<Question>> filter(@RequestParam(required = false) String courseCode,
                                          @RequestParam(required = false) String lessonNo,
@@ -86,7 +118,6 @@ public class QuestionController {
         return Result.ok(questionService.filterQuestions(courseCode, lessonNo, knowledgePointId, type, difficulty, keyword));
     }
 
-    /** 新增题目 | admin/授课教师 */
     @PostMapping
     public Result<Void> add(@RequestBody Question question, HttpSession session) {
         if (!auth.canModifyCourse(session, question.getCourseCode())) return Result.fail("无权限");
@@ -99,12 +130,12 @@ public class QuestionController {
         return Result.ok();
     }
 
-    /** 修改题目 | admin/授课教师 */
     @PutMapping("/{questionId}")
     public Result<Void> update(@PathVariable String questionId, @RequestBody Question question, HttpSession session) {
         Question existing = questionService.getById(questionId);
         if (existing == null) return Result.fail("题目不存在");
         if (!auth.canModifyCourse(session, existing.getCourseCode())) return Result.fail("无权限");
+
         question.setQuestionId(questionId);
         question.setCourseCode(existing.getCourseCode());
         try {
@@ -116,30 +147,27 @@ public class QuestionController {
         return Result.ok();
     }
 
-    /**
-     * 模块一 -> 模块三：将已有题目关联到课程知识点。
-     * 关联前校验知识点存在且归属同一课程，避免跨课程脏引用。
-     */
     @PostMapping("/{questionId}/link-kp")
     public Result<Question> linkKnowledgePoint(@PathVariable String questionId,
-                                               @RequestBody java.util.Map<String, String> body,
+                                               @RequestBody Map<String, String> body,
                                                HttpSession session) {
         Question question = questionService.getById(questionId);
         if (question == null) return Result.fail("题目不存在");
         if (!auth.canModifyCourse(session, question.getCourseCode())) return Result.fail("无权限");
-        String knowledgePointId = body == null ? null : body.get("knowledge_point_id");
-        if (knowledgePointId == null && body != null) knowledgePointId = body.get("knowledgePointId");
+
+        String knowledgePointId = body == null ? null : firstNonBlank(body.get("knowledge_point_id"), body.get("knowledgePointId"));
         if (knowledgePointId == null || knowledgePointId.isBlank()) return Result.fail("缺少 knowledgePointId");
+
         KnowledgePoint point = knowledgePointService.getById(knowledgePointId);
         if (point == null) return Result.fail("知识点不存在");
         if (!question.getCourseCode().equals(point.getCourseCode())) return Result.fail("知识点不属于当前课程");
+
         question.setKnowledgePointId(knowledgePointId);
         question.setKnowledgePoint(point);
         questionService.updateById(question);
         return Result.ok(question);
     }
 
-    /** 删除题目 | admin/授课教师 */
     @DeleteMapping("/{questionId}")
     public Result<Void> delete(@PathVariable String questionId, HttpSession session) {
         Question existing = questionService.getById(questionId);
@@ -149,16 +177,12 @@ public class QuestionController {
         return Result.ok();
     }
 
-    // ==================== 测验选题 ====================
-
-    /** 查看某测验已选的题目 | 登录用户 */
     @GetMapping("/task/{taskNo}")
     public Result<List<TaskQuestion>> listTaskQuestions(@PathVariable String taskNo, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         return Result.ok(taskQuestionService.listByTaskNo(taskNo));
     }
 
-    /** 向测验添加题目 | admin/授课教师 */
     @PostMapping("/task/{taskNo}")
     public Result<Void> addToTask(@PathVariable String taskNo, @RequestBody List<String> questionIds, HttpSession session) {
         LearningTask task = taskService.getById(taskNo);
@@ -172,7 +196,6 @@ public class QuestionController {
         return Result.ok();
     }
 
-    /** 从测验移除题目 | admin/授课教师 */
     @DeleteMapping("/task/{taskNo}/{questionId}")
     public Result<Void> removeFromTask(@PathVariable String taskNo, @PathVariable String questionId, HttpSession session) {
         LearningTask task = taskService.getById(taskNo);
@@ -190,6 +213,19 @@ public class QuestionController {
         if (question.getKnowledgePointId() == null || question.getKnowledgePointId().isBlank()) return;
         KnowledgePoint point = knowledgePointService.getById(question.getKnowledgePointId());
         if (point == null) throw new IllegalArgumentException("知识点不存在");
-        if (!point.getCourseCode().equals(question.getCourseCode())) throw new IllegalArgumentException("知识点不属于当前课程");
+        if (!point.getCourseCode().equals(question.getCourseCode())) {
+            throw new IllegalArgumentException("知识点不属于当前课程");
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
+
+    private Integer parseInteger(String value) {
+        return value == null || value.isBlank() ? null : Integer.valueOf(value);
     }
 }

@@ -70,12 +70,15 @@ public class KnowledgePointController {
     }
 
     @GetMapping("/knowledge-points")
-    public Result<List<KnowledgePoint>> list(@RequestParam String courseCode,
+    public Result<List<KnowledgePoint>> list(@RequestParam(required = false) String courseCode,
+                                             @RequestParam(name = "course_id", required = false) String courseId,
                                              @RequestParam(required = false) String chapter,
                                              HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
-        return Result.ok(knowledgePointService.listByCourseCode(courseCode, chapter));
+        String resolvedCourseCode = firstNonBlank(courseCode, courseId);
+        if (resolvedCourseCode == null) return Result.fail("缺少 courseCode 或 course_id");
+        if (courseService.getById(resolvedCourseCode) == null) return Result.fail("课程不存在");
+        return Result.ok(knowledgePointService.listByCourseCode(resolvedCourseCode, chapter));
     }
 
     @GetMapping("/knowledge-points/{knowledgePointId}")
@@ -86,12 +89,16 @@ public class KnowledgePointController {
     }
 
     @GetMapping("/knowledge-graph")
-    public Result<KnowledgeGraphDTO> graph(@RequestParam String courseCode, HttpSession session) {
+    public Result<KnowledgeGraphDTO> graph(@RequestParam(required = false) String courseCode,
+                                           @RequestParam(name = "course_id", required = false) String courseId,
+                                           HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
+        String resolvedCourseCode = firstNonBlank(courseCode, courseId);
+        if (resolvedCourseCode == null) return Result.fail("缺少 courseCode 或 course_id");
+        if (courseService.getById(resolvedCourseCode) == null) return Result.fail("课程不存在");
         return Result.ok(new KnowledgeGraphDTO(
-                knowledgePointService.listByCourseCode(courseCode, null),
-                knowledgeRelationService.listByCourseCode(courseCode)));
+                knowledgePointService.listByCourseCode(resolvedCourseCode, null),
+                knowledgeRelationService.listByCourseCode(resolvedCourseCode)));
     }
 
     @GetMapping("/courses/{courseCode}/structure")
@@ -210,6 +217,13 @@ public class KnowledgePointController {
         }
         if (knowledgePoint.getImportance() != null && (knowledgePoint.getImportance() < 1 || knowledgePoint.getImportance() > 5)) {
             return "知识点重要程度必须在 1 到 5 之间";
+        }
+        return null;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
         }
         return null;
     }

@@ -32,19 +32,19 @@ public class AgenticClient {
         this.restTemplate = new RestTemplate();
     }
 
-    /** 供模块一、三使用的统一 Agentic 调用入口；不可用时只返回降级结果。 */
+    /** 统一 Agentic 调用入口；mock 模式不依赖外部 AI 服务。 */
     public AgenticResponse invoke(String capability, AgenticRequest request) {
         if ("mock".equalsIgnoreCase(mode)) {
-            return new AgenticResponse(true, Map.of("mock", true, "capability", capability), "Mock agentic response");
+            return mockResponse(capability, request);
         }
         if (!"http".equalsIgnoreCase(mode) || baseUrl == null || baseUrl.isBlank()) {
             return AgenticResponse.unavailable();
         }
         try {
-            ResponseEntity<AgenticResponse> response = restTemplate.postForEntity(
-                    baseUrl + "/" + capability, request, AgenticResponse.class);
-            return response.getBody() == null ? AgenticResponse.unavailable() : response.getBody();
-        } catch (RestClientException e) {
+            Map<String, Object> body = Map.of("capability", capability, "request", request);
+            String result = post("/api/agent/" + capability, body);
+            return new AgenticResponse(true, Map.of("result", result), "ok");
+        } catch (AgenticException e) {
             return AgenticResponse.unavailable();
         }
     }
@@ -96,22 +96,6 @@ public class AgenticClient {
      */
     public String riskDetect(Map<String, Object> request) throws AgenticException {
         return post("/api/agent/risk-detect", request);
-    }
-
-    /**
-     * 通用 invoke（供 LectureController 等旧调用方使用）
-     */
-    public AgenticResponse invoke(String capability, AgenticRequest request) {
-        if (baseUrl == null || baseUrl.isBlank() || "mock".equalsIgnoreCase(baseUrl)) {
-            return mockResponse(capability, request);
-        }
-        try {
-            Map<String, Object> body = Map.of("capability", capability, "request", request);
-            String result = post("/api/agent/" + capability, body);
-            return new AgenticResponse(true, Map.of("result", result), "ok");
-        } catch (AgenticException e) {
-            return new AgenticResponse(false, Map.of(), e.getMessage());
-        }
     }
 
     private AgenticResponse mockResponse(String capability, AgenticRequest request) {

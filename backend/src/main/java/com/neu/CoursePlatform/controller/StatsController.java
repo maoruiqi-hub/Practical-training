@@ -31,6 +31,12 @@ public class StatsController {
         return Result.ok(statsService.buildStudentStats(studentNo));
     }
 
+    /** 模块3契约别名：GET /api/students/{id}/scores */
+    @GetMapping("/students/{studentNo}/scores")
+    public Result<Map<String, Object>> studentScores(@PathVariable String studentNo, HttpSession session) {
+        return studentStats(studentNo, session);
+    }
+
     /** 学生在某课程中的统计 | student本人 / admin */
     @GetMapping("/student/{studentNo}/course/{courseCode}")
     public Result<Map<String, Object>> studentCourseStats(@PathVariable String studentNo,

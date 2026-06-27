@@ -1,7 +1,10 @@
 package com.neu.CoursePlatform.profile.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.neu.CoursePlatform.common.GameEventPublisher;
+import com.neu.CoursePlatform.common.GameEventTypes;
+import com.neu.CoursePlatform.common.SharedIds;
+import com.neu.CoursePlatform.common.event.GameEvent;
+import com.neu.CoursePlatform.common.event.GameEventPublisher;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.profile.entity.*;
@@ -9,7 +12,9 @@ import com.neu.CoursePlatform.profile.mapper.*;
 import com.neu.CoursePlatform.profile.mock.*;
 import com.neu.CoursePlatform.profile.rule.GrowthRuleEngine;
 import com.neu.CoursePlatform.profile.service.ProfileService;
+import com.neu.CoursePlatform.service.CourseGameConfigService;
 import org.springframework.stereotype.Service;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,6 +30,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final MockKnowledgePointService mockKP;
     private final GrowthRuleEngine growthEngine;
     private final GameEventPublisher eventPublisher;
+    private final CourseGameConfigService gameConfigService;
 
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
                              CompetencyScoreMapper competencyMapper,
@@ -34,7 +40,8 @@ public class ProfileServiceImpl implements ProfileService {
                              StudentMapper studentMapper,
                              MockKnowledgePointService mockKP,
                              GrowthRuleEngine growthEngine,
-                             GameEventPublisher eventPublisher) {
+                             GameEventPublisher eventPublisher,
+                             CourseGameConfigService gameConfigService) {
         this.profileMapper = profileMapper;
         this.competencyMapper = competencyMapper;
         this.historyMapper = historyMapper;
@@ -44,6 +51,7 @@ public class ProfileServiceImpl implements ProfileService {
         this.mockKP = mockKP;
         this.growthEngine = growthEngine;
         this.eventPublisher = eventPublisher;
+        this.gameConfigService = gameConfigService;
     }
 
     @Override
@@ -125,8 +133,8 @@ public class ProfileServiceImpl implements ProfileService {
 
         // 检查点 3.5: HP < 30 → 模块4 → 模块5 发布风险事件
         if (profile.getHp() < 30) {
-            eventPublisher.publishHpCritical(
-                String.valueOf(studentNo), String.valueOf(courseCode), profile.getHp());
+            publishRiskEvent(GameEventTypes.HP_CRITICAL, studentNo, courseCode,
+                    Map.of("hp", profile.getHp(), "threshold", 30));
         }
 
         // 维护最近测验成绩记录 for R3.4/R3.5
@@ -172,9 +180,9 @@ public class ProfileServiceImpl implements ProfileService {
                 profile.setStatus("存在风险");
                 // 模块4 → 模块5: 发布卡顿风险事件
                 if (!"存在风险".equals(previousStatus)) {
-                    eventPublisher.publishStuckDetected(
-                        String.valueOf(profile.getStudentNo()),
-                        String.valueOf(profile.getCourseCode()), "unknown");
+                    publishRiskEvent(GameEventTypes.STUCK_DETECTED,
+                            profile.getStudentNo(), profile.getCourseCode(),
+                            Map.of("knowledge_point", "unknown", "consecutive_fails", recentCount));
                 }
                 return;
             }
@@ -205,6 +213,20 @@ public class ProfileServiceImpl implements ProfileService {
         }
 
         profile.setStatus("正常学习");
+    }
+
+    private void publishRiskEvent(String eventType, Integer studentNo, Integer courseCode, Map<String, Object> payload) {
+        String courseId = String.valueOf(courseCode);
+        if (!gameConfigService.isEnabled(courseId)) return;
+        eventPublisher.publish(GameEvent.builder()
+                .eventId(SharedIds.newId())
+                .eventType(eventType)
+                .studentId(String.valueOf(studentNo))
+                .courseId(courseId)
+                .sourceId("profile")
+                .occurredAt(LocalDateTime.now())
+                .payload(payload)
+                .build());
     }
 
     /** R6.6: 记录成长值变更明细 */
