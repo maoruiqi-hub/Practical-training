@@ -408,5 +408,5 @@ Teacher ──(授课)──▶ Course
 
 | 目录 | 内容 |
 |------|------|
-| `backend/src/main/resources/` | mapper XML、`application.yml`、`schema.sql`、`data.sql`，放项目配置和 SQL |
+| `backend/src/main/resources/` | mapper XML、`application.yml`、`schema-kingbase.sql`、迁移 SQL，放项目配置和 SQL |
 | `resource/`（项目根） | 上传的课件、作业附件、课程封面、测试图片。`WebConfig` 映射到 `/resource/**` 对外访问。里面 `red1.png` `white1.png` `python.png` 是占位玩的，以后换了就行 |

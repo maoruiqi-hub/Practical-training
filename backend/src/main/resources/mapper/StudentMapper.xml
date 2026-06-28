@@ -10,7 +10,7 @@
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Student">
         SELECT * FROM student
         WHERE name LIKE CONCAT('%', #{keyword}, '%')
-           OR student_no LIKE CONCAT('%', #{keyword}, '%')
+           OR CAST(student_no AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
     </select>
 
     <select id="selectByClassId" resultType="com.neu.CoursePlatform.entity.Student">

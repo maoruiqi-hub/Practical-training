@@ -5,9 +5,9 @@ spring:
     init:
       mode: never
   datasource:
-    driver-class-name: org.h2.Driver
-    url: "${DB_URL:jdbc:h2:mem:practical_training;MODE=MySQL;DB_CLOSE_DELAY=-1}"
-    username: "${DB_USERNAME:sa}"
+    driver-class-name: "${DB_DRIVER:org.postgresql.Driver}"
+    url: "${DB_URL:jdbc:postgresql://219.216.65.31:54321/course_platform}"
+    username: "${DB_USERNAME:system}"
     password: "${DB_PASSWORD:}"
     hikari:
       maximum-pool-size: 20
