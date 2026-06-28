@@ -11,7 +11,6 @@ import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.TeacherService;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,9 +27,6 @@ public class CourseController {
     private final TeacherService teacherService;
     private final CourseGameConfigService courseGameConfigService;
     private final Auth auth;
-
-    @Value("${game.mode.enabled:false}")
-    private boolean gameModeEnabled;
 
     public CourseController(CourseService courseService,
                             FileStorageService fileStorageService,

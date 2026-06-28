@@ -33,6 +33,7 @@ course-resource:
     soffice-path: ${COURSE_RESOURCE_SOFFICE_PATH:C:/Program Files/LibreOffice/program/soffice.exe}
     timeout-seconds: 60
 
+# Agentic AI 服务配置
 agentic:
   mode: ${AGENTIC_MODE:mock}
   base-url: ${AGENTIC_BASE_URL:http://localhost:8081}
@@ -49,4 +50,3 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-# Agentic AI 服务配置

@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,7 +34,7 @@ public class AgenticClient {
     /** 统一 Agentic 调用入口；mock 模式不依赖外部 AI 服务。 */
     public AgenticResponse invoke(String capability, AgenticRequest request) {
         if ("mock".equalsIgnoreCase(mode)) {
-            return mockResponse(capability, request);
+            return new AgenticResponse(true, Map.of("capability", capability, "mock", true), "Mock response");
         }
         if (!"http".equalsIgnoreCase(mode) || baseUrl == null || baseUrl.isBlank()) {
             return AgenticResponse.unavailable();
@@ -96,18 +95,6 @@ public class AgenticClient {
      */
     public String riskDetect(Map<String, Object> request) throws AgenticException {
         return post("/api/agent/risk-detect", request);
-    }
-
-    private AgenticResponse mockResponse(String capability, AgenticRequest request) {
-        if ("lecture".equals(capability)) {
-            return new AgenticResponse(true, Map.of(
-                    "explanation", "这是针对当前知识点和 PPT 页面的本地联调讲解。",
-                    "learningFocus", "理解概念定义与适用场景。",
-                    "commonMistakes", "不要只记结论，应结合例子判断。",
-                    "example", "请尝试用自己的话复述该概念。",
-                    "mock", true), "Mock lecture response");
-        }
-        return new AgenticResponse(true, Map.of("capability", capability, "mock", true), "Mock agentic response");
     }
 
     // ---- internal ----
