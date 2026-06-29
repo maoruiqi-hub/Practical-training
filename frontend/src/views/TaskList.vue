@@ -130,7 +130,7 @@
         <el-form-item label="任务说明" required><el-input v-model="newTask.description" type="textarea" :rows="2" /></el-form-item>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="截止时间"><el-input v-model="newTask.deadline" placeholder="2026-07-15 23:59:59" /></el-form-item>
+            <el-form-item label="截止时间"><el-date-picker v-model="newTask.deadline" type="datetime" placeholder="选择截止时间" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width:100%" /></el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="提交方式" required><el-input v-model="newTask.submitMethod" placeholder="在线提交/文档上传/在线答题" /></el-form-item>
@@ -189,7 +189,7 @@
         </el-row>
         <el-form-item label="任务说明"><el-input v-model="editTask.description" type="textarea" :rows="2" /></el-form-item>
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="截止时间"><el-input v-model="editTask.deadline" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="截止时间"><el-date-picker v-model="editTask.deadline" type="datetime" placeholder="选择截止时间" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="提交方式"><el-input v-model="editTask.submitMethod" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="分值"><el-input-number v-model="editTask.score" :min="0" :max="100" /></el-form-item></el-col>
         </el-row>

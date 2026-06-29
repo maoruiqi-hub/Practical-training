@@ -74,7 +74,7 @@
       <el-form :model="taskForm" label-width="80px">
         <el-form-item label="类型"><el-select v-model="taskForm.taskType" @change="onTaskTypeChange"><el-option label="编程作业" value="编程作业" /><el-option label="实验报告" value="实验报告" /><el-option label="在线测验" :value="ONLINE_QUIZ_TYPE" /><el-option label="其他" value="other" /></el-select></el-form-item>
         <el-form-item :label="isQuizType(taskForm.taskType)?'测验名称':'任务说明'"><el-input v-model="taskForm.description" /></el-form-item>
-        <el-form-item label="截止时间"><el-input v-model="taskForm.deadline" placeholder="2026-07-15 23:59:59" /></el-form-item>
+        <el-form-item label="截止时间"><el-date-picker v-model="taskForm.deadline" type="datetime" placeholder="选择截止时间" format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width:100%" /></el-form-item>
         <el-form-item v-if="!isQuizType(taskForm.taskType)" label="提交方式"><el-input v-model="taskForm.submitMethod" /></el-form-item>
         <el-form-item label="分值"><el-input-number v-model="taskForm.score" :min="0" :max="100" /></el-form-item>
         <el-form-item v-if="!isQuizType(taskForm.taskType)" label="附件"><el-upload :auto-upload="false" :limit="1" :on-change="handleTaskFile" accept="*"><el-button type="primary">选择文件</el-button></el-upload></el-form-item>
