@@ -39,6 +39,8 @@ export const getCourseByCode = (code) => api.get(`/api/courses/${code}`)
 export const addCourse = (data) => api.post('/api/courses', data)
 export const updateCourse = (code, data) => api.put(`/api/courses/${code}`, data)
 export const deleteCourse = (code) => api.delete(`/api/courses/${code}`)
+export const getCourseConfig = (code) => api.get(`/api/courses/${code}/config`)
+export const updateCourseConfig = (code, data) => api.put(`/api/courses/${code}/config`, data)
 
 // ============ 课时 (/api/lessons) ============
 export const getLessonList = (code) => api.get(`/api/lessons/${code}`)
@@ -125,6 +127,37 @@ export const getQuestionsByKnowledgePoint = (courseCode, knowledgePointId, param
   api.get('/api/questions', {
     params: { course_id: courseCode, knowledge_point_id: knowledgePointId, ...params }
   })
+export const extractKnowledgeCandidates = (courseCode, resourceId) => api.post(`/api/courses/${courseCode}/knowledge-extraction`, null, { params: { resourceId } })
+export const getKnowledgeExtractionCandidates = (courseCode) => api.get(`/api/courses/${courseCode}/knowledge-extraction`)
+export const acceptKnowledgeCandidate = (courseCode, candidateId, data) => api.post(`/api/courses/${courseCode}/knowledge-extraction/${candidateId}/accept`, data)
+export const rejectKnowledgeCandidate = (courseCode, candidateId) => api.post(`/api/courses/${courseCode}/knowledge-extraction/${candidateId}/reject`)
+export const getKnowledgeRelations = (courseCode) => api.get('/api/knowledge-relations', { params: { courseCode } })
+export const addKnowledgeRelation = (data) => api.post('/api/knowledge-relations', data)
+export const deleteKnowledgeRelation = (relationId) => api.delete(`/api/knowledge-relations/${relationId}`)
+
+// ============ 能力图谱 (/api/ability-map) ============
+export const getAbilityMap = (courseCode) => api.get('/api/ability-map', { params: { courseCode } })
+export const generateAbilityMap = (courseCode) => api.post('/api/ability-map/generate', null, { params: { courseCode } })
+export const addAbilityPoint = (data) => api.post('/api/ability-map', data)
+export const updateAbilityPoint = (abilityPointId, data) => api.put(`/api/ability-map/${abilityPointId}`, data)
+export const deleteAbilityPoint = (abilityPointId) => api.delete(`/api/ability-map/${abilityPointId}`)
+export const bindAbilityKnowledgePoint = (abilityPointId, knowledgePointId) => api.post(`/api/ability-map/${abilityPointId}/knowledge-points/${knowledgePointId}`)
+export const unbindAbilityKnowledgePoint = (abilityPointId, knowledgePointId) => api.delete(`/api/ability-map/${abilityPointId}/knowledge-points/${knowledgePointId}`)
+
+// ============ 班级运营与风险预警 (/api/classes, /api/risk-alerts) ============
+export const getClassList = (teacherId) => api.get('/api/classes', { params: teacherId ? { teacherId } : {} })
+export const addClass = (data) => api.post('/api/classes', data)
+export const updateClass = (id, data) => api.put(`/api/classes/${id}`, data)
+export const deleteClass = (id) => api.delete(`/api/classes/${id}`)
+export const getClassDetail = (id) => api.get(`/api/classes/${id}`)
+export const enrollClassStudent = (id, studentId) => api.post(`/api/classes/${id}/enroll`, { studentId })
+export const removeClassStudent = (id, studentId) => api.delete(`/api/classes/${id}/students/${studentId}`)
+export const getClassRiskAlerts = (id, status = 'active') => api.get(`/api/classes/${id}/risk-alerts`, { params: { status } })
+export const detectClassRisks = (id, courseId) => api.post(`/api/classes/${id}/risk-detect`, null, { params: { courseId } })
+export const resolveRiskAlert = (id) => api.put(`/api/risk-alerts/${id}/resolve`)
+export const generateTeachingSuggestions = (classId, courseId) => api.post(`/api/classes/${classId}/teaching-suggestions`, null, { params: { courseId } })
+export const getTeachingSuggestions = (classId) => api.get(`/api/classes/${classId}/teaching-suggestions`)
+export const getClassFeedbackSummary = (classId) => api.get(`/api/classes/${classId}/feedback-summary`)
 
 // ============ 错题本与学情分析 (/api/*/mistakes) ============
 export const getStudentWrongQuestions = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/mistakes`, { params })

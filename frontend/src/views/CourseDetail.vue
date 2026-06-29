@@ -6,8 +6,17 @@
       <div style="display:flex;gap:8px">
         <el-button type="primary" plain @click="$router.push('/course/' + code + '/resources')">课程资源</el-button>
         <el-button type="success" plain @click="$router.push('/course/' + code + '/knowledge-graph')">知识图谱</el-button>
+        <el-button v-if="userRole!=='student'" type="warning" plain @click="$router.push({ path: '/ability-map', query: { courseCode: code } })">能力图谱</el-button>
       </div>
     </div>
+    <el-alert v-if="userRole!=='student'" type="info" :closable="false" style="margin-top:10px">
+      <template #title>
+        <div class="course-config">
+          <span>爬塔模式</span>
+          <el-switch v-model="gameModeEnabled" :loading="configLoading" @change="saveCourseConfig" />
+        </div>
+      </template>
+    </el-alert>
     <el-tabs v-model="activeTab" style="margin-top:10px">
       <!-- 课时列表 -->
       <el-tab-pane label="课时列表" name="lessons">
@@ -192,7 +201,9 @@ import {
   updateTask,
   deleteTask as deleteTaskApi,
   addQuestionsToTask,
-  bindExamToTask
+  bindExamToTask,
+  getCourseConfig,
+  updateCourseConfig
 } from '../api'
 
 const route = useRoute()
@@ -207,6 +218,8 @@ const tasks = ref([])
 const loading = ref(true)
 const taskLoading = ref(true)
 const activeTab = ref('lessons')
+const gameModeEnabled = ref(false)
+const configLoading = ref(false)
 // 任务弹窗
 const taskDialog = ref(false)
 const isTaskEdit = ref(false)
@@ -335,12 +348,39 @@ const mergeQuestions = (base, added) => {
   return [...map.values()]
 }
 
+const loadCourseConfig = async () => {
+  if (userRole === 'student') return
+  configLoading.value = true
+  try {
+    const res = await getCourseConfig(code)
+    if (res.data.code === 200) gameModeEnabled.value = !!res.data.data.game_mode_enabled
+  } catch {
+    ElMessage.error('课程配置加载失败')
+  } finally {
+    configLoading.value = false
+  }
+}
+
+const saveCourseConfig = async (value) => {
+  configLoading.value = true
+  try {
+    const res = await updateCourseConfig(code, { game_mode_enabled: value })
+    if (res.data.code === 200) ElMessage.success('课程配置已保存')
+    else ElMessage.error(res.data.msg || '课程配置保存失败')
+  } catch {
+    ElMessage.error('课程配置保存失败')
+  } finally {
+    configLoading.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     const [lRes, cRes] = await Promise.all([getCourseLessons(code), searchCourse(code)])
     if (lRes.data.code === 200) lessons.value = lRes.data.data
     if (cRes.data.code === 200 && cRes.data.data.length > 0) courseName.value = cRes.data.data[0].courseName
     await loadKnowledgePoints()
+    await loadCourseConfig()
   } catch {
     ElMessage.error('课时加载失败')
   } finally { loading.value = false }
@@ -523,5 +563,11 @@ const deleteTask = async (taskNo) => {
   padding: 8px 10px;
   border: 1px dashed #dcdfe6;
   border-radius: 6px;
+}
+.course-config {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 </style>
