@@ -10,6 +10,8 @@ const routes = [
     component: MainLayout,
     children: [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue') },
+      { path: 'tower-map', name: 'TowerMap', component: () => import('../views/TowerMap.vue') },
+      { path: 'floor/:kpId', name: 'FloorView', component: () => import('../views/FloorView.vue') },
       { path: 'courses', name: 'CourseList', component: () => import('../views/CourseList.vue') },
       { path: 'quiz/take/:taskNo', name: 'QuizTake', component: () => import('../views/QuizTake.vue') },
       { path: 'course/:code', name: 'CourseDetail', component: () => import('../views/CourseDetail.vue') },
@@ -38,6 +40,30 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+const studentRoomRedirects = {
+  '/dashboard': 'start',
+  '/courses': 'treasure',
+  '/stats': 'event',
+  '/profile': 'rest',
+  '/wrong-book': 'shop',
+  '/progress': 'progress',
+  '/learning-analysis': 'event'
+}
+
+router.beforeEach(to => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
+  if (user.role !== 'student') return true
+
+  const room = studentRoomRedirects[to.path]
+  if (room) {
+    return {
+      path: '/tower-map',
+      query: { room }
+    }
+  }
+  return true
 })
 
 export default router

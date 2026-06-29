@@ -13,6 +13,14 @@ export const getStudentByNo = (no) => api.get(`/api/students/${no}`)
 export const updateStudent = (no, data) => api.put(`/api/students/${no}`, data)
 export const deleteStudent = (no) => api.delete(`/api/students/${no}`)
 export const searchStudent = (keyword) => api.get('/api/students/search', { params: { keyword } })
+export const getStudentProfile = (studentId, courseId) =>
+  api.get(`/api/students/${studentId}/profile`, { params: { course_id: courseId } })
+export const getTowerMap = (studentId, courseId) =>
+  api.get(`/api/students/${studentId}/tower-map`, { params: { course_id: courseId } })
+export const sendGameEvent = (studentId, body) =>
+  api.post(`/api/students/${studentId}/game-event`, body)
+export const getLeaderboard = (courseId, type = 'progress') =>
+  api.get('/api/leaderboard', { params: { course_id: courseId, type } })
 
 // ============ 教师 (/api/teachers) ============
 export const teacherLogin = (data) => api.post('/api/teachers/login', data)
@@ -113,6 +121,10 @@ export const recordCourseResourceView = (resourceId, data) => api.post(`/api/res
 export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
 export const getKnowledgePointDetail = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}`)
 export const getKnowledgePointPrerequisites = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}/prerequisites`)
+export const getQuestionsByKnowledgePoint = (courseCode, knowledgePointId, params = {}) =>
+  api.get('/api/questions', {
+    params: { course_id: courseCode, knowledge_point_id: knowledgePointId, ...params }
+  })
 
 // ============ 错题本与学情分析 (/api/*/mistakes) ============
 export const getStudentWrongQuestions = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/mistakes`, { params })

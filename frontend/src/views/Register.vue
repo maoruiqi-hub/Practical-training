@@ -55,18 +55,55 @@ const router = useRouter()
 const regType = ref('student')
 const form = reactive({ username: '', password: '', name: '', studentNo: '', teacherNo: '', college: '', className: '', major: '', phone: '' })
 
+const compact = payload => Object.fromEntries(
+  Object.entries(payload)
+    .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
+    .filter(([, value]) => value !== '' && value !== null && value !== undefined)
+)
+
+const buildPayload = () => {
+  const common = {
+    username: form.username,
+    password: form.password,
+    name: form.name,
+    college: form.college,
+    phone: form.phone
+  }
+
+  if (regType.value === 'student') {
+    return compact({
+      ...common,
+      studentNo: form.studentNo,
+      className: form.className
+    })
+  }
+
+  return compact({
+    ...common,
+    teacherNo: form.teacherNo,
+    major: form.major,
+    role: 'teacher'
+  })
+}
+
+const getErrorMessage = error =>
+  error?.response?.data?.msg ||
+  error?.response?.data?.message ||
+  error?.message ||
+  '注册失败'
+
 const handleRegister = async () => {
   try {
     const api = regType.value === 'student' ? studentRegister : teacherRegister
-    const res = await api(form)
+    const res = await api(buildPayload())
     if (res.data.code === 200) {
       ElMessage.success('注册成功，请登录')
       router.push('/login')
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res.data.msg || '注册失败')
     }
-  } catch {
-    ElMessage.error('注册失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
   }
 }
 </script>

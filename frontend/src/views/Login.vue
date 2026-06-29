@@ -34,6 +34,12 @@ const router = useRouter()
 const loginType = ref('student')
 const form = reactive({ username: '', password: '' })
 
+const getErrorMessage = error =>
+  error?.response?.data?.msg ||
+  error?.response?.data?.message ||
+  error?.message ||
+  '登录失败'
+
 const handleLogin = async () => {
   try {
     const api = loginType.value === 'student' ? studentLogin : teacherLogin
@@ -43,12 +49,12 @@ const handleLogin = async () => {
       user.role = loginType.value === 'student' ? 'student' : (res.data.data.role || 'teacher')
       localStorage.setItem('user', JSON.stringify(user))
       ElMessage.success('登录成功')
-      router.push('/dashboard')
+      router.push(user.role === 'student' ? '/tower-map' : '/dashboard')
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res.data.msg || '登录失败')
     }
-  } catch {
-    ElMessage.error('登录失败')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
   }
 }
 </script>
