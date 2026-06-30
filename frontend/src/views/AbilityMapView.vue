@@ -144,6 +144,38 @@
         <el-button type="primary" @click="bindKnowledge">绑定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="aiDraftDialog" title="AI 能力图谱草稿" width="720px">
+      <el-empty v-if="!aiDraft.length" description="暂无可采纳草稿" />
+      <div v-else class="draft-list">
+        <article
+          v-for="(item, index) in aiDraft"
+          :key="`${item.name}-${index}`"
+          class="draft-item"
+          :class="item.status"
+        >
+          <header>
+            <div>
+              <small>Draft {{ index + 1 }}</small>
+              <h4>{{ item.name }}</h4>
+            </div>
+            <el-tag size="small" :type="draftTagType(item.status)">{{ draftStatusText(item.status) }}</el-tag>
+          </header>
+          <p>{{ item.description || '暂无说明' }}</p>
+          <div class="draft-points">
+            <span v-for="name in item.knowledgePointNames" :key="name">{{ name }}</span>
+            <span v-if="!item.knowledgePointNames.length" class="empty">未指定知识点</span>
+          </div>
+          <strong v-if="item.error" class="draft-error">{{ item.error }}</strong>
+        </article>
+      </div>
+      <template #footer>
+        <el-button @click="aiDraftDialog=false">关闭</el-button>
+        <el-button type="primary" :loading="adoptingDraft" :disabled="!aiDraft.length" @click="adoptDraft">
+          采纳草稿
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -173,6 +205,9 @@ const mappings = ref([])
 const knowledgePoints = ref([])
 const abilityDialog = ref(false)
 const bindDialog = ref(false)
+const aiDraftDialog = ref(false)
+const aiDraft = ref([])
+const adoptingDraft = ref(false)
 const abilityForm = reactive({ abilityPointId: '', name: '', description: '' })
 const bindForm = reactive({ abilityPointId: '', knowledgePointId: '' })
 
@@ -290,14 +325,112 @@ async function generateMap() {
   try {
     const res = await generateAbilityMap(selectedCourse.value)
     if (res.data.code === 200) {
-      ElMessage.success('AI生成请求已完成')
-      loadAll()
+      const payload = res.data.data?.data || res.data.data || {}
+      aiDraft.value = normalizeAbilityDraft(payload)
+      aiDraftDialog.value = true
+      if (aiDraft.value.length) ElMessage.success('AI 草稿已生成')
+      else ElMessage.warning('AI 未返回可展示草稿')
     } else ElMessage.error(res.data.msg || 'AI生成失败')
   } catch {
     ElMessage.error('AI生成失败')
   } finally {
     generating.value = false
   }
+}
+
+function normalizeAbilityDraft(payload = {}) {
+  const list = Array.isArray(payload)
+    ? payload
+    : payload.abilityPoints || payload.abilities || payload.items || []
+  return list.map(item => {
+    const rawKnowledgePoints = item.knowledgePoints ||
+      item.knowledge_point_names ||
+      item.knowledgePointNames ||
+      item.points ||
+      []
+    const knowledgePointNames = (Array.isArray(rawKnowledgePoints) ? rawKnowledgePoints : [rawKnowledgePoints])
+      .map(point => typeof point === 'string' ? point : point?.name || point?.title || point?.knowledgePointName || '')
+      .filter(Boolean)
+    return {
+      name: item.name || item.title || '未命名能力点',
+      description: item.description || item.reason || '',
+      knowledgePointNames,
+      status: 'pending',
+      error: ''
+    }
+  })
+}
+
+function normalizeName(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function matchKnowledgePoint(name) {
+  const key = normalizeName(name)
+  if (!key) return null
+  return knowledgePoints.value.find(point => normalizeName(point.name) === key) ||
+    knowledgePoints.value.find(point => {
+      const pointName = normalizeName(point.name)
+      return pointName && (pointName.includes(key) || key.includes(pointName))
+    })
+}
+
+async function adoptDraft() {
+  if (!selectedCourse.value || !aiDraft.value.length) return
+  adoptingDraft.value = true
+  try {
+    for (const item of aiDraft.value) {
+      item.status = 'saving'
+      item.error = ''
+      try {
+        const addRes = await addAbilityPoint({
+          courseCode: selectedCourse.value,
+          name: item.name,
+          description: item.description
+        })
+        if (addRes.data.code !== 200) throw new Error(addRes.data.msg || '能力点保存失败')
+        const abilityPointId = addRes.data.data
+        const failures = []
+        for (const pointName of item.knowledgePointNames) {
+          const point = matchKnowledgePoint(pointName)
+          if (!point) {
+            failures.push(`未匹配：${pointName}`)
+            continue
+          }
+          const knowledgePointId = point.knowledgePointId || point.id || point.kpId
+          const bindRes = await bindAbilityKnowledgePoint(abilityPointId, knowledgePointId)
+          if (bindRes.data.code !== 200) failures.push(`绑定失败：${pointName}`)
+        }
+        item.status = failures.length ? 'partial' : 'saved'
+        item.error = failures.join('；')
+      } catch (error) {
+        item.status = 'failed'
+        item.error = error.message || '采纳失败'
+      }
+    }
+    await loadAll()
+    ElMessage.success('草稿采纳已处理')
+  } finally {
+    adoptingDraft.value = false
+  }
+}
+
+function draftTagType(status) {
+  if (status === 'saved') return 'success'
+  if (status === 'partial') return 'warning'
+  if (status === 'failed') return 'danger'
+  if (status === 'saving') return 'info'
+  return ''
+}
+
+function draftStatusText(status) {
+  return {
+    pending: '待采纳',
+    saving: '采纳中',
+    saved: '已采纳',
+    partial: '部分采纳',
+    failed: '失败'
+  }[status] || '待采纳'
 }
 
 function branchColor(index) {
@@ -539,6 +672,73 @@ onMounted(async () => {
 .knowledge-leaf.empty {
   color:#94a3b8;
   border-style:dashed;
+}
+.draft-list {
+  display:grid;
+  gap:12px;
+  max-height:58vh;
+  overflow:auto;
+}
+.draft-item {
+  display:grid;
+  gap:10px;
+  padding:14px;
+  border:1px solid #e5e7eb;
+  border-left:5px solid #94a3b8;
+  border-radius:8px;
+  background:#fff;
+}
+.draft-item.saved {
+  border-left-color:#16a34a;
+}
+.draft-item.partial {
+  border-left-color:#ca8a04;
+}
+.draft-item.failed {
+  border-left-color:#dc2626;
+}
+.draft-item header {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.draft-item small {
+  color:#64748b;
+  font-weight:700;
+}
+.draft-item h4 {
+  margin:3px 0 0;
+  color:#111827;
+  font-size:16px;
+  line-height:1.35;
+}
+.draft-item p {
+  margin:0;
+  color:#64748b;
+  line-height:1.5;
+}
+.draft-points {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.draft-points span {
+  padding:5px 9px;
+  border-radius:999px;
+  color:#334155;
+  background:#f1f5f9;
+  font-size:12px;
+}
+.draft-points .empty {
+  color:#94a3b8;
+  border:1px dashed #cbd5e1;
+  background:#fff;
+}
+.draft-error {
+  color:#b91c1c;
+  font-size:13px;
+  line-height:1.45;
 }
 @media (max-width: 960px) {
   .map-summary { align-items:flex-start; flex-direction:column; }
