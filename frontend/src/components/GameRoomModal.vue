@@ -163,7 +163,7 @@ const loadRoomData = async () => {
   if (props.roomType === 'shop' && props.studentId) {
     try {
       const res = await getStudentWrongQuestions(props.studentId)
-      mistakes.value = res.data.code === 200 ? (res.data.data || []) : []
+      mistakes.value = res.data.code === 200 ? (res.data.data?.wrongList || []) : []
     } catch {
       mistakes.value = []
     }
