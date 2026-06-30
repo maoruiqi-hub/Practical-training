@@ -6,7 +6,9 @@ import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.common.event.GameEventPublisher;
 import com.neu.CoursePlatform.entity.AbilityPoint;
+import com.neu.CoursePlatform.entity.KnowledgePointFloorStatus;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.mapper.KnowledgePointFloorStatusMapper;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.profile.entity.*;
 import com.neu.CoursePlatform.profile.mapper.*;
@@ -14,6 +16,7 @@ import com.neu.CoursePlatform.profile.rule.GrowthRuleEngine;
 import com.neu.CoursePlatform.profile.service.ProfileService;
 import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -31,6 +34,32 @@ public class ProfileServiceImpl implements ProfileService {
     private final GrowthRuleEngine growthEngine;
     private final GameEventPublisher eventPublisher;
     private final CourseGameConfigService gameConfigService;
+    private final KnowledgePointFloorStatusMapper floorStatusMapper;
+
+    @Autowired
+    public ProfileServiceImpl(StudentProfileMapper profileMapper,
+                             CompetencyScoreMapper competencyMapper,
+                             CompetencyScoreHistoryMapper historyMapper,
+                             GrowthHistoryMapper growthHistoryMapper,
+                             AchievementMapper achievementMapper,
+                             StudentMapper studentMapper,
+                             AbilityPointService abilityPointService,
+                             GrowthRuleEngine growthEngine,
+                             GameEventPublisher eventPublisher,
+                             CourseGameConfigService gameConfigService,
+                             KnowledgePointFloorStatusMapper floorStatusMapper) {
+        this.profileMapper = profileMapper;
+        this.competencyMapper = competencyMapper;
+        this.historyMapper = historyMapper;
+        this.growthHistoryMapper = growthHistoryMapper;
+        this.achievementMapper = achievementMapper;
+        this.studentMapper = studentMapper;
+        this.abilityPointService = abilityPointService;
+        this.growthEngine = growthEngine;
+        this.eventPublisher = eventPublisher;
+        this.gameConfigService = gameConfigService;
+        this.floorStatusMapper = floorStatusMapper;
+    }
 
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
                              CompetencyScoreMapper competencyMapper,
@@ -42,16 +71,8 @@ public class ProfileServiceImpl implements ProfileService {
                              GrowthRuleEngine growthEngine,
                              GameEventPublisher eventPublisher,
                              CourseGameConfigService gameConfigService) {
-        this.profileMapper = profileMapper;
-        this.competencyMapper = competencyMapper;
-        this.historyMapper = historyMapper;
-        this.growthHistoryMapper = growthHistoryMapper;
-        this.achievementMapper = achievementMapper;
-        this.studentMapper = studentMapper;
-        this.abilityPointService = abilityPointService;
-        this.growthEngine = growthEngine;
-        this.eventPublisher = eventPublisher;
-        this.gameConfigService = gameConfigService;
+        this(profileMapper, competencyMapper, historyMapper, growthHistoryMapper, achievementMapper,
+                studentMapper, abilityPointService, growthEngine, eventPublisher, gameConfigService, null);
     }
 
     @Override
@@ -372,6 +393,38 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
+    public void applyGameDelta(Integer studentNo, Integer courseCode,
+                               int hpDelta, int atkDelta, int defDelta, int expDelta, int coinDelta, int energyDelta,
+                               String source, String sourceId) {
+        StudentProfile profile = getOrCreateProfile(studentNo, courseCode);
+        profile.setHp(clamp(intValue(profile.getHp(), 100) + hpDelta, 0, 100));
+        profile.setAtk(clamp(intValue(profile.getAtk(), 50) + atkDelta, 0, 100));
+        profile.setDef(clamp(intValue(profile.getDef(), 50) + defDelta, 0, 100));
+        profile.setExp(Math.max(0, intValue(profile.getExp(), 0) + expDelta));
+        profile.setCoins(Math.max(0, intValue(profile.getCoins(), 0) + coinDelta));
+        profile.setEnergy(Math.max(0, intValue(profile.getEnergy(), 0) + energyDelta));
+        profile.setLevel(growthEngine.calcLevel(profile.getExp()));
+        profile.setLastActivityDate(new Date());
+        profile.setUpdatedAt(new Date());
+        profileMapper.updateById(profile);
+
+        if (hpDelta != 0) recordGrowthHistory(studentNo, courseCode, hpDelta, "hp", source, sourceId);
+        if (atkDelta != 0) recordGrowthHistory(studentNo, courseCode, atkDelta, "atk", source, sourceId);
+        if (defDelta != 0) recordGrowthHistory(studentNo, courseCode, defDelta, "def", source, sourceId);
+        if (expDelta != 0) recordGrowthHistory(studentNo, courseCode, expDelta, "exp", source, sourceId);
+        if (coinDelta != 0) recordGrowthHistory(studentNo, courseCode, coinDelta, "coins", source, sourceId);
+        if (energyDelta != 0) recordGrowthHistory(studentNo, courseCode, energyDelta, "energy", source, sourceId);
+    }
+
+    private static int intValue(Integer value, int fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    @Override
     public Map<String, Object> generateProfile(Integer studentNo, Integer courseCode) {
         StudentProfile profile = getOrCreateProfile(studentNo, courseCode);
         profile.setUpdatedAt(new Date());
@@ -567,40 +620,42 @@ public class ProfileServiceImpl implements ProfileService {
             scoreIndex.put(cs.getAbilityPointId(), cs.getScore());
         }
 
-        // 按 level 排序构建楼层顺序（模拟前置依赖：低level在前）
-        abilityMap.sort(Comparator.comparingInt(ap -> (int) ap.getOrDefault("level", 1)));
+        abilityMap.sort(Comparator.comparing(ap -> String.valueOf(ap.getOrDefault("id", ""))));
 
-        Set<String> clearedIds = new HashSet<>();
+        Map<String, String> storedStatus = new HashMap<>();
+        if (floorStatusMapper != null) {
+            List<KnowledgePointFloorStatus> statuses = floorStatusMapper.selectList(
+                    new LambdaQueryWrapper<KnowledgePointFloorStatus>()
+                            .eq(KnowledgePointFloorStatus::getStudentId, String.valueOf(studentNo))
+                            .eq(KnowledgePointFloorStatus::getCourseId, String.valueOf(courseCode)));
+            for (KnowledgePointFloorStatus status : statuses) {
+                storedStatus.put(status.getKnowledgePointId(), status.getStatus());
+            }
+        }
+
+        boolean previousCleared = true;
         for (int i = 0; i < abilityMap.size(); i++) {
             Map<String, Object> ap = abilityMap.get(i);
             String apId = (String) ap.get("id");
             int mastery = scoreIndex.getOrDefault(apId, 50);
-            int level = (int) ap.getOrDefault("level", 1);
-
-            // 判定楼层状态（§14.6 四色规则）
+            int level = i + 1;
+            String saved = storedStatus.get(apId);
             String floorStatus;
-            boolean isAccessible = false;
+            boolean masteryCleared = mastery >= 85;
 
-            if (mastery >= 85) {
-                floorStatus = "cleared";   // ✅ 灰色：已掌握
-                clearedIds.add(apId);
-            } else if (mastery < 40) {
-                // 检查前置是否已通
-                if (i == 0 || clearedIds.size() >= level - 1) {
-                    floorStatus = "weak";     // 🔥 橙色：薄弱
-                    isAccessible = true;
-                } else {
-                    floorStatus = "locked";   // 🔒 暗色：前置未通过
-                }
+            if ("cleared".equals(saved) || masteryCleared) {
+                floorStatus = "cleared";
+                previousCleared = true;
+            } else if (!previousCleared) {
+                floorStatus = "locked";
+            } else if (mastery < 40 || "weak".equals(saved)) {
+                floorStatus = "weak";
+                previousCleared = false;
             } else {
-                // mastery 40-84
-                if (i == 0 || clearedIds.size() >= level - 1) {
-                    floorStatus = "available"; // 🔓 亮色：可挑战
-                    isAccessible = true;
-                } else {
-                    floorStatus = "locked";    // 🔒 暗色：前置未通过
-                }
+                floorStatus = "available";
+                previousCleared = false;
             }
+            boolean isAccessible = !"locked".equals(floorStatus);
 
             Map<String, Object> floor = new LinkedHashMap<>();
             floor.put("kpId", apId);

@@ -400,9 +400,7 @@ const resolveCurrentAnswer = async ({ skipped = false } = {}) => {
     feedback.value = { type: 'wrong', text: `回答错误，HP -${damage}` }
   }
 
-  if (!usingFallbackQuestions.value) {
-    await recordAnswerEvent(correct, skipped)
-  }
+  await recordAnswerEvent(correct, skipped)
 
   setTimeout(() => {
     if (playerHp.value <= 0) {
@@ -491,6 +489,9 @@ const recordAnswerEvent = async (correct, skipped) => {
       event_type: skipped ? 'answer_skipped' : correct ? 'answer_correct' : 'answer_wrong',
       question_id: activeQuestion.value.questionId,
       knowledge_point_id: props.kpId,
+      ability_point_id: props.kpId,
+      task_type: props.roomType,
+      source_id: activeQuestion.value.questionId,
       hp_left: playerHp.value
     })
   } catch {

@@ -31,6 +31,11 @@ public final class GameEventTypes {
     public static final String ELITE_DEFEATED = "elite_defeated";
     /** 某层尝试后未通过 */
     public static final String FLOOR_FAILED = "floor_failed";
+    public static final String REWARD_PICKED = "reward_picked";
+    public static final String TREASURE_OPENED = "treasure_opened";
+    public static final String REST_TAKEN = "rest_taken";
+    public static final String SHOP_PURCHASED = "shop_purchased";
+    public static final String EVENT_RESOLVED = "event_resolved";
 
     // ============ §14.3.3 补给类事件（模块2/前端 发出） ============
 

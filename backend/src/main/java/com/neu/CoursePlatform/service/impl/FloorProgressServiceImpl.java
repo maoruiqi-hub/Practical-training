@@ -9,6 +9,7 @@ import com.neu.CoursePlatform.entity.KnowledgePointFloorStatus;
 import com.neu.CoursePlatform.mapper.KnowledgePointFloorStatusMapper;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.FloorProgressService;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -61,6 +62,33 @@ public class FloorProgressServiceImpl implements FloorProgressService {
         item.setUpdatedAt(now);
         if ("cleared".equals(status)) item.setClearedAt(now);
         return mapper.updateById(item) > 0;
+    }
+
+    @EventListener
+    public void onGameEvent(GameEvent event) {
+        if (event == null || event.getStudentId() == null || event.getCourseId() == null
+                || event.getEventType() == null || !gameConfigService.isEnabled(event.getCourseId())) {
+            return;
+        }
+        String knowledgePointId = knowledgePointId(event);
+        if (knowledgePointId == null || knowledgePointId.isBlank()) return;
+
+        switch (event.getEventType()) {
+            case GameEventTypes.FLOOR_CLEARED, GameEventTypes.ELITE_DEFEATED, GameEventTypes.BOSS_DEFEATED ->
+                    updateFloorStatus(event.getStudentId(), event.getCourseId(), knowledgePointId, "cleared");
+            case GameEventTypes.FLOOR_FAILED ->
+                    updateFloorStatus(event.getStudentId(), event.getCourseId(), knowledgePointId, "weak");
+            default -> { }
+        }
+    }
+
+    private static String knowledgePointId(GameEvent event) {
+        Map<String, Object> payload = event.getPayload() == null ? Map.of() : event.getPayload();
+        Object value = payload.get("knowledge_point_id");
+        if (value == null) value = payload.get("knowledgePointId");
+        if (value == null) value = payload.get("target_kp_id");
+        if (value == null) value = event.getSourceId();
+        return value == null ? null : String.valueOf(value);
     }
 
     private KnowledgePointFloorStatus find(String studentId, String courseId, String knowledgePointId) {

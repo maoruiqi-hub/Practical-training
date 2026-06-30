@@ -10,13 +10,13 @@
       </div>
     </div>
 
-    <div class="hud-core">
+    <div class="hud-core" :class="{ 'without-hp': !showHp }">
       <div class="level-chip">
         <span>Lv.{{ safeProfile.level }}</span>
         <strong>{{ levelName }}</strong>
       </div>
 
-      <div class="hp-block">
+      <div v-if="showHp" class="hp-block">
         <div class="hp-meta">
           <span>HP</span>
           <strong>{{ safeProfile.hp }}/{{ safeProfile.maxHp }}</strong>
@@ -53,7 +53,8 @@ import { computed } from 'vue'
 const props = defineProps({
   profile: { type: Object, default: () => ({}) },
   courseName: { type: String, default: 'Python 程序设计' },
-  compact: { type: Boolean, default: false }
+  compact: { type: Boolean, default: false },
+  showHp: { type: Boolean, default: true }
 })
 
 const clamp = value => Math.max(0, Math.min(100, Number(value) || 0))
@@ -165,6 +166,10 @@ h1 {
   grid-template-columns: 92px minmax(180px, 1.3fr) repeat(2, minmax(90px, 116px)) minmax(220px, .8fr);
   gap: 10px;
   align-items: stretch;
+}
+
+.hud-core.without-hp {
+  grid-template-columns: 92px repeat(2, minmax(90px, 116px)) minmax(220px, .8fr);
 }
 
 .level-chip,
@@ -289,6 +294,9 @@ h1 {
   .hud-core {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  .hud-core.without-hp {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .hp-block,
   .mini-stats {
     grid-column: span 2;
@@ -306,6 +314,9 @@ h1 {
     font-size: 20px;
   }
   .hud-core {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hud-core.without-hp {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .hp-block,

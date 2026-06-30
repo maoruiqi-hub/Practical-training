@@ -13,6 +13,9 @@ public interface ProfileService {
                                String abilityPointId, boolean correct);
     Map<String, Object> getProfileSummary(Integer studentNo, Integer courseCode);
     void addGrowth(Integer studentNo, Integer courseCode, int amount, String source, String sourceId);
+    void applyGameDelta(Integer studentNo, Integer courseCode,
+                        int hpDelta, int atkDelta, int defDelta, int expDelta, int coinDelta, int energyDelta,
+                        String source, String sourceId);
     Map<String, Object> generateProfile(Integer studentNo, Integer courseCode);
     List<CompetencyScore> updateAllCompetencyScores(Integer studentNo, Integer courseCode);
     List<Map<String, Object>> getCompetencyHistory(Integer studentNo, Integer courseCode, String abilityPointId);

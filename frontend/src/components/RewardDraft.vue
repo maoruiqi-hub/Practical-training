@@ -101,10 +101,18 @@ const rewards = computed(() => {
   ].slice(0, 3)
 })
 
+const profileDeltaFor = reward => {
+  if (reward.type === 'coin') return { coins: 20 }
+  if (reward.type === 'heal') return { hp: 15, def: 1 }
+  if (reward.type === 'relic') return { energy: 1, atk: 1 }
+  if (reward.id === 'indent-shield') return { def: 2 }
+  return { atk: 1 }
+}
+
 const pickReward = reward => {
   emit('reward-picked', {
     reward,
-    profileDelta: reward.type === 'coin' ? { coins: 20 } : reward.type === 'heal' ? { hp: 15 } : {},
+    profileDelta: profileDeltaFor(reward),
     card: reward.type === 'card' ? reward : null,
     relic: reward.type === 'relic' ? reward : null
   })

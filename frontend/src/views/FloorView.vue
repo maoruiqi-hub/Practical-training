@@ -312,6 +312,12 @@ const handleDiagnosed = async result => {
   })
   if (result.status === 'mastered' && !isBossFloor.value) {
     battleResult.value = { cleared: true, correctRate: result.correctRate || 1 }
+    await sendEvent('floor_cleared', {
+      correct_rate: result.correctRate || 1,
+      cleared: true,
+      room_type: roomType.value
+    })
+    await refreshProfile()
     phase.value = 'reward'
     ElMessage.success('诊断表现优秀，普通战斗已跳过，进入奖励选择')
     return
@@ -324,10 +330,11 @@ const handleBattleEnd = async result => {
   if (Number.isFinite(Number(result.hpLeft))) {
     profile.value = { ...profile.value, hp: Number(result.hpLeft), maxHp: playerMaxHp.value }
   }
-  await sendEvent('battle_finished', {
+  await sendEvent(battleResultEvent(result), {
     correct_rate: result.correctRate,
     cleared: result.cleared,
-    room_type: roomType.value
+    room_type: roomType.value,
+    hp_left: result.hpLeft
   })
   await refreshProfile()
   phase.value = result.cleared ? 'reward' : 'settlement'
@@ -335,12 +342,21 @@ const handleBattleEnd = async result => {
 
 const handleRewardPicked = async payload => {
   pickedReward.value = payload.reward
-  applyProfileDelta(payload.profileDelta || {})
+  const delta = payload.profileDelta || {}
+  applyProfileDelta(delta)
   await sendEvent('reward_picked', {
     reward_id: payload.reward?.id,
-    reward_name: payload.reward?.name
+    reward_name: payload.reward?.name,
+    reward_type: payload.reward?.type,
+    hp_delta: delta.hp || 0,
+    atk_delta: delta.atk || 0,
+    def_delta: delta.def || 0,
+    exp_delta: delta.exp || 0,
+    coin_delta: delta.coins || 0,
+    energy_delta: delta.energy || 0
   })
-  ElMessage.success(`获得奖励：${payload.reward?.name || '金币'}`)
+  await refreshProfile()
+  ElMessage.success('Reward received')
   phase.value = 'settlement'
 }
 
@@ -349,17 +365,30 @@ const applyProfileDelta = delta => {
   const next = { ...profile.value }
   if (delta.hp) next.hp = Math.min(Number(next.maxHp || next.max_hp || 100), Number(next.hp || 0) + Number(delta.hp))
   if (delta.coins) next.coins = Number(next.coins || 0) + Number(delta.coins)
+  if (delta.energy) next.energy = Math.max(0, Number(next.energy || 0) + Number(delta.energy))
+  if (delta.atk) next.atk = Math.max(0, Math.min(100, Number(next.atk || 0) + Number(delta.atk)))
+  if (delta.def) next.def = Math.max(0, Math.min(100, Number(next.def || 0) + Number(delta.def)))
+  if (delta.exp) next.exp = Math.max(0, Number(next.exp || 0) + Number(delta.exp))
   profile.value = next
+}
+
+const battleResultEvent = result => {
+  if (!result.cleared) return 'floor_failed'
+  if (isBossFloor.value) return 'boss_defeated'
+  if (roomType.value === 'elite') return 'elite_defeated'
+  return 'floor_cleared'
 }
 
 const sendEvent = async (eventType, extra = {}) => {
   try {
-    await sendGameEvent(studentId.value, {
+    const res = await sendGameEvent(studentId.value, {
       course_id: courseId.value,
       knowledge_point_id: kpId.value,
+      source_id: kpId.value,
       event_type: eventType,
       ...extra
     })
+    if (res.data.code === 200) profile.value = pickProfile(res.data.data)
   } catch {
     // 行为记录失败不阻断学习流程。
   }
