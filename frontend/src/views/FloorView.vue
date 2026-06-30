@@ -12,6 +12,10 @@
           <h1>{{ floor.kpName || floorName }}</h1>
         </div>
         <div class="header-actions">
+          <el-button class="ghost-button" @click="openAiTutor">
+            <el-icon><ChatLineRound /></el-icon>
+            AI 导师
+          </el-button>
           <el-button class="ghost-button" @click="supplyVisible = true">
             <el-icon><Box /></el-icon>
             补给
@@ -71,6 +75,7 @@
           :max-hp="playerMaxHp"
           @battle-end="handleBattleEnd"
           @profile-refresh="refreshProfile"
+          @ai-help="openAiTutor"
         />
 
         <RewardDraft
@@ -121,6 +126,11 @@
           </div>
           <el-empty v-else description="尚未诊断" :image-size="80" />
         </section>
+
+        <KnowledgeContextPanel
+          :course-id="courseId"
+          :knowledge-point-id="kpId"
+        />
       </aside>
     </main>
 
@@ -132,6 +142,15 @@
       :profile="profile"
       @used="refreshProfile"
     />
+
+    <AiTutorPanel
+      v-model="aiVisible"
+      :knowledge-point-id="kpId"
+      :knowledge-point-name="floor.kpName || floorName"
+      :course-id="courseId"
+      :resource-id="aiResourceId"
+      :mode="aiMode"
+    />
   </div>
 </template>
 
@@ -139,11 +158,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Aim, ArrowLeft, Box } from '@element-plus/icons-vue'
+import { Aim, ArrowLeft, Box, ChatLineRound } from '@element-plus/icons-vue'
+import AiTutorPanel from '../components/AiTutorPanel.vue'
 import BattleRoom from '../components/BattleRoom.vue'
 import BossRoom from '../components/BossRoom.vue'
 import DiagnosisRoom from '../components/DiagnosisRoom.vue'
 import GameHud from '../components/GameHud.vue'
+import KnowledgeContextPanel from '../components/KnowledgeContextPanel.vue'
 import RewardDraft from '../components/RewardDraft.vue'
 import SupplyModal from '../components/SupplyModal.vue'
 import { gameBackgrounds } from '../data/gameAssetManifest'
@@ -161,6 +182,9 @@ const diagnosisResult = ref(null)
 const battleResult = ref({ cleared: false, correctRate: 0 })
 const pickedReward = ref(null)
 const supplyVisible = ref(false)
+const aiVisible = ref(false)
+const aiMode = ref('qa')
+const aiResourceId = ref('')
 
 const kpId = computed(() => route.params.kpId)
 const roomType = computed(() => String(route.query.roomType || (route.query.boss === '1' ? 'boss' : 'battle')))
@@ -302,6 +326,12 @@ const loadData = async () => {
 
 const startBattle = () => {
   phase.value = isBossFloor.value ? 'boss' : 'battle'
+}
+
+const openAiTutor = question => {
+  aiMode.value = 'qa'
+  aiResourceId.value = question?.resourceId || ''
+  aiVisible.value = true
 }
 
 const handleDiagnosed = async result => {

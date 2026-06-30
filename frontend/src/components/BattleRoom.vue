@@ -117,6 +117,7 @@
 
       <div class="scene-tools">
         <button type="button" :disabled="hinting || choiceLocked" @click="useHint">提示</button>
+        <button type="button" :disabled="!activeQuestion.questionId" @click="emit('ai-help', activeQuestion)">AI 导师</button>
         <button type="button" :disabled="choiceLocked" @click="gainBlock">护盾</button>
         <button type="button" :disabled="skipping || choiceLocked" @click="skipQuestion">跳过</button>
       </div>
@@ -142,7 +143,7 @@ const props = defineProps({
   maxHp: { type: Number, default: 100 }
 })
 
-const emit = defineEmits(['battle-end', 'profile-refresh'])
+const emit = defineEmits(['battle-end', 'profile-refresh', 'ai-help'])
 
 const loading = ref(true)
 const submitting = ref(false)
