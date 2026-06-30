@@ -62,6 +62,9 @@ export const addTask = (data) => {
   Object.entries(data).forEach(([key, value]) => formData.append(key, value ?? ''))
   return api.post('/api/tasks', formData)
 }
+export const assignTask = (taskNo, data) => api.post(`/api/tasks/${taskNo}/assign`, data)
+export const getAssignedTasks = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/assigned-tasks`, { params })
+export const cancelTaskAssignment = (assignmentId) => api.delete(`/api/task-assignments/${assignmentId}`)
 export const getTaskDetail = (taskNo) => api.get('/api/tasks/' + taskNo)
 export const updateTask = (code, no, data) => api.put(`/api/tasks/${code}/${no}`, data, {
   headers: { 'Content-Type': 'application/json' }
@@ -119,6 +122,10 @@ export const getAiReview = (id) => api.get(`/submission/ai-review/${id}`)
 export const getCourseResources = (courseCode, params = {}) => api.get('/api/resources', {
   params: { ...params, courseCode }
 })
+export const uploadCourseResource = (data) => api.post('/api/resources', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
+export const deleteCourseResource = (resourceId) => api.delete(`/api/resources/${resourceId}`)
 export const getCourseResourcePreview = (resourceId) => api.get(`/api/resources/${resourceId}/preview`)
 export const recordCourseResourceView = (resourceId, data) => api.post(`/api/resources/${resourceId}/view-events`, data)
 export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })

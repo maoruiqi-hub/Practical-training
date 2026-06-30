@@ -559,6 +559,8 @@ public class ProfileServiceImpl implements ProfileService {
                 entry.put("coins", 0);
                 entry.put("status", "学号暂不支持画像");
                 entry.put("badgeCount", 0);
+                entry.put("competencyAverage", 0);
+                entry.put("weakPointCount", 0);
                 result.add(entry);
                 continue;
             }
@@ -579,6 +581,21 @@ public class ProfileServiceImpl implements ProfileService {
                 entry.put("status", profile.getStatus());
                 entry.put("lastActivityDate", profile.getLastActivityDate());
 
+                LambdaQueryWrapper<CompetencyScore> cq = new LambdaQueryWrapper<>();
+                cq.eq(CompetencyScore::getStudentNo, numericStudentNo)
+                  .eq(CompetencyScore::getCourseCode, courseCode);
+                List<CompetencyScore> scores = competencyMapper.selectList(cq);
+                int avgScore = scores.isEmpty() ? 0 : (int) Math.round(scores.stream()
+                    .filter(score -> score.getScore() != null)
+                    .mapToInt(CompetencyScore::getScore)
+                    .average()
+                    .orElse(0));
+                long weakCount = scores.stream()
+                    .filter(score -> score.getScore() != null && score.getScore() < 60)
+                    .count();
+                entry.put("competencyAverage", avgScore);
+                entry.put("weakPointCount", weakCount);
+
                 // 徽章数量
                 LambdaQueryWrapper<Achievement> aq = new LambdaQueryWrapper<>();
                 aq.eq(Achievement::getStudentNo, numericStudentNo)
@@ -595,6 +612,8 @@ public class ProfileServiceImpl implements ProfileService {
                 entry.put("coins", 0);
                 entry.put("status", "未激活");
                 entry.put("badgeCount", 0);
+                entry.put("competencyAverage", 0);
+                entry.put("weakPointCount", 0);
             }
             result.add(entry);
         }
