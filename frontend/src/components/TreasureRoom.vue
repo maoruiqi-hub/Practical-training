@@ -22,17 +22,27 @@
         </div>
 
         <div v-else class="choice-grid reward">
-          <button
+          <article
             v-for="resource in shownResources"
             :key="resource.resourceId"
-            type="button"
             class="choice-card reward-card"
+            role="button"
+            tabindex="0"
             @click="claimResource(resource)"
+            @keydown.enter.prevent="claimResource(resource)"
           >
             <small>{{ resource.resourceType || 'Resource' }}</small>
             <strong>{{ resource.title || '课程资源' }}</strong>
             <span>{{ resource.chapter || nodeName || courseName }}</span>
-          </button>
+            <button
+              v-if="isPptResource(resource)"
+              type="button"
+              class="mini-action"
+              @click.stop="openLecture(resource)"
+            >
+              AI 讲解
+            </button>
+          </article>
 
           <button
             v-if="!shownResources.length"
@@ -47,12 +57,22 @@
         </div>
       </div>
     </section>
+
+    <AiTutorPanel
+      v-model="lectureVisible"
+      :knowledge-point-id="lectureKnowledgePointId"
+      :knowledge-point-name="nodeName"
+      :course-id="courseId"
+      :resource-id="lectureResourceId"
+      mode="lecture"
+    />
   </el-dialog>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import AiTutorPanel from './AiTutorPanel.vue'
 import { gameBackgrounds, mapLegendIcons } from '../data/gameAssetManifest'
 import { getCourseResources, recordCourseResourceView } from '../api'
 
@@ -67,6 +87,9 @@ const emit = defineEmits(['update:modelValue', 'room-complete'])
 
 const loading = ref(false)
 const resources = ref([])
+const lectureVisible = ref(false)
+const lectureResourceId = ref('')
+const lectureKnowledgePointId = ref('')
 
 const visible = computed({
   get: () => props.modelValue,
@@ -92,6 +115,22 @@ const loadResources = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const isPptResource = resource => {
+  const type = String(resource.resourceType || resource.resource_type || resource.type || '').toLowerCase()
+  return type.includes('ppt') || type.includes('powerpoint')
+}
+
+const openLecture = resource => {
+  const kpId = props.selectedNode?.kpId || resource.knowledgePointId || resource.knowledge_point_id
+  if (!kpId) {
+    ElMessage.warning('当前资源缺少知识点')
+    return
+  }
+  lectureKnowledgePointId.value = kpId
+  lectureResourceId.value = resource.resourceId || resource.resource_id || resource.id
+  lectureVisible.value = true
 }
 
 const closeWithReward = rewardName => {
@@ -242,6 +281,22 @@ watch(() => [props.modelValue, props.courseId, props.selectedNode?.kpId], loadRe
   margin-top: 12px;
   color: #e7d1a2;
   line-height: 1.5;
+}
+
+.mini-action {
+  min-height: 32px;
+  margin-top: 14px;
+  padding: 6px 10px;
+  border: 1px solid rgba(237, 185, 90, .58);
+  border-radius: 6px;
+  color: #fff5d6;
+  background: rgba(183, 91, 40, .58);
+  cursor: pointer;
+}
+
+.mini-action:hover {
+  border-color: rgba(255, 226, 163, .86);
+  background: rgba(183, 91, 40, .78);
 }
 
 .fallback {

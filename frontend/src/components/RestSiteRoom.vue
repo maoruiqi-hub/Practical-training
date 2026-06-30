@@ -56,25 +56,35 @@
             </button>
             <button type="button" class="choice-card" @click="reviewWeakPoint">
               <small>Review</small>
-              <strong>复习薄弱点</strong>
-              <span>按错题线索完成休息点，把复习收益交给后端结算。</span>
+              <strong>{{ reviewStarted ? '完成薄弱点复习' : '复习薄弱点' }}</strong>
+              <span>{{ reviewStarted ? '导师复习已打开，可以把休息点复习收益交给后端结算。' : '按错题线索打开 AI 导师，先把薄弱知识点讲清楚。' }}</span>
             </button>
           </div>
         </div>
       </div>
     </section>
+
+    <AiTutorPanel
+      v-model="aiVisible"
+      :knowledge-point-id="aiKnowledgePointId"
+      :knowledge-point-name="weakPointTitle"
+      :course-id="courseId"
+      mode="qa"
+    />
   </el-dialog>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import AiTutorPanel from './AiTutorPanel.vue'
 import { gameBackgrounds, mapLegendIcons } from '../data/gameAssetManifest'
 import { getStudentWrongQuestions } from '../api'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   studentId: { type: [String, Number], default: '' },
+  courseId: { type: [String, Number], default: '' },
   profile: { type: Object, default: () => ({}) },
   selectedNode: { type: Object, default: () => ({}) }
 })
@@ -83,6 +93,9 @@ const emit = defineEmits(['update:modelValue', 'open-supply', 'room-complete'])
 
 const loading = ref(false)
 const weakCards = ref([])
+const aiVisible = ref(false)
+const aiKnowledgePointId = ref('')
+const reviewStarted = ref(false)
 
 const visible = computed({
   get: () => props.modelValue,
@@ -126,11 +139,29 @@ const takeRest = () => {
 }
 
 const reviewWeakPoint = () => {
+  if (reviewStarted.value) {
+    ElMessage.success('薄弱点复习完成')
+    complete('weak_point_review')
+    return
+  }
+  const targetId = weakPoint.value?.knowledgePointId ||
+    weakPoint.value?.knowledge_point_id ||
+    props.selectedNode?.kpId ||
+    props.selectedNode?.knowledgePointId
+  if (targetId) {
+    aiKnowledgePointId.value = targetId
+    reviewStarted.value = true
+    aiVisible.value = true
+    return
+  }
   ElMessage.success('薄弱点复习完成')
   complete('weak_point_review')
 }
 
-watch(() => [props.modelValue, props.studentId, props.selectedNode?.kpId], loadWeakCards, { immediate: true })
+watch(() => [props.modelValue, props.studentId, props.selectedNode?.kpId], () => {
+  if (props.modelValue) reviewStarted.value = false
+  loadWeakCards()
+}, { immediate: true })
 </script>
 
 <style scoped>
