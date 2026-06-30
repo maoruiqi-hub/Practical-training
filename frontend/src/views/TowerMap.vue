@@ -56,9 +56,13 @@
           <p class="panel-copy">{{ previewCopy }}</p>
           <div v-if="selectedNode" class="intel-list">
             <span>??? <b>{{ selectedNode.kpName }}</b></span>
+            <span>掌握度 <b>{{ selectedNode.masteryRate }}%</b></span>
+            <span v-if="selectedNode.masterySource">来源 <b>{{ masterySourceLabel(selectedNode.masterySource) }}</b></span>
+            <span v-if="selectedNode.abilityPointName">关联能力 <b>{{ selectedNode.abilityPointName }}</b></span>
             <span>?? <b>{{ roomLabel(selectedNode.roomType) }}</b></span>
             <span>?? <b>{{ riskText(selectedNode.risk) }}</b></span>
             <span>?? <b>{{ rewardText(selectedNode) }}</b></span>
+            <span v-if="selectedNode.statusReason">状态原因 <b :title="selectedNode.statusReason">{{ selectedNode.statusReason }}</b></span>
           </div>
           <el-button
             class="spire-button"
@@ -94,6 +98,7 @@
       v-else-if="activeRoomType === 'rest'"
       v-model="roomVisible"
       :student-id="studentId"
+      :course-id="courseId"
       :profile="profile"
       :selected-node="selectedNode"
       @open-supply="openSupply"
@@ -186,6 +191,10 @@ const fallbackFloors = fallbackNames.map((name, index) => ({
   kpName: name,
   level: index + 1,
   masteryRate: index === 0 ? 42 : 0,
+  masterySource: 'demo',
+  abilityPointId: '',
+  abilityPointName: '',
+  statusReason: 'fallback_demo',
   status: index === 0 ? 'available' : 'locked',
   roomType: roomPattern[index]
 }))
@@ -212,6 +221,10 @@ const normalizeFloors = list => {
       kpName: item.kpName || item.knowledgePointName || item.name || item.title || `Floor ${index + 1}`,
       level,
       masteryRate: Number(item.masteryRate ?? item.mastery_rate ?? item.mastery ?? 0),
+      masterySource: item.masterySource || item.mastery_source || '',
+      abilityPointId: item.abilityPointId || item.ability_point_id || '',
+      abilityPointName: item.abilityPointName || item.ability_point_name || '',
+      statusReason: item.statusReason || item.status_reason || '',
       status: normalizeStatus(item, index),
       roomType: item.boss || item.isBoss || item.is_boss ? 'boss' : roomType
     }
@@ -335,6 +348,13 @@ const riskText = risk => ({
   normal: 'Normal',
   high: 'High'
 })[risk] || 'Normal'
+
+const masterySourceLabel = source => ({
+  knowledge_mastery: '来自知识点掌握度',
+  competency_score: '来自能力评分',
+  demo: '演示数据',
+  none: '暂无掌握度'
+})[source] || source
 
 const rewardText = node => ({
   diagnosis: 'Initial state',
