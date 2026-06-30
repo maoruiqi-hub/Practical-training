@@ -124,6 +124,12 @@ export const recordCourseResourceView = (resourceId, data) => api.post(`/api/res
 export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
 export const getKnowledgePointDetail = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}`)
 export const getKnowledgePointPrerequisites = (knowledgePointId) => api.get(`/api/knowledge-points/${knowledgePointId}/prerequisites`)
+export const explainKnowledgePoint = (knowledgePointId, data) =>
+  api.post(`/api/knowledge-points/${knowledgePointId}/explain`, data)
+export const askKnowledgePoint = (knowledgePointId, data) =>
+  api.post(`/api/knowledge-points/${knowledgePointId}/qa`, data)
+export const getKnowledgeMastery = (studentNo, courseCode) =>
+  api.get(`/api/knowledge-mastery/student/${studentNo}`, { params: { courseCode } })
 export const getQuestionsByKnowledgePoint = (courseCode, knowledgePointId, params = {}) =>
   api.get('/api/questions', {
     params: { course_id: courseCode, knowledge_point_id: knowledgePointId, ...params }
