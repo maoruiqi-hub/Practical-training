@@ -19,12 +19,14 @@
             <el-table-column prop="name" label="班级" min-width="120" show-overflow-tooltip />
             <el-table-column prop="courseId" label="课程" width="100" />
             <el-table-column prop="semester" label="学期" width="120" show-overflow-tooltip />
-            <el-table-column label="操作" width="130">
+            <el-table-column label="操作" width="150" fixed="right">
               <template #default="{ row }">
+                <div class="row-actions">
                 <el-button size="small" @click.stop="openClass(row)">编辑</el-button>
                 <el-popconfirm title="删除空班级？" @confirm="removeClass(row.id)">
                   <template #reference><el-button size="small" type="danger" @click.stop>删除</el-button></template>
                 </el-popconfirm>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -46,15 +48,23 @@
 
           <el-tabs v-model="activeTab">
             <el-tab-pane label="学生名单" name="students">
-              <div class="inline-form">
-                <el-input v-model="studentId" placeholder="学生编号" style="width:220px" @keyup.enter="enrollStudent" />
-                <el-button type="primary" @click="enrollStudent">添加学生</el-button>
+              <div class="inline-form student-tools">
+                <el-button type="primary" @click="openStudentPicker">从学生库添加</el-button>
+                <el-select v-model="classImportName" placeholder="按行政班导入" filterable clearable style="width:200px">
+                  <el-option v-for="name in classNameOptions" :key="name" :label="name" :value="name" />
+                </el-select>
+                <el-button :disabled="!classImportName" @click="importByClassName">导入行政班</el-button>
               </div>
               <el-table :data="studentRows" empty-text="暂无学生">
-                <el-table-column prop="studentId" label="学生编号" />
-                <el-table-column label="操作" width="100">
+                <el-table-column prop="studentNo" label="学号" width="130" />
+                <el-table-column prop="name" label="姓名" width="100" />
+                <el-table-column prop="college" label="学院" width="120" />
+                <el-table-column prop="className" label="行政班" width="130" />
+                <el-table-column prop="username" label="账号" min-width="120" />
+                <el-table-column prop="phone" label="手机号" width="130" />
+                <el-table-column label="操作" width="90">
                   <template #default="{ row }">
-                    <el-button size="small" type="danger" text @click="removeStudent(row.studentId)">移除</el-button>
+                    <el-button size="small" type="danger" text @click="removeStudent(row.studentNo)">移除</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -121,6 +131,42 @@
         <el-button type="primary" @click="saveClass">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="studentDialog" title="从学生库添加" width="860px">
+      <div class="picker-toolbar">
+        <el-input v-model="studentKeyword" placeholder="搜索姓名、学号、账号或班级" clearable style="width:260px" @keyup.enter="loadStudentCandidates" />
+        <el-select v-model="studentClassFilter" placeholder="行政班" filterable clearable style="width:180px" @change="applyStudentFilters">
+          <el-option v-for="name in classNameOptions" :key="name" :label="name" :value="name" />
+        </el-select>
+        <el-button :loading="studentLoading" @click="loadStudentCandidates">搜索</el-button>
+      </div>
+      <el-table
+        ref="studentTableRef"
+        v-loading="studentLoading"
+        :data="filteredStudentCandidates"
+        height="420"
+        row-key="studentNo"
+        empty-text="暂无学生"
+        @selection-change="selectedStudents = $event"
+      >
+        <el-table-column type="selection" width="46" :selectable="row => !enrolledStudentNos.has(row.studentNo)" />
+        <el-table-column prop="studentNo" label="学号" width="130" />
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column prop="college" label="学院" width="120" />
+        <el-table-column prop="className" label="行政班" width="130" />
+        <el-table-column prop="username" label="账号" min-width="120" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag v-if="enrolledStudentNos.has(row.studentNo)" size="small" type="info">已加入</el-tag>
+            <el-tag v-else size="small" type="success">可加入</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="studentDialog=false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedStudents.length" @click="enrollSelectedStudents">加入选中学生</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -131,12 +177,14 @@ import {
   addClass,
   deleteClass,
   detectClassRisks,
-  enrollClassStudent,
+  enrollClassStudents,
+  enrollClassStudentsByClassName,
   generateTeachingSuggestions,
   getClassDetail,
   getClassFeedbackSummary,
   getClassList,
   getClassRiskAlerts,
+  getStudentRoster,
   getTeachingSuggestions,
   removeClassStudent,
   resolveRiskAlert,
@@ -155,11 +203,25 @@ const loading = ref(false)
 const detecting = ref(false)
 const suggesting = ref(false)
 const activeTab = ref('students')
-const studentId = ref('')
 const classDialog = ref(false)
+const studentDialog = ref(false)
+const studentLoading = ref(false)
+const studentKeyword = ref('')
+const studentClassFilter = ref('')
+const classImportName = ref('')
+const studentCandidates = ref([])
+const filteredStudentCandidates = ref([])
+const selectedStudents = ref([])
+const studentTableRef = ref(null)
 const classForm = reactive({ id: '', name: '', courseId: '', semester: '' })
 
-const studentRows = computed(() => (detail.value?.studentIds || []).map(id => ({ studentId: id })))
+const studentRows = computed(() => detail.value?.students || [])
+const enrolledStudentNos = computed(() => new Set(studentRows.value.map(student => student.studentNo)))
+const classNameOptions = computed(() => {
+  const names = new Set(studentCandidates.value.map(student => student.className).filter(Boolean))
+  studentRows.value.forEach(student => { if (student.className) names.add(student.className) })
+  return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+})
 
 async function loadCourses() {
   const res = await searchCourse('')
@@ -201,6 +263,39 @@ async function loadClassDetail() {
   if (feedbackRes.data.code === 200) feedback.value = feedbackRes.data.data || []
 }
 
+async function loadStudentCandidates() {
+  studentLoading.value = true
+  try {
+    const res = await getStudentRoster()
+    if (res.data.code === 200) {
+      const keyword = studentKeyword.value.trim().toLowerCase()
+      studentCandidates.value = (res.data.data || []).filter(student => {
+        if (!keyword) return true
+        return [student.studentNo, student.name, student.username, student.className, student.college]
+          .filter(Boolean)
+          .some(value => String(value).toLowerCase().includes(keyword))
+      })
+      applyStudentFilters()
+    } else ElMessage.error(res.data.msg || '学生加载失败')
+  } catch {
+    ElMessage.error('学生加载失败')
+  } finally {
+    studentLoading.value = false
+  }
+}
+
+function applyStudentFilters() {
+  filteredStudentCandidates.value = studentCandidates.value.filter(student =>
+    !studentClassFilter.value || student.className === studentClassFilter.value
+  )
+}
+
+async function openStudentPicker() {
+  studentDialog.value = true
+  selectedStudents.value = []
+  await loadStudentCandidates()
+}
+
 function openClass(row) {
   Object.assign(classForm, row || { id: '', name: '', courseId: courses.value[0]?.courseCode || '', semester: '' })
   classDialog.value = true
@@ -227,14 +322,29 @@ async function removeClass(id) {
   } else ElMessage.error(res.data.msg || '删除失败')
 }
 
-async function enrollStudent() {
-  if (!studentId.value) return
-  const res = await enrollClassStudent(currentClass.value.id, studentId.value)
+function showEnrollResult(result) {
+  const added = result?.added?.length || 0
+  const skipped = result?.duplicatedOrFailed?.length || 0
+  const missing = result?.missing?.length || 0
+  ElMessage.success(`已加入 ${added} 人${skipped ? `，跳过 ${skipped} 人` : ''}${missing ? `，不存在 ${missing} 人` : ''}`)
+}
+
+async function enrollSelectedStudents() {
+  const ids = selectedStudents.value.map(student => student.studentNo)
+  const res = await enrollClassStudents(currentClass.value.id, ids)
   if (res.data.code === 200) {
-    ElMessage.success('已添加')
-    studentId.value = ''
-    loadClassDetail()
+    showEnrollResult(res.data.data)
+    studentDialog.value = false
+    await loadClassDetail()
   } else ElMessage.error(res.data.msg || '添加失败')
+}
+
+async function importByClassName() {
+  const res = await enrollClassStudentsByClassName(currentClass.value.id, classImportName.value)
+  if (res.data.code === 200) {
+    showEnrollResult(res.data.data)
+    await loadClassDetail()
+  } else ElMessage.error(res.data.msg || '导入失败')
 }
 
 async function removeStudent(id) {
@@ -287,6 +397,7 @@ const riskTag = level => level === 'high' ? 'danger' : level === 'medium' ? 'war
 onMounted(async () => {
   await loadCourses()
   await loadClasses()
+  await loadStudentCandidates()
 })
 </script>
 
@@ -298,4 +409,6 @@ onMounted(async () => {
 .actions { display:flex; gap:10px; align-items:center; }
 .card-head { display:flex; justify-content:space-between; align-items:center; gap:12px; }
 .inline-form { display:flex; gap:10px; margin-bottom:12px; }
+.row-actions { display:flex; align-items:center; gap:8px; white-space:nowrap; }
+.row-actions :deep(.el-button + .el-button) { margin-left:0; }
 </style>

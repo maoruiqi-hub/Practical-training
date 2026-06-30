@@ -6,12 +6,27 @@
     </div>
     <div v-loading="loading" element-loading-text="正在加载课程..." style="min-height:300px">
       <el-row :gutter="20">
-        <el-col v-for="c in courses" :key="c.courseCode" :span="6" style="margin-bottom:20px">
-          <el-card shadow="hover" :body-style="{ padding: '0' }" class="course-card" @click="$router.push('/course/' + c.courseCode)">
-            <img v-if="c.coverUrl" :src="'/practical-training/' + c.coverUrl" class="cover-img" />
+        <el-col
+          v-for="c in courses"
+          :key="c.courseCode"
+          :xs="24"
+          :sm="courses.length === 1 ? 18 : 12"
+          :md="courses.length === 1 ? 14 : 8"
+          :lg="courses.length === 1 ? 10 : 6"
+          :xl="courses.length === 1 ? 9 : 6"
+          style="margin-bottom:20px"
+        >
+          <el-card
+            shadow="hover"
+            :body-style="{ padding: '0' }"
+            :class="['course-card', { 'single-course-card': courses.length === 1 }]"
+            @click="$router.push('/course/' + c.courseCode)"
+          >
+            <img v-if="c.coverUrl" :src="resolveCoverUrl(c.coverUrl)" class="cover-img" />
             <div v-else class="cover-placeholder"><el-icon :size="40"><Reading /></el-icon></div>
             <div class="card-body">
               <h4>{{ c.courseName }}</h4>
+              <p v-if="courses.length === 1 && c.description" class="course-desc">{{ c.description }}</p>
               <div class="card-info">
                 <el-tag size="small" type="info">授课 {{ c.teacher }}</el-tag>
                 <el-tag size="small">{{ c.credits }}学分</el-tag>
@@ -34,6 +49,14 @@ import { ElMessage } from 'element-plus'
 const keyword = ref('')
 const courses = ref([])
 const loading = ref(true)
+
+const resolveCoverUrl = (url) => {
+  if (!url) return ''
+  if (/^https?:\/\//i.test(url)) return url
+  const normalized = url.startsWith('/') ? url : `/${url}`
+  if (normalized.startsWith('/practical-training/')) return normalized
+  return `/practical-training${normalized}`
+}
 
 const doSearch = async () => {
   loading.value = true
@@ -60,4 +83,14 @@ onMounted(doSearch)
 .card-body { padding: 14px 16px; }
 .card-body h4 { margin: 0 0 10px 0; font-size: 15px; }
 .card-info { display: flex; gap: 6px; flex-wrap: wrap; }
+.single-course-card .cover-img,
+.single-course-card .cover-placeholder { height:260px; }
+.single-course-card .card-body { padding: 18px 20px 20px; }
+.single-course-card .card-body h4 { font-size: 20px; margin-bottom: 8px; }
+.course-desc {
+  margin: 0 0 14px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
 </style>

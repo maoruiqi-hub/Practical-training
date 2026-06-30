@@ -15,6 +15,65 @@
       </div>
     </div>
 
+    <section class="map-board" v-loading="loading" element-loading-text="正在加载能力图谱...">
+      <div class="map-summary">
+        <div class="course-mark">
+          <span class="course-code">{{ selectedCourse || '-' }}</span>
+          <div>
+            <h2>{{ currentCourse?.courseName || '课程能力图谱' }}</h2>
+            <p>{{ abilityPoints.length }} 个能力点 / {{ mappings.length }} 个知识点映射</p>
+          </div>
+        </div>
+        <div class="summary-metrics">
+          <div>
+            <b>{{ abilityPoints.length }}</b>
+            <span>能力点</span>
+          </div>
+          <div>
+            <b>{{ linkedKnowledgeCount }}</b>
+            <span>已覆盖知识点</span>
+          </div>
+          <div>
+            <b>{{ coverageRate }}%</b>
+            <span>覆盖率</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="abilityTree.length" class="tree-canvas">
+        <div class="tree-root">
+          <span>课程</span>
+          <strong>{{ currentCourse?.courseName || selectedCourse }}</strong>
+        </div>
+        <div class="trunk-line" />
+        <div class="ability-branches">
+          <article
+            v-for="(ability, index) in abilityTree"
+            :key="ability.abilityPointId"
+            class="ability-branch"
+            :style="{ '--accent': branchColor(index), '--accent-bg': branchBg(index), '--branch-offset': branchOffset(index) }"
+          >
+            <div class="branch-stem" />
+            <button class="ability-node" type="button" @click="openAbility(ability)">
+              <span class="node-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span>
+                <b>{{ ability.name }}</b>
+                <small>{{ ability.description || '暂无说明' }}</small>
+              </span>
+            </button>
+            <div class="knowledge-leaves">
+              <span v-for="point in ability.knowledgePoints" :key="point.knowledgePointId" class="knowledge-leaf">
+                {{ point.name }}
+              </span>
+              <span v-if="!ability.knowledgePoints.length" class="knowledge-leaf empty">未绑定</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <el-empty v-else description="暂无能力图谱数据" />
+    </section>
+
     <el-row :gutter="16" v-loading="loading" element-loading-text="正在加载能力图谱...">
       <el-col :xs="24" :lg="11">
         <el-card shadow="never">
@@ -116,6 +175,25 @@ const abilityDialog = ref(false)
 const bindDialog = ref(false)
 const abilityForm = reactive({ abilityPointId: '', name: '', description: '' })
 const bindForm = reactive({ abilityPointId: '', knowledgePointId: '' })
+
+const currentCourse = computed(() => courses.value.find(course => String(course.courseCode) === String(selectedCourse.value)))
+
+const linkedKnowledgeCount = computed(() => new Set(mappings.value.map(item => item.knowledgePointId)).size)
+const coverageRate = computed(() => {
+  if (!knowledgePoints.value.length) return 0
+  return Math.round((linkedKnowledgeCount.value / knowledgePoints.value.length) * 100)
+})
+
+const abilityTree = computed(() => abilityPoints.value.map(ability => {
+  const linkedIds = mappings.value
+    .filter(item => item.abilityPointId === ability.abilityPointId)
+    .map(item => item.knowledgePointId)
+  const linkedPoints = linkedIds
+    .map(id => knowledgePoints.value.find(point => point.knowledgePointId === id))
+    .filter(Boolean)
+    .sort((a, b) => Number(a.lessonNo || 0) - Number(b.lessonNo || 0))
+  return { ...ability, knowledgePoints: linkedPoints }
+}))
 
 const mappingRows = computed(() => mappings.value.map(item => {
   const ability = abilityPoints.value.find(point => point.abilityPointId === item.abilityPointId)
@@ -222,6 +300,20 @@ async function generateMap() {
   }
 }
 
+function branchColor(index) {
+  const colors = ['#2563eb', '#0891b2', '#7c3aed', '#dc2626', '#ca8a04', '#059669', '#c2410c', '#4f46e5']
+  return colors[index % colors.length]
+}
+
+function branchBg(index) {
+  const colors = ['#eff6ff', '#ecfeff', '#f5f3ff', '#fef2f2', '#fefce8', '#ecfdf5', '#fff7ed', '#eef2ff']
+  return colors[index % colors.length]
+}
+
+function branchOffset(index) {
+  return `${(index % 2) * 14}px`
+}
+
 onMounted(async () => {
   await loadCourses()
   await loadAll()
@@ -229,10 +321,246 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ability-page { max-width: 1240px; }
+.ability-page { max-width: 1280px; }
 .page-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; }
 .page-head h3 { margin:0 0 6px; }
 .page-head p { margin:0; color:#606266; }
 .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
 .card-head { display:flex; justify-content:space-between; align-items:center; }
+.map-board {
+  background:
+    linear-gradient(90deg, rgba(37, 99, 235, 0.07), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.map-summary {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:18px;
+  margin-bottom:16px;
+}
+.course-mark {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+.course-code {
+  width:48px;
+  height:48px;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  background:#111827;
+  color:#fff;
+  font-weight:700;
+}
+.course-mark h2 {
+  margin:0;
+  font-size:22px;
+  line-height:1.25;
+  color:#111827;
+}
+.course-mark p {
+  margin:4px 0 0;
+  color:#64748b;
+}
+.summary-metrics {
+  display:grid;
+  grid-template-columns:repeat(3, minmax(92px, 1fr));
+  gap:8px;
+}
+.summary-metrics div {
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  background:#fff;
+  padding:10px 12px;
+}
+.summary-metrics b {
+  display:block;
+  font-size:22px;
+  color:#0f172a;
+  line-height:1;
+}
+.summary-metrics span {
+  display:block;
+  margin-top:6px;
+  color:#64748b;
+  font-size:12px;
+}
+.tree-canvas {
+  position:relative;
+  display:grid;
+  grid-template-columns:180px 34px minmax(0, 1fr);
+  gap:0;
+  min-height:360px;
+}
+.tree-root {
+  align-self:center;
+  border:1px solid #cbd5e1;
+  background:#fff;
+  border-radius:8px;
+  padding:18px;
+  min-height:104px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  box-shadow:0 10px 24px rgba(15, 23, 42, 0.08);
+}
+.tree-root span {
+  color:#64748b;
+  font-size:12px;
+  margin-bottom:8px;
+}
+.tree-root strong {
+  color:#0f172a;
+  font-size:18px;
+  line-height:1.35;
+}
+.trunk-line {
+  position:relative;
+}
+.trunk-line::before {
+  content:'';
+  position:absolute;
+  left:50%;
+  top:24px;
+  bottom:24px;
+  width:2px;
+  background:#cbd5e1;
+}
+.trunk-line::after {
+  content:'';
+  position:absolute;
+  left:0;
+  right:0;
+  top:50%;
+  height:2px;
+  background:#cbd5e1;
+}
+.ability-branches {
+  display:grid;
+  gap:10px;
+}
+.ability-branch {
+  --accent:#2563eb;
+  --accent-bg:#eff6ff;
+  display:grid;
+  grid-template-columns:34px minmax(220px, 280px) minmax(0, 1fr);
+  gap:0;
+  align-items:center;
+  transform:translateY(var(--branch-offset));
+}
+.branch-stem {
+  height:2px;
+  background:linear-gradient(90deg, #cbd5e1, var(--accent));
+}
+.ability-node {
+  min-height:72px;
+  border:1px solid #dbe3ee;
+  border-left:5px solid var(--accent);
+  border-radius:8px;
+  background:#fff;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:12px;
+  text-align:left;
+  cursor:pointer;
+  box-shadow:0 8px 18px rgba(15, 23, 42, 0.06);
+}
+.ability-node:hover {
+  border-color:var(--accent);
+  transform:translateY(-1px);
+}
+.node-index {
+  width:34px;
+  height:34px;
+  flex:0 0 auto;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:var(--accent-bg);
+  color:var(--accent);
+  font-weight:700;
+  font-size:12px;
+}
+.ability-node b {
+  display:block;
+  color:#0f172a;
+  font-size:14px;
+  line-height:1.35;
+}
+.ability-node small {
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  margin-top:4px;
+  color:#64748b;
+  line-height:1.4;
+}
+.knowledge-leaves {
+  min-height:72px;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  padding-left:14px;
+  position:relative;
+}
+.knowledge-leaves::before {
+  content:'';
+  position:absolute;
+  left:0;
+  top:50%;
+  width:14px;
+  height:2px;
+  background:var(--accent);
+}
+.knowledge-leaf {
+  max-width:170px;
+  border:1px solid #e2e8f0;
+  border-radius:999px;
+  background:#fff;
+  color:#334155;
+  padding:6px 10px;
+  font-size:12px;
+  line-height:1.25;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.knowledge-leaf.empty {
+  color:#94a3b8;
+  border-style:dashed;
+}
+@media (max-width: 960px) {
+  .map-summary { align-items:flex-start; flex-direction:column; }
+  .summary-metrics { width:100%; }
+  .tree-canvas {
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .trunk-line { display:none; }
+  .ability-branch {
+    grid-template-columns:1fr;
+    transform:none;
+  }
+  .branch-stem,
+  .knowledge-leaves::before { display:none; }
+  .knowledge-leaves { padding:8px 0 0; }
+}
+@media (max-width: 640px) {
+  .page-head { flex-direction:column; }
+  .actions { width:100%; justify-content:flex-start; }
+  .actions .el-select { width:100% !important; }
+  .summary-metrics { grid-template-columns:1fr; }
+  .map-board { padding:14px; }
+}
 </style>

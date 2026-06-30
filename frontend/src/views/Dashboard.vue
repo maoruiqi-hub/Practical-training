@@ -689,9 +689,9 @@ onMounted(async () => {
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(240, 253, 250, 0.92), rgba(248, 250, 252, 0.98) 54%, rgba(239, 246, 255, 0.9)),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(248, 250, 252, 0.98) 54%, rgba(245, 247, 250, 0.92)),
     #ffffff;
-  border: 1px solid #dbe7e5;
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   padding: 18px 22px;
   color: #1f2937;
@@ -708,17 +708,17 @@ onMounted(async () => {
   top: 0;
   width: 36%;
   height: 100%;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(45, 107, 126, 0.08));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(64, 112, 180, 0.08));
   pointer-events: none;
 }
 .welcome-avatar {
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
-  background: #256b73;
+  background: #3568a6;
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(37, 107, 115, 0.2);
+  box-shadow: 0 8px 18px rgba(53, 104, 166, 0.2);
 }
 .welcome-copy {
   position: relative;
@@ -728,7 +728,7 @@ onMounted(async () => {
 }
 .eyebrow {
   margin-bottom: 5px;
-  color: #267069;
+  color: #3568a6;
   font-size: 12px;
   font-weight: 700;
 }
@@ -748,10 +748,10 @@ onMounted(async () => {
   z-index: 1;
   flex: 0 0 auto;
   padding: 8px 12px;
-  border: 1px solid rgba(37, 107, 115, 0.16);
+  border: 1px solid rgba(53, 104, 166, 0.16);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
-  color: #37515a;
+  color: #475569;
   font-size: 13px;
   font-weight: 600;
 }
@@ -774,10 +774,10 @@ onMounted(async () => {
   grid-area: mission;
   min-height: 0;
   padding: 20px;
-  border: 1px solid #dbe7e5;
+  border: 1px solid #dbe3ef;
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(240, 253, 250, 0.95), rgba(255, 255, 255, 0.98) 54%, rgba(239, 246, 255, 0.88)),
+    linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(255, 255, 255, 0.98) 54%, rgba(245, 247, 250, 0.9)),
     #fff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
@@ -796,10 +796,10 @@ onMounted(async () => {
 }
 .mission-avatar {
   flex: 0 0 auto;
-  background: #256b73;
+  background: #3568a6;
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(37, 107, 115, 0.16);
+  box-shadow: 0 8px 18px rgba(53, 104, 166, 0.16);
 }
 .mission-user {
   color: #111827;
@@ -816,10 +816,10 @@ onMounted(async () => {
 .mission-date {
   flex: 0 0 auto;
   padding: 6px 10px;
-  border: 1px solid rgba(37, 107, 115, 0.14);
+  border: 1px solid rgba(53, 104, 166, 0.14);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.62);
-  color: #536872;
+  color: #475569;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
@@ -855,7 +855,7 @@ onMounted(async () => {
 }
 .section-kicker {
   margin-bottom: 8px;
-  color: #267069;
+  color: #3568a6;
   font-size: 12px;
   font-weight: 700;
 }
@@ -874,8 +874,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eef4f5;
-  color: #256b73;
+  background: #eef4ff;
+  color: #3568a6;
   font-size: 21px;
 }
 .teacher-canvas.warning .focus-icon {
@@ -943,8 +943,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eef4f5;
-  color: #256b73;
+  background: #eef4ff;
+  color: #3568a6;
   font-size: 14px;
 }
 .signal-item.warning .signal-icon {
@@ -1161,7 +1161,7 @@ onMounted(async () => {
 }
 .observe-row.warning .observe-marker { background: #d99026; }
 .observe-row.danger .observe-marker { background: #d94d4d; }
-.observe-row.normal .observe-marker { background: #4f9b8f; }
+.observe-row.normal .observe-marker { background: #6b7c93; }
 .observe-row .el-button {
   padding-left: 0;
   padding-right: 0;

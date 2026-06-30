@@ -1,6 +1,7 @@
 package com.neu.CoursePlatform.module5_analytics.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.module5_analytics.entity.ClassInfo;
 import org.apache.ibatis.annotations.Param;
 
@@ -21,6 +22,9 @@ public interface ClassInfoMapper extends BaseMapper<ClassInfo> {
 
     /** 查询班级内的学生ID列表 */
     List<String> selectStudentIdsByClassId(@Param("classId") String classId);
+
+    /** 查询班级内的完整学生信息 */
+    List<Student> selectStudentsByClassId(@Param("classId") String classId);
 
     /** 添加学生到班级 */
     int insertClassStudent(@Param("classId") String classId,

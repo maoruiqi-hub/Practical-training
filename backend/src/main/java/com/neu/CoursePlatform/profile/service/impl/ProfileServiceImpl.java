@@ -488,6 +488,7 @@ public class ProfileServiceImpl implements ProfileService {
         List<Student> students = studentMapper.selectList(null);
 
         for (Student s : students) {
+            Integer numericStudentNo = parseStudentNo(s.getStudentNo());
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("studentNo", s.getStudentNo());
             entry.put("name", s.getName());
@@ -495,9 +496,23 @@ public class ProfileServiceImpl implements ProfileService {
             entry.put("college", s.getCollege());
             entry.put("phone", s.getPhone());
 
+            if (numericStudentNo == null) {
+                entry.put("hasProfile", false);
+                entry.put("hp", 0);
+                entry.put("atk", 0);
+                entry.put("def", 0);
+                entry.put("exp", 0);
+                entry.put("level", 1);
+                entry.put("coins", 0);
+                entry.put("status", "学号暂不支持画像");
+                entry.put("badgeCount", 0);
+                result.add(entry);
+                continue;
+            }
+
             // 查询画像
             LambdaQueryWrapper<StudentProfile> pq = new LambdaQueryWrapper<>();
-            pq.eq(StudentProfile::getStudentNo, Integer.parseInt(s.getStudentNo()))
+            pq.eq(StudentProfile::getStudentNo, numericStudentNo)
               .eq(StudentProfile::getCourseCode, courseCode);
             StudentProfile profile = profileMapper.selectOne(pq);
             if (profile != null) {
@@ -513,7 +528,7 @@ public class ProfileServiceImpl implements ProfileService {
 
                 // 徽章数量
                 LambdaQueryWrapper<Achievement> aq = new LambdaQueryWrapper<>();
-                aq.eq(Achievement::getStudentNo, Integer.parseInt(s.getStudentNo()))
+                aq.eq(Achievement::getStudentNo, numericStudentNo)
                   .eq(Achievement::getCourseCode, courseCode)
                   .eq(Achievement::getAchievementType, "badge");
                 entry.put("badgeCount", achievementMapper.selectCount(aq));
@@ -613,5 +628,14 @@ public class ProfileServiceImpl implements ProfileService {
             abilityMap.add(item);
         }
         return abilityMap;
+    }
+
+    private Integer parseStudentNo(String studentNo) {
+        if (studentNo == null || studentNo.isBlank()) return null;
+        try {
+            return Integer.parseInt(studentNo);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 }

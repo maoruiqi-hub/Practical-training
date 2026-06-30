@@ -65,7 +65,10 @@ public class ClassController {
         ClassInfo classInfo = classInfoService.getById(id);
         if (classInfo == null) return Result.fail("班级不存在");
         List<String> studentIds = classInfoService.getStudentIds(id);
-        return Result.ok(Map.of("classInfo", classInfo, "studentIds", studentIds));
+        return Result.ok(Map.of(
+                "classInfo", classInfo,
+                "studentIds", studentIds,
+                "students", classInfoService.getStudents(id)));
     }
 
     /** R1.5 添加学生到班级 | 教师 */
@@ -77,7 +80,29 @@ public class ClassController {
         String studentId = body.get("studentId");
         if (studentId == null || studentId.isEmpty()) return Result.fail("studentId 不能为空");
         boolean ok = classInfoService.enrollStudent(id, studentId);
-        return ok ? Result.ok() : Result.fail("添加失败（学生可能已在班级中）");
+        return ok ? Result.ok() : Result.fail("添加失败（学生不存在或已在班级中）");
+    }
+
+    /** 批量添加真实学生到教学班 | 教师 */
+    @PostMapping("/{id}/students/batch")
+    public Result<Map<String, Object>> enrollBatch(@PathVariable String id,
+                                                   @RequestBody Map<String, List<String>> body,
+                                                   HttpSession session) {
+        if (auth.getTeacher(session) == null) return Result.fail("请先登录");
+        List<String> studentIds = body == null ? List.of() : body.get("studentIds");
+        if (studentIds == null || studentIds.isEmpty()) return Result.fail("studentIds 不能为空");
+        return Result.ok(classInfoService.enrollStudents(id, studentIds));
+    }
+
+    /** 按学生行政班批量加入教学班 | 教师 */
+    @PostMapping("/{id}/students/by-class")
+    public Result<Map<String, Object>> enrollByClass(@PathVariable String id,
+                                                     @RequestBody Map<String, String> body,
+                                                     HttpSession session) {
+        if (auth.getTeacher(session) == null) return Result.fail("请先登录");
+        String className = body == null ? null : body.get("className");
+        if (className == null || className.isBlank()) return Result.fail("className 不能为空");
+        return Result.ok(classInfoService.enrollStudentsByClassName(id, className));
     }
 
     /** R1.6 从班级移除学生 | 教师 */
