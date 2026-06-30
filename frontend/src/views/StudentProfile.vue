@@ -39,6 +39,12 @@
         </el-card>
       </el-tab-pane>
 
+      <el-tab-pane label="能力图谱" name="abilityMap">
+        <el-card>
+          <StudentAbilityMapPanel :student-no="studentNo" :course-code="courseCode" />
+        </el-card>
+      </el-tab-pane>
+
       <el-tab-pane label="个性化推荐" name="recommendations">
         <el-card>
           <div style="margin-bottom:12px">
@@ -121,6 +127,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
+import StudentAbilityMapPanel from '../components/StudentAbilityMapPanel.vue'
 import { getProfileSummary, getCompetency, getRecommendations, generateRecommendations,
          feedbackRecommendation, getAchievements, getTitle, getLeaderboard,
          getGrowthHistory, getCompetencyHistory } from '@/api/profile'
