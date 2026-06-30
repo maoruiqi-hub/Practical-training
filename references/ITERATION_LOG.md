@@ -2,6 +2,24 @@
 
 ---
 
+## [b15c71e] 2026-06-30 20:04:00 +0800
+
+**Goal of this increment:** 将商店节点从通用弹窗中拆出，接上错题本数据和后端 `shop_purchased` 房间事件能力。
+
+**What was changed:**
+- `frontend/src/components/ShopRoom.vue` — 新增独立错题商店组件，复用现有商店背景和商人图标；进入房间时调用错题接口并读取 `wrongList`，展示待处理错题卡、金币和两个购买动作。
+- `frontend/src/views/TowerMap.vue` — 当当前节点为 `shop` 时渲染 `ShopRoom`，商店完成后沿用地图的 `completeRoom`，由现有 `shop_purchased` 事件同步后端画像增量。
+
+**Current state of the task:** 商店节点已经拥有独立交互；提示卡购买会发送 `rewardName=hint_card`，净化错题会发送 `rewardName=clean_wrong_card`，后端监听器据此扣金币并增加攻击或防御/经验。宝箱节点保持可用。休息点尚未拆出。
+
+**Next step:** 新建 `RestSiteRoom.vue` 并改造 `TowerMap.vue` 的 `rest` 分支，使用 `rest_taken` 和可选补给入口连接后端画像恢复能力。
+
+**Known risks / blockers:** 错题净化当前不会从错题本后端删除题目，只把错题作为商店交互来源并触发画像收益；如果学生金币不足，前端会禁用动作，后端仍以事件为准。
+
+**What was intentionally NOT touched:** 未改错题本页面，未修改后端商店收益规则，未处理休息点和通用 `GameRoomModal` 中残留的旧商店分支。
+
+---
+
 ## [f102335] 2026-06-30 20:00:25 +0800
 
 **Goal of this increment:** 先把宝箱节点从通用房间弹窗中拆出来，接上课程资源后端能力，形成一个可构建、可回退的小切片。

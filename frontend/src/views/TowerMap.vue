@@ -82,6 +82,14 @@
       @room-complete="completeRoom"
     />
 
+    <ShopRoom
+      v-else-if="activeRoomType === 'shop'"
+      v-model="roomVisible"
+      :student-id="studentId"
+      :profile="profile"
+      @room-complete="completeRoom"
+    />
+
     <GameRoomModal
       v-else
       v-model="roomVisible"
@@ -113,6 +121,7 @@ import { ElMessage } from 'element-plus'
 import { Aim, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import GameHud from '../components/GameHud.vue'
 import GameRoomModal from '../components/GameRoomModal.vue'
+import ShopRoom from '../components/ShopRoom.vue'
 import SupplyModal from '../components/SupplyModal.vue'
 import TreasureRoom from '../components/TreasureRoom.vue'
 import { gameBackgrounds, mapLegendIcons, referenceTokenIcons } from '../data/gameAssetManifest'
