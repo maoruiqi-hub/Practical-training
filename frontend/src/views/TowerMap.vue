@@ -73,7 +73,17 @@
       </aside>
     </main>
 
+    <TreasureRoom
+      v-if="activeRoomType === 'treasure'"
+      v-model="roomVisible"
+      :course-id="courseId"
+      :course-name="courseName"
+      :selected-node="selectedNode"
+      @room-complete="completeRoom"
+    />
+
     <GameRoomModal
+      v-else
       v-model="roomVisible"
       :room-type="activeRoomType"
       :profile="profile"
@@ -104,6 +114,7 @@ import { Aim, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import GameHud from '../components/GameHud.vue'
 import GameRoomModal from '../components/GameRoomModal.vue'
 import SupplyModal from '../components/SupplyModal.vue'
+import TreasureRoom from '../components/TreasureRoom.vue'
 import { gameBackgrounds, mapLegendIcons, referenceTokenIcons } from '../data/gameAssetManifest'
 import { getLeaderboard, getStudentProfile, getTowerMap, sendGameEvent } from '../api'
 

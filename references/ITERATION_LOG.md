@@ -2,6 +2,24 @@
 
 ---
 
+## [f102335] 2026-06-30 20:00:25 +0800
+
+**Goal of this increment:** 先把宝箱节点从通用房间弹窗中拆出来，接上课程资源后端能力，形成一个可构建、可回退的小切片。
+
+**What was changed:**
+- `frontend/src/components/TreasureRoom.vue` — 新增独立宝箱房组件，复用现有宝箱背景和地图图标；打开时按课程和当前知识点读取课程资源，领取资源时记录资源浏览 `start` 事件，并通过 `room-complete` 交还地图流程。
+- `frontend/src/views/TowerMap.vue` — 当当前节点为 `treasure` 时渲染 `TreasureRoom`，其他非战斗节点继续沿用原 `GameRoomModal`，避免一次性扩大改动范围。
+
+**Current state of the task:** 宝箱节点已经拥有独立交互，并连接 `/api/resources` 与 `/api/resources/{resourceId}/view-events`；构建通过，但仍存在项目既有的包体积 warning。商店和休息点尚未拆出。
+
+**Next step:** 新建 `ShopRoom.vue` 并改造 `TowerMap.vue` 的 `shop` 分支，正确读取错题接口返回的 `wrongList`，保留宝箱切片不动。
+
+**Known risks / blockers:** 宝箱资源查看事件依赖学生登录态；如果接口因会话失效失败，当前组件会提示记录失败但仍允许完成房间。`treasure_opened` 事件目前后端监听器未处理画像收益，只作为路线房间完成事件上报。
+
+**What was intentionally NOT touched:** 未修改后端事件语义，未改 `GameRoomModal` 的旧宝箱分支，未处理商店、休息点、战斗/诊断事件上报。
+
+---
+
 ## 2026-06-23 (第二次提交)
 
 **Goal:** 从 token_reduce 参考项目引入 SDD 方法论，建立规格文档与实施计划的写作规范体系。
