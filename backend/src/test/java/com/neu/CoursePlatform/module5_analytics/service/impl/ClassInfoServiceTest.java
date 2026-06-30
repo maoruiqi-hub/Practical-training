@@ -1,5 +1,7 @@
 package com.neu.CoursePlatform.module5_analytics.service.impl;
 
+import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.module5_analytics.entity.ClassInfo;
 import com.neu.CoursePlatform.module5_analytics.mapper.ClassInfoMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,26 +17,33 @@ class ClassInfoServiceTest {
     private ClassInfoServiceImpl service;
     private Map<String, ClassInfo> store;
     private Map<String, Set<String>> classStudents; // classId → studentIds
+    private Map<String, Student> students; // studentNo → Student
     private int nameDuplicateCount;
 
     @BeforeEach
     void setUp() throws Exception {
         store = new LinkedHashMap<>();
         classStudents = new LinkedHashMap<>();
+        students = new LinkedHashMap<>();
         nameDuplicateCount = 0;
 
-        ClassInfoMapper proxy = (ClassInfoMapper) Proxy.newProxyInstance(
+        ClassInfoMapper classInfoMapperProxy = (ClassInfoMapper) Proxy.newProxyInstance(
                 ClassInfoMapper.class.getClassLoader(),
                 new Class<?>[]{ClassInfoMapper.class},
                 (p, method, args) -> mapperInvoke(this, method.getName(), args));
 
-        service = new ClassInfoServiceImpl();
+        StudentMapper studentMapperProxy = (StudentMapper) Proxy.newProxyInstance(
+                StudentMapper.class.getClassLoader(),
+                new Class<?>[]{StudentMapper.class},
+                (p, method, args) -> studentMapperInvoke(this, method.getName(), args));
+
+        service = new ClassInfoServiceImpl(studentMapperProxy);
         Class<?> clazz = service.getClass();
         while (clazz != null) {
             try {
                 java.lang.reflect.Field f = clazz.getDeclaredField("baseMapper");
                 f.setAccessible(true);
-                f.set(service, proxy);
+                f.set(service, classInfoMapperProxy);
                 break;
             } catch (NoSuchFieldException e) {
                 clazz = clazz.getSuperclass();
@@ -147,6 +156,19 @@ class ClassInfoServiceTest {
                 return students == null ? List.of() : new ArrayList<>(students);
             }
             case "selectByTeacherId": return new ArrayList<>(self.store.values());
+            default: return null;
+        }
+    }
+
+    static Object studentMapperInvoke(ClassInfoServiceTest self, String name, Object[] args) {
+        switch (name) {
+            case "selectById": return self.students.get(String.valueOf(args[0]));
+            case "selectByClassId": {
+                String className = String.valueOf(args[0]);
+                return self.students.values().stream()
+                        .filter(s -> className.equals(s.getClassName()))
+                        .toList();
+            }
             default: return null;
         }
     }

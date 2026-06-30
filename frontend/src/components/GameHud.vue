@@ -1,48 +1,47 @@
 <template>
-  <section class="game-hud" aria-label="学生游戏属性">
-    <div class="hud-title">
-      <span class="tower-mark" aria-hidden="true"></span>
-      <div>
+  <section class="game-hud" :class="{ compact }" aria-label="学生游戏状态">
+    <div class="hud-brand">
+      <span class="avatar-mark" aria-hidden="true">
+        <span></span>
+      </span>
+      <div class="brand-copy">
         <p class="eyebrow">Tower Run</p>
         <h1>{{ courseName }}</h1>
       </div>
     </div>
 
-    <div class="hud-stats">
-      <div class="level-plate">
-        <span class="label">Lv.{{ safeProfile.level }}</span>
+    <div class="hud-core">
+      <div class="level-chip">
+        <span>Lv.{{ safeProfile.level }}</span>
         <strong>{{ levelName }}</strong>
       </div>
 
       <div class="hp-block">
         <div class="hp-meta">
           <span>HP</span>
-          <strong>{{ safeProfile.hp }}/100</strong>
+          <strong>{{ safeProfile.hp }}/{{ safeProfile.maxHp }}</strong>
         </div>
         <div class="hp-track" aria-hidden="true">
-          <div class="hp-fill" :style="{ width: safeProfile.hp + '%' }"></div>
+          <div class="hp-fill" :style="{ width: hpPercent + '%' }"></div>
         </div>
       </div>
 
-      <div class="stat-card">
-        <span>ATK</span>
-        <strong>{{ safeProfile.atk }}%</strong>
+      <div class="resource-chip energy">
+        <span class="resource-icon" aria-hidden="true"></span>
+        <small>Energy</small>
+        <strong>{{ safeProfile.energy }}</strong>
       </div>
-      <div class="stat-card">
-        <span>DEF</span>
-        <strong>{{ safeProfile.def }}%</strong>
-      </div>
-      <div class="stat-card">
-        <span>EXP</span>
-        <strong>{{ safeProfile.exp }}</strong>
-      </div>
-      <div class="stat-card">
-        <span>COIN</span>
+
+      <div class="resource-chip coin">
+        <span class="resource-icon" aria-hidden="true"></span>
+        <small>Coin</small>
         <strong>{{ safeProfile.coins }}</strong>
       </div>
-      <div class="stat-card">
-        <span>ENERGY</span>
-        <strong>{{ safeProfile.energy }}</strong>
+
+      <div class="mini-stats">
+        <span>ATK <b>{{ safeProfile.atk }}%</b></span>
+        <span>DEF <b>{{ safeProfile.def }}%</b></span>
+        <span>EXP <b>{{ safeProfile.exp }}</b></span>
       </div>
     </div>
   </section>
@@ -53,24 +52,33 @@ import { computed } from 'vue'
 
 const props = defineProps({
   profile: { type: Object, default: () => ({}) },
-  courseName: { type: String, default: 'Python 程序设计' }
+  courseName: { type: String, default: 'Python 程序设计' },
+  compact: { type: Boolean, default: false }
 })
 
 const clamp = value => Math.max(0, Math.min(100, Number(value) || 0))
 
-const safeProfile = computed(() => ({
-  hp: clamp(props.profile.hp),
-  atk: clamp(props.profile.atk),
-  def: clamp(props.profile.def),
-  exp: Number(props.profile.exp) || 0,
-  level: Number(props.profile.level) || 1,
-  coins: Number(props.profile.coins) || 0,
-  energy: Number(props.profile.energy) || 0
-}))
+const safeProfile = computed(() => {
+  const maxHp = Number(props.profile.maxHp || props.profile.max_hp || 100) || 100
+  return {
+    hp: Math.max(0, Math.min(maxHp, Number(props.profile.hp ?? 100) || 0)),
+    maxHp,
+    atk: clamp(props.profile.atk ?? 50),
+    def: clamp(props.profile.def ?? 50),
+    exp: Number(props.profile.exp) || 0,
+    level: Number(props.profile.level) || 1,
+    coins: Number(props.profile.coins ?? props.profile.coin) || 0,
+    energy: Number(props.profile.energy ?? 5) || 0
+  }
+})
+
+const hpPercent = computed(() =>
+  Math.round((safeProfile.value.hp / Math.max(1, safeProfile.value.maxHp)) * 100)
+)
 
 const levelName = computed(() => {
-  const names = { 1: '入门', 2: '初级', 3: '中级', 4: '熟练', 5: '精通' }
-  return names[safeProfile.value.level] || '精通'
+  const names = { 1: '入门', 2: '初级', 3: '进阶', 4: '熟练', 5: '精通' }
+  return names[safeProfile.value.level] || '挑战者'
 })
 </script>
 
@@ -78,90 +86,115 @@ const levelName = computed(() => {
 .game-hud {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 40;
   display: grid;
-  grid-template-columns: minmax(220px, 340px) 1fr;
+  grid-template-columns: minmax(240px, 360px) 1fr;
   gap: 18px;
   align-items: center;
-  padding: 18px 22px;
+  min-height: 88px;
+  padding: 14px 20px;
   color: #fff7df;
   background:
-    linear-gradient(90deg, rgba(20, 12, 10, .96), rgba(47, 22, 14, .94) 50%, rgba(16, 24, 32, .96)),
-    radial-gradient(circle at 25% 0%, rgba(220, 92, 32, .28), transparent 36%);
-  border-bottom: 1px solid rgba(241, 181, 77, .35);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, .34);
+    linear-gradient(90deg, rgba(13, 9, 9, .96), rgba(46, 22, 15, .9) 48%, rgba(11, 18, 25, .96)),
+    radial-gradient(circle at 28% 0%, rgba(224, 137, 54, .22), transparent 34%);
+  border-bottom: 1px solid rgba(241, 181, 77, .36);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .38);
 }
 
-.hud-title {
-  display: flex;
+.game-hud.compact {
+  min-height: 78px;
+  padding-block: 10px;
+}
+
+.hud-brand {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
-  gap: 14px;
   min-width: 0;
 }
 
-.tower-mark {
-  width: 46px;
-  height: 52px;
-  flex: 0 0 auto;
-  border: 2px solid #f0b85d;
-  border-radius: 12px 12px 6px 6px;
+.avatar-mark {
+  position: relative;
+  display: grid;
+  width: 48px;
+  height: 54px;
+  place-items: center;
+  border: 2px solid #e2ad57;
+  border-radius: 12px 12px 7px 7px;
   background:
-    linear-gradient(180deg, #6b3420, #21140f),
-    repeating-linear-gradient(90deg, transparent 0 8px, rgba(255, 255, 255, .12) 8px 10px);
-  box-shadow: inset 0 0 0 4px rgba(255, 236, 187, .08), 0 0 24px rgba(208, 88, 33, .25);
+    radial-gradient(circle at 50% 22%, rgba(255, 230, 150, .92) 0 7px, transparent 8px),
+    linear-gradient(180deg, #6d2f1f, #1c1210);
+  box-shadow: inset 0 0 0 4px rgba(255, 236, 187, .08), 0 0 24px rgba(208, 88, 33, .22);
+}
+
+.avatar-mark span {
+  width: 18px;
+  height: 22px;
+  margin-top: 12px;
+  border-radius: 50% 50% 42% 42%;
+  background: linear-gradient(180deg, #f4d184, #d28c3f);
+  opacity: .9;
+}
+
+.brand-copy {
+  min-width: 0;
 }
 
 .eyebrow {
   margin: 0 0 3px;
-  color: #d39b57;
+  color: #dba257;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
 h1 {
+  overflow: hidden;
   margin: 0;
   color: #fff8df;
   font-size: 22px;
   line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hud-stats {
+.hud-core {
   display: grid;
-  grid-template-columns: 96px minmax(170px, 1.4fr) repeat(5, minmax(82px, 1fr));
+  grid-template-columns: 92px minmax(180px, 1.3fr) repeat(2, minmax(90px, 116px)) minmax(220px, .8fr);
   gap: 10px;
   align-items: stretch;
 }
 
-.level-plate,
-.stat-card,
-.hp-block {
-  min-height: 58px;
+.level-chip,
+.hp-block,
+.resource-chip,
+.mini-stats {
+  min-height: 56px;
   border: 1px solid rgba(240, 184, 93, .28);
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 239, 197, .12), rgba(70, 35, 22, .36));
+  background: linear-gradient(180deg, rgba(255, 239, 197, .12), rgba(70, 35, 22, .34));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1), 0 8px 18px rgba(0, 0, 0, .2);
 }
 
-.level-plate,
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.level-chip,
+.resource-chip {
+  display: grid;
+  align-content: center;
   padding: 8px 10px;
 }
 
-.label,
-.stat-card span,
+.level-chip span,
+.resource-chip small,
 .hp-meta span {
   color: #c7a976;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
-.level-plate strong,
-.stat-card strong,
+.level-chip strong,
+.resource-chip strong,
 .hp-meta strong {
   color: #fff5ce;
   font-size: 18px;
@@ -183,11 +216,11 @@ h1 {
 }
 
 .hp-track {
-  height: 12px;
+  height: 13px;
   overflow: hidden;
-  border-radius: 999px;
-  background: rgba(24, 12, 10, .82);
   border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: rgba(22, 10, 9, .84);
 }
 
 .hp-fill {
@@ -197,27 +230,87 @@ h1 {
   transition: width .22s ease-out;
 }
 
-@media (max-width: 1100px) {
+.resource-chip {
+  position: relative;
+  grid-template-columns: 30px 1fr;
+  column-gap: 8px;
+}
+
+.resource-chip strong,
+.resource-chip small {
+  grid-column: 2;
+}
+
+.resource-icon {
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .16), 0 0 14px rgba(237, 178, 83, .18);
+}
+
+.resource-chip.energy .resource-icon {
+  clip-path: polygon(48% 0, 82% 0, 62% 38%, 92% 38%, 36% 100%, 48% 56%, 18% 56%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #89fff2, #2aa0a8);
+}
+
+.resource-chip.coin .resource-icon {
+  background: radial-gradient(circle at 35% 30%, #fff2a8, #d9952f 62%, #7c4218);
+}
+
+.mini-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+.mini-stats span {
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #c7a976;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, .06);
+}
+
+.mini-stats b {
+  color: #fff5ce;
+  font-size: 15px;
+}
+
+@media (max-width: 1180px) {
   .game-hud {
     grid-template-columns: 1fr;
   }
-  .hud-stats {
+  .hud-core {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .hp-block {
+  .hp-block,
+  .mini-stats {
     grid-column: span 2;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
   .game-hud {
-    padding: 14px;
+    padding: 12px;
   }
-  .hud-stats {
+  .hud-brand {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  h1 {
+    font-size: 20px;
+  }
+  .hud-core {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .hp-block {
-    grid-column: span 2;
+  .hp-block,
+  .mini-stats {
+    grid-column: 1 / -1;
   }
 }
 

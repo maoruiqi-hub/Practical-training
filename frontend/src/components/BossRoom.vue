@@ -5,6 +5,9 @@
     :student-id="studentId"
     :task-no="taskNo"
     :floor-name="floorName"
+    :initial-hp="initialHp"
+    :max-hp="maxHp"
+    room-type="boss"
     boss-mode
     @battle-end="$emit('boss-end', $event)"
     @profile-refresh="$emit('profile-refresh')"
@@ -19,7 +22,9 @@ defineProps({
   courseId: { type: [String, Number], required: true },
   studentId: { type: [String, Number], required: true },
   taskNo: { type: [String, Number], default: '' },
-  floorName: { type: String, default: 'Boss 楼层' }
+  floorName: { type: String, default: 'Boss 楼层' },
+  initialHp: { type: Number, default: 100 },
+  maxHp: { type: Number, default: 100 }
 })
 
 defineEmits(['boss-end', 'profile-refresh'])
