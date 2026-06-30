@@ -6,8 +6,13 @@ import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.common.event.GameEventPublisher;
 import com.neu.CoursePlatform.entity.AbilityPoint;
+import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
+import com.neu.CoursePlatform.entity.KnowledgeMastery;
+import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.KnowledgePointFloorStatus;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.mapper.AbilityKnowledgePointMapper;
+import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.mapper.KnowledgePointFloorStatusMapper;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.profile.entity.*;
@@ -16,6 +21,7 @@ import com.neu.CoursePlatform.profile.rule.GrowthRuleEngine;
 import com.neu.CoursePlatform.profile.service.ProfileService;
 import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
+import com.neu.CoursePlatform.service.KnowledgePointService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
@@ -35,6 +41,9 @@ public class ProfileServiceImpl implements ProfileService {
     private final GameEventPublisher eventPublisher;
     private final CourseGameConfigService gameConfigService;
     private final KnowledgePointFloorStatusMapper floorStatusMapper;
+    private final KnowledgePointService knowledgePointService;
+    private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
+    private final KnowledgeMasteryMapper knowledgeMasteryMapper;
 
     @Autowired
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
@@ -47,7 +56,10 @@ public class ProfileServiceImpl implements ProfileService {
                              GrowthRuleEngine growthEngine,
                              GameEventPublisher eventPublisher,
                              CourseGameConfigService gameConfigService,
-                             KnowledgePointFloorStatusMapper floorStatusMapper) {
+                             KnowledgePointFloorStatusMapper floorStatusMapper,
+                             KnowledgePointService knowledgePointService,
+                             AbilityKnowledgePointMapper abilityKnowledgePointMapper,
+                             KnowledgeMasteryMapper knowledgeMasteryMapper) {
         this.profileMapper = profileMapper;
         this.competencyMapper = competencyMapper;
         this.historyMapper = historyMapper;
@@ -59,6 +71,9 @@ public class ProfileServiceImpl implements ProfileService {
         this.eventPublisher = eventPublisher;
         this.gameConfigService = gameConfigService;
         this.floorStatusMapper = floorStatusMapper;
+        this.knowledgePointService = knowledgePointService;
+        this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
+        this.knowledgeMasteryMapper = knowledgeMasteryMapper;
     }
 
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
@@ -72,7 +87,8 @@ public class ProfileServiceImpl implements ProfileService {
                              GameEventPublisher eventPublisher,
                              CourseGameConfigService gameConfigService) {
         this(profileMapper, competencyMapper, historyMapper, growthHistoryMapper, achievementMapper,
-                studentMapper, abilityPointService, growthEngine, eventPublisher, gameConfigService, null);
+                studentMapper, abilityPointService, growthEngine, eventPublisher, gameConfigService,
+                null, null, null, null);
     }
 
     @Override
@@ -608,20 +624,82 @@ public class ProfileServiceImpl implements ProfileService {
 
     @Override
     public List<Map<String, Object>> getTowerMap(Integer studentNo, Integer courseCode) {
-        // 确画像已初始化
         getOrCreateProfile(studentNo, courseCode);
+        if (knowledgePointService == null) {
+            return getAbilityFallbackTowerMap(studentNo, courseCode);
+        }
+
+        List<KnowledgePoint> knowledgePoints = knowledgePointService.listByCourseCode(String.valueOf(courseCode), null);
+        if (knowledgePoints == null || knowledgePoints.isEmpty()) {
+            return getAbilityFallbackTowerMap(studentNo, courseCode);
+        }
+
+        List<CompetencyScore> scores = getCompetencyScores(studentNo, courseCode);
+        List<Map<String, Object>> towerMap = new ArrayList<>();
+        Map<String, Integer> scoreIndex = new HashMap<>();
+        for (CompetencyScore cs : scores) {
+            scoreIndex.put(cs.getAbilityPointId(), cs.getScore());
+        }
+
+        Map<String, KnowledgeMastery> masteryIndex = loadKnowledgeMasteryIndex(studentNo, courseCode);
+        Map<String, String> storedStatus = loadFloorStatusIndex(studentNo, courseCode);
+        Map<String, List<String>> abilityIdsByKnowledgePoint = loadAbilityIdsByKnowledgePoint(knowledgePoints);
+        Map<String, AbilityPoint> abilityPointIndex = loadAbilityPointIndex(courseCode);
+
+        boolean previousCleared = true;
+        for (int i = 0; i < knowledgePoints.size(); i++) {
+            KnowledgePoint kp = knowledgePoints.get(i);
+            String knowledgePointId = kp.getKnowledgePointId();
+            List<String> relatedAbilityPointIds = abilityIdsByKnowledgePoint.getOrDefault(knowledgePointId, List.of());
+            String abilityPointId = relatedAbilityPointIds.stream()
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse("");
+            AbilityPoint abilityPoint = abilityPointIndex.get(abilityPointId);
+
+            KnowledgeMastery masteryRecord = masteryIndex.get(knowledgePointId);
+            boolean hasMastery = masteryRecord != null && masteryRecord.getMasteryScore() != null;
+            int mastery = hasMastery
+                    ? clamp(masteryRecord.getMasteryScore(), 0, 100)
+                    : (abilityPointId.isBlank() ? 0 : clamp(scoreIndex.getOrDefault(abilityPointId, 0), 0, 100));
+            String masterySource = hasMastery ? "knowledge_mastery" : abilityPointId.isBlank() ? "none" : "competency_score";
+            String saved = storedStatus.get(knowledgePointId);
+            String floorStatus = resolveFloorStatus(saved, mastery, previousCleared, i);
+            boolean isAccessible = !"locked".equals(floorStatus);
+
+            Map<String, Object> floor = new LinkedHashMap<>();
+            floor.put("kpId", knowledgePointId);
+            floor.put("knowledgePointId", knowledgePointId);
+            floor.put("kpName", kp.getName());
+            floor.put("description", kp.getDescription() != null ? kp.getDescription() : "");
+            floor.put("level", i + 1);
+            floor.put("floorStatus", floorStatus);
+            floor.put("masteryRate", mastery);
+            floor.put("masterySource", masterySource);
+            floor.put("isAccessible", isAccessible);
+            floor.put("abilityPointId", abilityPointId);
+            floor.put("abilityPointName", abilityPoint == null ? "" : abilityPoint.getName());
+            floor.put("relatedAbilityPointIds", relatedAbilityPointIds);
+            floor.put("statusReason", "floor_status:" + (saved == null ? "none" : saved) + "; mastery:" + mastery);
+            towerMap.add(floor);
+
+            previousCleared = "cleared".equals(floorStatus);
+        }
+
+        return towerMap;
+    }
+
+    private List<Map<String, Object>> getAbilityFallbackTowerMap(Integer studentNo, Integer courseCode) {
         List<CompetencyScore> scores = getCompetencyScores(studentNo, courseCode);
         List<Map<String, Object>> abilityMap = getCourseAbilityMap(courseCode);
         List<Map<String, Object>> towerMap = new ArrayList<>();
 
-        // 构建 competency score 索引
         Map<String, Integer> scoreIndex = new HashMap<>();
         for (CompetencyScore cs : scores) {
             scoreIndex.put(cs.getAbilityPointId(), cs.getScore());
         }
 
         abilityMap.sort(Comparator.comparing(ap -> String.valueOf(ap.getOrDefault("id", ""))));
-
         Map<String, String> storedStatus = new HashMap<>();
         if (floorStatusMapper != null) {
             List<KnowledgePointFloorStatus> statuses = floorStatusMapper.selectList(
@@ -664,11 +742,78 @@ public class ProfileServiceImpl implements ProfileService {
             floor.put("level", level);
             floor.put("floorStatus", floorStatus);
             floor.put("masteryRate", mastery);
+            floor.put("masterySource", "competency_score");
             floor.put("isAccessible", isAccessible);
+            floor.put("abilityPointId", apId);
+            floor.put("abilityPointName", ap.get("name"));
+            floor.put("relatedAbilityPointIds", List.of(apId));
+            floor.put("statusReason", "fallback_ability_floor; mastery:" + mastery);
             towerMap.add(floor);
         }
 
         return towerMap;
+    }
+
+    private Map<String, KnowledgeMastery> loadKnowledgeMasteryIndex(Integer studentNo, Integer courseCode) {
+        Map<String, KnowledgeMastery> masteryIndex = new HashMap<>();
+        if (knowledgeMasteryMapper == null) return masteryIndex;
+        List<KnowledgeMastery> masteries = knowledgeMasteryMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeMastery>()
+                        .eq(KnowledgeMastery::getStudentNo, String.valueOf(studentNo))
+                        .eq(KnowledgeMastery::getCourseCode, String.valueOf(courseCode)));
+        for (KnowledgeMastery mastery : masteries) {
+            masteryIndex.put(mastery.getKnowledgePointId(), mastery);
+        }
+        return masteryIndex;
+    }
+
+    private Map<String, String> loadFloorStatusIndex(Integer studentNo, Integer courseCode) {
+        Map<String, String> storedStatus = new HashMap<>();
+        if (floorStatusMapper == null) return storedStatus;
+        List<KnowledgePointFloorStatus> statuses = floorStatusMapper.selectList(
+                new LambdaQueryWrapper<KnowledgePointFloorStatus>()
+                        .eq(KnowledgePointFloorStatus::getStudentId, String.valueOf(studentNo))
+                        .eq(KnowledgePointFloorStatus::getCourseId, String.valueOf(courseCode)));
+        for (KnowledgePointFloorStatus status : statuses) {
+            storedStatus.put(status.getKnowledgePointId(), status.getStatus());
+        }
+        return storedStatus;
+    }
+
+    private Map<String, List<String>> loadAbilityIdsByKnowledgePoint(List<KnowledgePoint> knowledgePoints) {
+        Map<String, List<String>> result = new HashMap<>();
+        if (abilityKnowledgePointMapper == null || knowledgePoints.isEmpty()) return result;
+        List<String> knowledgePointIds = knowledgePoints.stream()
+                .map(KnowledgePoint::getKnowledgePointId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (knowledgePointIds.isEmpty()) return result;
+
+        List<AbilityKnowledgePoint> mappings = abilityKnowledgePointMapper.selectList(
+                new LambdaQueryWrapper<AbilityKnowledgePoint>()
+                        .in(AbilityKnowledgePoint::getKnowledgePointId, knowledgePointIds));
+        for (AbilityKnowledgePoint mapping : mappings) {
+            result.computeIfAbsent(mapping.getKnowledgePointId(), key -> new ArrayList<>())
+                    .add(mapping.getAbilityPointId());
+        }
+        return result;
+    }
+
+    private Map<String, AbilityPoint> loadAbilityPointIndex(Integer courseCode) {
+        Map<String, AbilityPoint> abilityPointIndex = new HashMap<>();
+        if (abilityPointService == null) return abilityPointIndex;
+        List<AbilityPoint> abilityPoints = abilityPointService.listByCourseCode(String.valueOf(courseCode));
+        for (AbilityPoint abilityPoint : abilityPoints) {
+            abilityPointIndex.put(abilityPoint.getAbilityPointId(), abilityPoint);
+        }
+        return abilityPointIndex;
+    }
+
+    private String resolveFloorStatus(String saved, int mastery, boolean previousCleared, int index) {
+        if ("cleared".equals(saved) || mastery >= 85) return "cleared";
+        if ("weak".equals(saved) || (mastery > 0 && mastery < 60)) return "weak";
+        if (!previousCleared && index > 0) return "locked";
+        return "available";
     }
 
     private List<Map<String, Object>> getCourseAbilityMap(Integer courseCode) {
