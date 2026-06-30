@@ -90,6 +90,16 @@
       @room-complete="completeRoom"
     />
 
+    <RestSiteRoom
+      v-else-if="activeRoomType === 'rest'"
+      v-model="roomVisible"
+      :student-id="studentId"
+      :profile="profile"
+      :selected-node="selectedNode"
+      @open-supply="openSupply"
+      @room-complete="completeRoom"
+    />
+
     <GameRoomModal
       v-else
       v-model="roomVisible"
@@ -121,6 +131,7 @@ import { ElMessage } from 'element-plus'
 import { Aim, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import GameHud from '../components/GameHud.vue'
 import GameRoomModal from '../components/GameRoomModal.vue'
+import RestSiteRoom from '../components/RestSiteRoom.vue'
 import ShopRoom from '../components/ShopRoom.vue'
 import SupplyModal from '../components/SupplyModal.vue'
 import TreasureRoom from '../components/TreasureRoom.vue'

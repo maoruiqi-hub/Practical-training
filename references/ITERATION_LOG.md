@@ -2,6 +2,24 @@
 
 ---
 
+## [019f405] 2026-06-30 20:07:00 +0800
+
+**Goal of this increment:** 将休息点从通用弹窗中拆出，接上后端 `rest_taken` 恢复事件和现有补给使用流程。
+
+**What was changed:**
+- `frontend/src/components/RestSiteRoom.vue` — 新增独立休息点组件，复用休息点背景和地图图标；展示 HP、防御、精力和错题线索，提供休整回血、整理补给、复习薄弱点三个动作。
+- `frontend/src/views/TowerMap.vue` — 当当前节点为 `rest` 时渲染 `RestSiteRoom`；主行动完成后沿用 `completeRoom` 发送 `rest_taken`，整理补给继续打开现有 `SupplyModal` 并使用 `supply_used`。
+
+**Current state of the task:** 宝箱、商店、休息点都已拥有独立交互入口，并分别连接课程资源、错题本、画像恢复/补给后端能力；最终前端构建通过，但仍有项目既有包体积 warning。
+
+**Next step:** 进入人工联调：用学生账号从地图依次进入 treasure/shop/rest，检查对应接口请求、画像刷新和地图返回体验。
+
+**Known risks / blockers:** 休息点的“复习薄弱点”不会删除错题，只把错题作为复习提示并发送 `rest_taken`；补给恢复仍由 `SupplyModal` 的 `supply_used` 语义负责。
+
+**What was intentionally NOT touched:** 未修改后端收益公式，未清理 `GameRoomModal` 中旧的 rest/treasure/shop 分支，未改战斗和诊断流程。
+
+---
+
 ## [b15c71e] 2026-06-30 20:04:00 +0800
 
 **Goal of this increment:** 将商店节点从通用弹窗中拆出，接上错题本数据和后端 `shop_purchased` 房间事件能力。
