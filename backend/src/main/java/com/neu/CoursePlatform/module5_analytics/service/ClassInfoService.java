@@ -1,9 +1,11 @@
 package com.neu.CoursePlatform.module5_analytics.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.module5_analytics.entity.ClassInfo;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 班级管理 Service 接口
@@ -49,6 +51,21 @@ public interface ClassInfoService extends IService<ClassInfo> {
      * 获取班级内学生ID列表
      */
     List<String> getStudentIds(String classId);
+
+    /**
+     * 获取班级内完整学生信息
+     */
+    List<Student> getStudents(String classId);
+
+    /**
+     * 批量添加真实学生到班级
+     */
+    Map<String, Object> enrollStudents(String classId, List<String> studentIds);
+
+    /**
+     * 按学生行政班批量添加到教学班
+     */
+    Map<String, Object> enrollStudentsByClassName(String classId, String className);
 
     /**
      * 班级学生数

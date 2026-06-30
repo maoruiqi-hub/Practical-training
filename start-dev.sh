@@ -4,7 +4,7 @@
 # 自动检测端口占用，切换到可用端口后再启动前后端
 # ============================================================
 
-BACKEND_PORT=${1:-8080}
+BACKEND_PORT=${1:-8081}
 FRONTEND_PORT=${2:-3000}
 
 # 检查端口是否被占用，是则递增直到找到可用端口
@@ -36,6 +36,11 @@ fi
 echo ""
 echo ">>> 启动后端 (port $BACKEND_PORT)..."
 cd "$(dirname "$0")/backend"
+if [ -f ".env" ]; then
+  set -a
+  . ./.env
+  set +a
+fi
 mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=$BACKEND_PORT" &
 BACKEND_PID=$!
 

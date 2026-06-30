@@ -3,7 +3,7 @@ module.exports = {
     port: 3000,
     proxy: {
       '/practical-training': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:8081',
         changeOrigin: true
       }
     }
