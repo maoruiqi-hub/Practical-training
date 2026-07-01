@@ -2,7 +2,7 @@
   <section class="reward-room" :style="roomStyle" aria-label="战斗奖励">
     <div class="reward-scrim">
       <header class="reward-header">
-        <p class="kicker">Reward Draft</p>
+        <p class="kicker">奖励选择</p>
         <h2>选择一项战利品</h2>
         <p>
           本场正确率 {{ Math.round((battleResult.correctRate || 0) * 100) }}%，选择一个奖励强化后续路线。
@@ -94,7 +94,7 @@ const rewards = computed(() => {
       type: 'coin',
       typeLabel: '资源',
       rarity: 'common',
-      badge: '$',
+      badge: '金',
       icon: Coin,
       description: '获得 20 金币，可在商店购买提示、回血或净化错题卡。'
     }

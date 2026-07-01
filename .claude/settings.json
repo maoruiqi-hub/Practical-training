@@ -1,12 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X GET \"http://localhost:8080/practical-training/teacher/list\")",
-      "Bash(curl -s -X POST \"http://localhost:8080/practical-training/teacher/login\" -H \"Content-Type: application/json\" --data-raw '{\"username\":\"admin\",\"password\":\"admin123\"}')",
-      "Bash(mvn compile *)",
-      "Bash(pkill -f \"spring-boot:run\")",
-      "Bash(mvn spring-boot:run -q)",
-      "Bash(curl -s -X POST \"http://localhost:8080/practical-training/teacher/login\" -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')"
+      "Bash(curl *)",
+      "Bash(mvn *)",
+      "Bash(pkill *)",
+      "Bash(taskkill *)",
+      "Bash(netstat *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(set *)",
+      "Bash(sc *)",
+      "Bash(which *)",
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(rm *)",
+      "Bash(nc *)",
+      "Bash(ping *)",
+      "Bash(mysql *)",
+      "Bash(psql *)"
     ]
   }
 }

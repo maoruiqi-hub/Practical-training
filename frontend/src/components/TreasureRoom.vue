@@ -11,7 +11,7 @@
         <header class="room-head">
           <img class="room-icon" :src="mapLegendIcons.treasure" alt="" />
           <div>
-            <p class="kicker">Treasure</p>
+            <p class="kicker">课程宝箱</p>
             <h2>知识宝箱</h2>
             <p>从当前课程资源里选择一份补给，带回路线继续推进。</p>
           </div>
@@ -31,7 +31,7 @@
             @click="claimResource(resource)"
             @keydown.enter.prevent="claimResource(resource)"
           >
-            <small>{{ resource.resourceType || 'Resource' }}</small>
+            <small>{{ resourceTypeLabel(resource) }}</small>
             <strong>{{ resource.title || '课程资源' }}</strong>
             <span>{{ resource.chapter || nodeName || courseName }}</span>
             <button
@@ -50,9 +50,9 @@
             class="choice-card reward-card fallback"
             @click="claimFallback"
           >
-            <small>Fallback Reward</small>
+            <small>兜底奖励</small>
             <strong>知识卡碎片</strong>
-            <span>当前知识点暂无绑定资源，先获得一份路线奖励。</span>
+            <span>课程资源待配置，先获得一份路线奖励。</span>
           </button>
         </div>
       </div>
@@ -122,6 +122,16 @@ const isPptResource = resource => {
   return type.includes('ppt') || type.includes('powerpoint')
 }
 
+const resourceTypeLabel = resource => {
+  const type = String(resource.resourceType || resource.resource_type || resource.type || '').toLowerCase()
+  if (type.includes('video') || type.includes('mp4')) return '视频'
+  if (type.includes('ppt') || type.includes('powerpoint')) return '课件'
+  if (type.includes('pdf') || type.includes('doc') || type.includes('document')) return '文档'
+  if (type.includes('link') || type.includes('url')) return '链接'
+  if (type.includes('exercise') || type.includes('practice')) return '练习'
+  return '课程资源'
+}
+
 const openLecture = resource => {
   const kpId = props.selectedNode?.kpId || resource.knowledgePointId || resource.knowledge_point_id
   if (!kpId) {
@@ -140,7 +150,8 @@ const closeWithReward = rewardName => {
 
 const claimResource = async resource => {
   try {
-    await recordCourseResourceView(resource.resourceId, { action: 'start', durationMs: 0 })
+    const resourceId = resource.resourceId || resource.resource_id || resource.id
+    if (resourceId) await recordCourseResourceView(resourceId, { action: 'start', durationMs: 0 })
   } catch {
     ElMessage.warning('资源学习行为记录失败')
   }

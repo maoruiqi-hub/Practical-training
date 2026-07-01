@@ -2,17 +2,17 @@
   <section class="game-hud" :class="{ compact }" aria-label="学生游戏状态">
     <div class="hud-brand">
       <span class="avatar-mark" aria-hidden="true">
-        <span></span>
+        <img class="avatar-image" :src="characterSprites.playerKnightIdle" alt="" />
       </span>
       <div class="brand-copy">
-        <p class="eyebrow">Tower Run</p>
-        <h1>{{ courseName }}</h1>
+        <p class="eyebrow">登塔试炼</p>
+        <h1>{{ displayCourseName }}</h1>
       </div>
     </div>
 
     <div class="hud-core" :class="{ 'without-hp': !showHp }">
       <div class="level-chip">
-        <span>Lv.{{ safeProfile.level }}</span>
+        <span>等级 {{ safeProfile.level }}</span>
         <strong>{{ levelName }}</strong>
       </div>
 
@@ -28,20 +28,20 @@
 
       <div class="resource-chip energy">
         <span class="resource-icon" aria-hidden="true"></span>
-        <small>Energy</small>
+        <small>能量</small>
         <strong>{{ safeProfile.energy }}</strong>
       </div>
 
       <div class="resource-chip coin">
         <span class="resource-icon" aria-hidden="true"></span>
-        <small>Coin</small>
+        <small>金币</small>
         <strong>{{ safeProfile.coins }}</strong>
       </div>
 
       <div class="mini-stats">
-        <span>ATK <b>{{ safeProfile.atk }}%</b></span>
-        <span>DEF <b>{{ safeProfile.def }}%</b></span>
-        <span>EXP <b>{{ safeProfile.exp }}</b></span>
+        <span>攻击 <b>{{ safeProfile.atk }}%</b></span>
+        <span>防御 <b>{{ safeProfile.def }}%</b></span>
+        <span>经验 <b>{{ safeProfile.exp }}</b></span>
       </div>
     </div>
   </section>
@@ -49,6 +49,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { characterSprites } from '../data/gameAssetManifest'
 
 const props = defineProps({
   profile: { type: Object, default: () => ({}) },
@@ -76,6 +77,11 @@ const safeProfile = computed(() => {
 const hpPercent = computed(() =>
   Math.round((safeProfile.value.hp / Math.max(1, safeProfile.value.maxHp)) * 100)
 )
+
+const displayCourseName = computed(() => {
+  const name = String(props.courseName || '').trim()
+  return name === 'Python Program Design' ? 'Python 程序设计' : name
+})
 
 const levelName = computed(() => {
   const names = { 1: '入门', 2: '初级', 3: '进阶', 4: '熟练', 5: '精通' }
@@ -129,13 +135,12 @@ const levelName = computed(() => {
   box-shadow: inset 0 0 0 4px rgba(255, 236, 187, .08), 0 0 24px rgba(208, 88, 33, .22);
 }
 
-.avatar-mark span {
-  width: 18px;
-  height: 22px;
-  margin-top: 12px;
-  border-radius: 50% 50% 42% 42%;
-  background: linear-gradient(180deg, #f4d184, #d28c3f);
-  opacity: .9;
+.avatar-image {
+  width: 44px;
+  height: 50px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45));
 }
 
 .brand-copy {

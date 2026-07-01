@@ -44,6 +44,7 @@ class CourseAiServiceImplTest {
         assertEquals(200, result.getCode());
         assertNotNull(result.getData());
         assertTrue(result.getData().isSuccess());
+        assertEquals("Mock AI response", result.getData().getData().get("answer"));
     }
 
     @Test
@@ -137,6 +138,7 @@ class CourseAiServiceImplTest {
         assertEquals(200, result.getCode());
         assertNotNull(result.getData());
         assertTrue(result.getData().isSuccess());
+        assertEquals("Mock AI response", result.getData().getData().get("answer"));
     }
 
     @Test

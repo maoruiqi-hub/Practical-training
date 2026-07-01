@@ -1,6 +1,6 @@
 <template>
-  <section class="student-ability-map" v-loading="loading">
-    <div class="summary-row">
+  <section class="student-ability-map" :class="{ compact }" v-loading="loading">
+    <div v-if="!compact" class="summary-row">
       <div>
         <strong>{{ abilityCards.length }}</strong>
         <span>能力点</span>
@@ -17,7 +17,12 @@
 
     <el-empty v-if="!abilityCards.length && !loading" description="暂无能力图谱" />
 
-    <div v-else class="ability-grid">
+    <section v-if="radarDimensions.length" class="radar-panel">
+      <div ref="radarRef" class="radar-chart" aria-label="ability radar"></div>
+      <p>{{ radarSummary }}</p>
+    </section>
+
+    <div v-if="abilityCards.length && !compact" class="ability-grid">
       <article
         v-for="ability in abilityCards"
         :key="ability.abilityPointId"
@@ -31,6 +36,10 @@
           </div>
           <b>{{ ability.masteryRate }}%</b>
         </header>
+        <div v-if="ability.latestDelta" class="delta-line" :class="{ positive: ability.latestDelta.deltaScore >= 0, negative: ability.latestDelta.deltaScore < 0 }">
+          <strong>{{ ability.latestDelta.deltaScore >= 0 ? '+' : '' }}{{ ability.latestDelta.deltaScore }}</strong>
+          <span>{{ ability.latestDelta.aiSummary || ability.latestDelta.reason }}</span>
+        </div>
         <p>{{ ability.description || '暂无说明' }}</p>
         <div class="knowledge-chips">
           <span
@@ -49,12 +58,16 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { getAbilityMap, getKnowledgeGraph, getKnowledgeMastery } from '../api'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as echarts from 'echarts'
+import { getAbilityDeltas, getAbilityMap, getAbilityRadar, getKnowledgeGraph, getKnowledgeMastery } from '../api'
 
 const props = defineProps({
   studentNo: { type: [String, Number], required: true },
-  courseCode: { type: [String, Number], required: true }
+  courseCode: { type: [String, Number], required: true },
+  runId: { type: [String, Number], default: '' },
+  nodeId: { type: [String, Number], default: '' },
+  compact: { type: Boolean, default: false }
 })
 
 const loading = ref(false)
@@ -62,6 +75,10 @@ const abilityPoints = ref([])
 const mappings = ref([])
 const knowledgePoints = ref([])
 const masteryRows = ref([])
+const abilityDeltas = ref([])
+const abilityRadar = ref(null)
+const radarRef = ref(null)
+let radarChart = null
 
 const knowledgeIndex = computed(() => {
   const map = new Map()
@@ -83,6 +100,9 @@ const masteryIndex = computed(() => {
 
 const abilityCards = computed(() => abilityPoints.value.map(ability => {
   const abilityId = ability.abilityPointId || ability.ability_point_id || ability.id
+  const latestDelta = abilityDeltas.value.find(delta =>
+    String(delta.abilityPointId || delta.ability_point_id) === String(abilityId)
+  )
   const linkedIds = mappings.value
     .filter(item => String(item.abilityPointId || item.ability_point_id) === String(abilityId))
     .map(item => String(item.knowledgePointId || item.knowledge_point_id))
@@ -107,7 +127,8 @@ const abilityCards = computed(() => abilityPoints.value.map(ability => {
     description: ability.description || '',
     knowledgePoints: linkedKnowledgePoints,
     masteryRate,
-    status
+    status,
+    latestDelta
   }
 }))
 
@@ -116,6 +137,8 @@ const overallMastery = computed(() => {
   if (!abilityCards.value.length) return 0
   return Math.round(abilityCards.value.reduce((sum, ability) => sum + ability.masteryRate, 0) / abilityCards.value.length)
 })
+const radarDimensions = computed(() => abilityRadar.value?.dimensions || [])
+const radarSummary = computed(() => abilityRadar.value?.summary || '')
 
 const clamp = value => Math.max(0, Math.min(100, Number(value || 0)))
 const statusClass = status => status === '掌握' ? 'mastered' : status === '推进中' ? 'progressing' : 'weak'
@@ -125,10 +148,12 @@ const loadData = async () => {
   if (!props.studentNo || !props.courseCode) return
   loading.value = true
   try {
-    const [abilityRes, graphRes, masteryRes] = await Promise.allSettled([
+    const [abilityRes, graphRes, masteryRes, deltaRes, radarRes] = await Promise.allSettled([
       getAbilityMap(props.courseCode),
       getKnowledgeGraph(props.courseCode),
-      getKnowledgeMastery(props.studentNo, props.courseCode)
+      getKnowledgeMastery(props.studentNo, props.courseCode),
+      getAbilityDeltas(props.studentNo, props.courseCode),
+      getAbilityRadar(props.studentNo, props.courseCode, props.runId, props.nodeId)
     ])
     if (abilityRes.status === 'fulfilled' && abilityRes.value.data.code === 200) {
       abilityPoints.value = abilityRes.value.data.data?.abilityPoints || []
@@ -147,13 +172,63 @@ const loadData = async () => {
     } else {
       masteryRows.value = []
     }
+    if (deltaRes.status === 'fulfilled' && deltaRes.value.data.code === 200) {
+      abilityDeltas.value = deltaRes.value.data.data || []
+    } else {
+      abilityDeltas.value = []
+    }
+    if (radarRes.status === 'fulfilled' && radarRes.value.data.code === 200) {
+      abilityRadar.value = radarRes.value.data.data || null
+    } else {
+      abilityRadar.value = null
+    }
+    await nextTick()
+    renderRadar()
   } finally {
     loading.value = false
   }
 }
 
-watch(() => [props.studentNo, props.courseCode], loadData)
+const renderRadar = () => {
+  if (!radarRef.value || !radarDimensions.value.length) return
+  if (!radarChart) radarChart = echarts.init(radarRef.value)
+  radarChart.setOption({
+    color: ['#64748b', '#2563eb'],
+    tooltip: { trigger: 'item' },
+    legend: { top: 0, data: ['通关前', '通关后'] },
+    radar: {
+      indicator: radarDimensions.value.map(item => ({ name: item.name || item.abilityPointId, max: 100 })),
+      radius: '62%',
+      splitNumber: 5,
+      axisName: { color: '#334155', fontSize: 12 },
+      splitLine: { lineStyle: { color: '#dbe3ef' } },
+      splitArea: { areaStyle: { color: ['#f8fafc', '#ffffff'] } },
+      axisLine: { lineStyle: { color: '#cbd5e1' } }
+    },
+    series: [{
+      type: 'radar',
+      data: [
+        { value: abilityRadar.value?.series?.before || [], name: '通关前', areaStyle: { opacity: 0.08 } },
+        { value: abilityRadar.value?.series?.after || [], name: '通关后', areaStyle: { opacity: 0.16 } }
+      ]
+    }]
+  })
+}
+
+const resizeRadar = () => {
+  if (radarChart) radarChart.resize()
+}
+
+watch(() => [props.studentNo, props.courseCode, props.runId, props.nodeId], loadData)
 onMounted(loadData)
+onMounted(() => window.addEventListener('resize', resizeRadar))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeRadar)
+  if (radarChart) {
+    radarChart.dispose()
+    radarChart = null
+  }
+})
 </script>
 
 <style scoped>
@@ -193,6 +268,30 @@ onMounted(loadData)
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
+}
+
+.radar-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.radar-chart {
+  width: 100%;
+  height: 360px;
+}
+
+.student-ability-map.compact .radar-chart {
+  height: 300px;
+}
+
+.radar-panel p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.6;
 }
 
 .ability-card {
@@ -243,6 +342,33 @@ onMounted(loadData)
   margin: 0;
   color: #64748b;
   line-height: 1.5;
+}
+
+.delta-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f1f5f9;
+}
+
+.delta-line strong {
+  font-size: 18px;
+}
+
+.delta-line.positive strong {
+  color: #15803d;
+}
+
+.delta-line.negative strong {
+  color: #b91c1c;
+}
+
+.delta-line span {
+  color: #475569;
+  line-height: 1.4;
 }
 
 .knowledge-chips {

@@ -8,6 +8,11 @@
       <el-skeleton :rows="7" animated />
     </div>
 
+    <div v-else-if="packError" class="scene-loading">
+      <el-empty :description="packError" :image-size="90" />
+      <button type="button" class="confirm-choice" @click="loadQuestions">重新加载题包</button>
+    </div>
+
     <template v-else>
       <div class="scene-vignette" aria-hidden="true"></div>
 
@@ -27,7 +32,7 @@
       <div class="scene-actor player-actor" :class="{ damaged: hurtFlash }" aria-label="学习者">
         <div class="actor-aura"></div>
         <div class="player-sprite">
-          <span></span>
+          <img :src="characterSprites.playerKnightGuard" alt="" />
         </div>
         <div class="actor-nameplate">
           <strong>学习者</strong>
@@ -38,7 +43,7 @@
       <div class="scene-actor enemy-actor" :class="{ hit: hitFlash }" aria-label="知识敌人">
         <div class="actor-aura"></div>
         <div class="enemy-sprite">
-          <img :src="enemyToken" alt="" />
+          <img :src="enemyToken" :alt="enemyName" />
         </div>
         <div class="actor-nameplate">
           <strong>{{ enemyName }}</strong>
@@ -128,8 +133,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, sendGameEvent, submitTask } from '../api'
-import { mapLegendIcons, referenceTokenIcons } from '../data/gameAssetManifest'
+import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, getTowerQuestionPack, sendGameEvent, submitTask } from '../api'
+import { characterSprites, enemySprites } from '../data/gameAssetManifest'
 
 const props = defineProps({
   kpId: { type: [String, Number], required: true },
@@ -140,7 +145,9 @@ const props = defineProps({
   bossMode: { type: Boolean, default: false },
   roomType: { type: String, default: 'battle' },
   initialHp: { type: Number, default: 100 },
-  maxHp: { type: Number, default: 100 }
+  maxHp: { type: Number, default: 100 },
+  runId: { type: [String, Number], default: '' },
+  nodeId: { type: [String, Number], default: '' }
 })
 
 const emit = defineEmits(['battle-end', 'profile-refresh', 'ai-help'])
@@ -166,12 +173,18 @@ const hitFlash = ref(false)
 const usingFallbackQuestions = ref(false)
 const selectedMulti = ref([])
 const freeAnswer = ref('')
+const packId = ref('')
+const packError = ref('')
 
 const playerMaxHp = computed(() => Math.max(1, props.maxHp || props.initialHp || 100))
 const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
 const displayOptions = computed(() => parseOptions(activeQuestion.value.options))
 const enemyName = computed(() => props.bossMode ? '章节首领' : props.roomType === 'elite' ? '精英知识敌人' : '知识敌人')
-const enemyToken = computed(() => props.bossMode ? referenceTokenIcons.bossHeartFlame : mapLegendIcons.enemy)
+const enemyToken = computed(() => {
+  if (props.bossMode) return enemySprites.bossEnemy
+  if (props.roomType === 'elite') return enemySprites.eliteEnemy
+  return enemySprites.knowledgeEnemy
+})
 const typeLabel = type => ({ single: '单选', multi: '多选', fill: '填空', essay: '简答', program: '编程' })[type] || type
 const roomQuestionLimit = computed(() => props.bossMode ? 8 : props.roomType === 'elite' ? 6 : 5)
 const playerHpPercent = computed(() => Math.round((playerHp.value / playerMaxHp.value) * 100))
@@ -310,8 +323,22 @@ const loadQuestions = async () => {
   loading.value = true
   usingFallbackQuestions.value = false
   questions.value = []
+  packId.value = ''
+  packError.value = ''
   try {
-    if (props.taskNo) {
+    if (props.runId && props.nodeId) {
+      const mode = props.bossMode ? 'boss' : props.roomType === 'elite' ? 'elite' : 'battle'
+      const packRes = await getTowerQuestionPack(props.studentId, props.runId, props.nodeId, mode)
+      if (packRes.data.code === 200) {
+        packId.value = packRes.data.data?.packId || ''
+        questions.value = packRes.data.data?.questions || []
+      }
+      if (!questions.value.length) {
+        throw new Error(packRes.data.msg || '当前节点题包为空')
+      }
+    }
+
+    if (!questions.value.length && props.taskNo) {
       const taskRes = await getTaskQuestions(props.taskNo)
       if (taskRes.data.code === 200) {
         const details = await Promise.all(taskRes.data.data.map(item => getQuestionById(item.questionId)))
@@ -333,10 +360,13 @@ const loadQuestions = async () => {
     } else {
       questions.value = questions.value.slice(0, roomQuestionLimit.value)
     }
-  } catch {
+  } catch (error) {
+    if (props.runId && props.nodeId) {
+      packError.value = error?.message || '题包加载失败，请重试'
+    }
     questions.value = []
   } finally {
-    if (!questions.value.length) {
+    if (!questions.value.length && !packError.value) {
       questions.value = fallbackQuestions.value
       usingFallbackQuestions.value = true
     }
@@ -472,7 +502,20 @@ const submitBattle = async forcedCleared => {
     emit('battle-end', {
       cleared: Boolean(forcedCleared) && playerHp.value > 0,
       correctRate,
-      hpLeft: playerHp.value
+      hpLeft: playerHp.value,
+      packId: packId.value,
+      answerSummary: questions.value.map(question => ({
+        questionId: question.questionId,
+        stem: question.stem,
+        studentAnswer: Array.isArray(answers[question.questionId])
+          ? answers[question.questionId].join(',')
+          : (answers[question.questionId] || ''),
+        correctAnswer: question.answer,
+        correct: isCorrect(question),
+        knowledgePointId: question.knowledgePointId || props.kpId,
+        abilityPointId: question.abilityPointId || props.kpId,
+        type: question.type
+      }))
     })
   } catch {
     ElMessage.error('挑战提交失败')
@@ -567,9 +610,9 @@ onMounted(loadQuestions)
 .combat-mini-hud {
   position: absolute;
   z-index: 5;
-  top: 18px;
-  left: 24px;
-  right: 24px;
+  top: 76px;
+  left: clamp(22px, 2.4vw, 46px);
+  right: clamp(22px, 2.4vw, 46px);
   display: flex;
   justify-content: space-between;
   gap: 18px;
@@ -577,7 +620,7 @@ onMounted(loadQuestions)
 }
 
 .hud-pill {
-  width: min(360px, 42vw);
+  width: min(340px, 32vw);
   padding: 10px 12px;
   border: 1px solid rgba(245, 203, 118, .38);
   border-radius: 8px;
@@ -627,7 +670,7 @@ onMounted(loadQuestions)
 .scene-actor {
   position: absolute;
   z-index: 3;
-  bottom: 132px;
+  bottom: 150px;
   display: grid;
   place-items: center;
   transition: transform .22s ease, filter .22s ease;
@@ -638,7 +681,8 @@ onMounted(loadQuestions)
 }
 
 .enemy-actor {
-  right: clamp(60px, 13vw, 220px);
+  right: clamp(340px, 31vw, 660px);
+  bottom: 190px;
 }
 
 .actor-aura {
@@ -655,39 +699,38 @@ onMounted(loadQuestions)
 .enemy-sprite {
   position: relative;
   display: grid;
-  width: 156px;
-  height: 218px;
+  width: 220px;
+  height: 268px;
   place-items: center;
   filter: drop-shadow(0 28px 30px rgba(0, 0, 0, .56));
 }
 
-.player-sprite span {
-  width: 86px;
-  height: 138px;
-  border-radius: 46% 46% 30% 30%;
-  background:
-    radial-gradient(circle at 50% 12%, #ffe2a1 0 23px, transparent 24px),
-    linear-gradient(180deg, #c78a43 0 42px, #31b3b4 43px 138px);
-  box-shadow:
-    inset 0 -18px 24px rgba(15, 66, 70, .48),
-    0 0 34px rgba(70, 216, 218, .24);
+.player-sprite img {
+  max-width: 226px;
+  max-height: 268px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 0 18px rgba(242, 194, 93, .22));
 }
 
 .enemy-sprite {
-  width: 176px;
-  height: 218px;
+  width: 300px;
+  height: 260px;
 }
 
 .enemy-sprite img {
-  width: 142px;
-  height: 142px;
+  width: 270px;
+  height: 240px;
   object-fit: contain;
-  filter: drop-shadow(0 0 28px rgba(224, 84, 48, .34));
+  object-position: center bottom;
+  filter:
+    drop-shadow(0 0 22px rgba(224, 84, 48, .34))
+    drop-shadow(0 20px 24px rgba(0, 0, 0, .48));
 }
 
 .boss .enemy-sprite img {
-  width: 168px;
-  height: 168px;
+  width: 300px;
+  height: 300px;
 }
 
 .actor-nameplate {
@@ -695,6 +738,7 @@ onMounted(loadQuestions)
   display: grid;
   gap: 3px;
   min-width: 150px;
+  max-width: 260px;
   padding: 8px 14px;
   border: 1px solid rgba(244, 202, 118, .36);
   border-radius: 999px;
@@ -708,8 +752,11 @@ onMounted(loadQuestions)
 }
 
 .actor-nameplate span {
+  overflow: hidden;
   color: #d7c09a;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .enemy-actor.hit {
@@ -725,8 +772,8 @@ onMounted(loadQuestions)
 .intent-bubble {
   position: absolute;
   z-index: 4;
-  top: 96px;
-  right: clamp(220px, 22vw, 340px);
+  top: 150px;
+  right: clamp(470px, 36vw, 720px);
   display: grid;
   gap: 4px;
   min-width: 170px;
@@ -916,8 +963,8 @@ onMounted(loadQuestions)
 .scene-tools {
   position: absolute;
   z-index: 7;
-  top: 92px;
-  left: 28px;
+  top: 146px;
+  left: clamp(28px, 3vw, 54px);
   display: flex;
   gap: 10px;
 }
@@ -958,6 +1005,7 @@ onMounted(loadQuestions)
   }
   .enemy-actor {
     right: 8vw;
+    bottom: 160px;
   }
   .player-actor {
     left: 8vw;

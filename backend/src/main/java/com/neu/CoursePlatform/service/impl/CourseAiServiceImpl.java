@@ -13,6 +13,7 @@ import com.neu.CoursePlatform.service.CourseResourceService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -54,7 +55,7 @@ public class CourseAiServiceImpl implements CourseAiService {
                 "knowledgePoint", point.getName()
         ));
 
-        AgenticResponse response = agenticClient.invoke("lecture", input);
+        AgenticResponse response = normalizeChatResponse(agenticClient.invoke("lecture", input));
         return response.isSuccess() ? Result.ok(response) : Result.serviceUnavailable("AI 服务暂不可用");
     }
 
@@ -84,7 +85,7 @@ public class CourseAiServiceImpl implements CourseAiService {
                 "resourceTitle", resource == null ? "课程知识图谱" : resource.getTitle(),
                 "previousMessages", request.getPreviousMessages() == null ? List.of() : request.getPreviousMessages()
         ));
-        AgenticResponse response = agenticClient.invoke("qa", input);
+        AgenticResponse response = normalizeChatResponse(agenticClient.invoke("qa", input));
         return response.isSuccess() ? Result.ok(response) : Result.serviceUnavailable("AI 服务暂不可用");
     }
 
@@ -96,5 +97,36 @@ public class CourseAiServiceImpl implements CourseAiService {
         request.setContext(Map.of("knowledgePoints", knowledgePoints));
         AgenticResponse response = agenticClient.invoke("ability-map", request);
         return response.isSuccess() ? Result.ok(response) : Result.serviceUnavailable("AI 服务暂不可用");
+    }
+
+    private AgenticResponse normalizeChatResponse(AgenticResponse response) {
+        if (response == null || !response.isSuccess()) return response;
+        Map<String, Object> rawData = response.getData() == null ? Map.of() : response.getData();
+        Map<String, Object> data = new LinkedHashMap<>(rawData);
+        if (!hasText(data.get("answer"))) {
+            String answer = firstText(data.get("content"), data.get("text"), data.get("result"));
+            if (answer == null && !isStatusMessage(response.getMessage())) {
+                answer = response.getMessage();
+            }
+            if (answer != null) data.put("answer", answer);
+        }
+        return new AgenticResponse(response.isSuccess(), data, response.getMessage());
+    }
+
+    private String firstText(Object... values) {
+        for (Object value : values) {
+            if (hasText(value)) return String.valueOf(value).trim();
+        }
+        return null;
+    }
+
+    private boolean hasText(Object value) {
+        return value != null && !String.valueOf(value).isBlank();
+    }
+
+    private boolean isStatusMessage(String message) {
+        if (message == null) return true;
+        String normalized = message.trim().toLowerCase();
+        return normalized.isBlank() || "ok".equals(normalized) || "success".equals(normalized);
     }
 }

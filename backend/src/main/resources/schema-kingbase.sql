@@ -457,3 +457,95 @@ CREATE TABLE IF NOT EXISTS analytics_teaching_suggestion (
 );
 CREATE INDEX IF NOT EXISTS idx_teaching_suggestion_class ON analytics_teaching_suggestion(class_id);
 CREATE INDEX IF NOT EXISTS idx_teaching_suggestion_course ON analytics_teaching_suggestion(course_id);
+
+CREATE TABLE IF NOT EXISTS student_tower_run (
+    run_id VARCHAR(64) PRIMARY KEY,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    version INTEGER DEFAULT 1,
+    status VARCHAR(32) DEFAULT 'active',
+    route_source VARCHAR(32) DEFAULT 'rule',
+    current_node_id VARCHAR(64),
+    ai_snapshot_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tower_run_student_course
+ON student_tower_run(student_no, course_code, status);
+
+CREATE TABLE IF NOT EXISTS student_tower_node (
+    node_id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    node_order INTEGER NOT NULL,
+    row_no INTEGER NOT NULL,
+    col_no INTEGER NOT NULL,
+    room_type VARCHAR(32) NOT NULL,
+    status VARCHAR(32) DEFAULT 'locked',
+    knowledge_point_id VARCHAR(64),
+    ability_point_id VARCHAR(64),
+    parent_node_id VARCHAR(64),
+    unlock_after_node_id VARCHAR(64),
+    difficulty INTEGER DEFAULT 1,
+    ai_reason TEXT,
+    payload_json TEXT,
+    cleared_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tower_node_run_order
+ON student_tower_node(run_id, node_order);
+CREATE INDEX IF NOT EXISTS idx_tower_node_unlock
+ON student_tower_node(run_id, unlock_after_node_id);
+
+CREATE TABLE IF NOT EXISTS student_tower_attempt (
+    attempt_id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    room_type VARCHAR(32) NOT NULL,
+    result VARCHAR(32) NOT NULL,
+    correct_rate NUMERIC(5, 2),
+    hp_left INTEGER,
+    answer_summary_json TEXT,
+    ai_report_json TEXT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tower_attempt_node
+ON student_tower_attempt(node_id, finished_at);
+
+CREATE TABLE IF NOT EXISTS student_ability_delta_log (
+    id VARCHAR(64) PRIMARY KEY,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    run_id VARCHAR(64),
+    node_id VARCHAR(64),
+    knowledge_point_id VARCHAR(64),
+    ability_point_id VARCHAR(64),
+    delta_score INTEGER DEFAULT 0,
+    before_score INTEGER,
+    after_score INTEGER,
+    reason TEXT,
+    ai_summary TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ability_delta_student_course
+ON student_ability_delta_log(student_no, course_code, created_at);
+
+CREATE TABLE IF NOT EXISTS student_tower_question_pack (
+    pack_id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    mode VARCHAR(32) NOT NULL,
+    question_ids_json TEXT NOT NULL,
+    source VARCHAR(32) DEFAULT 'rule',
+    strategy_json TEXT,
+    ai_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tower_question_pack_node
+ON student_tower_question_pack(run_id, node_id, mode);

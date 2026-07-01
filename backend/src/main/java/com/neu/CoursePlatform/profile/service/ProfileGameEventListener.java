@@ -45,14 +45,26 @@ public class ProfileGameEventListener {
             }
             case GameEventTypes.ANSWER_SKIPPED -> profileService.applyGameDelta(studentNo, courseCode,
                     0, 0, 0, 0, 0, -1, GameEventTypes.ANSWER_SKIPPED, sourceId);
-            case GameEventTypes.FLOOR_CLEARED -> profileService.applyGameDelta(studentNo, courseCode,
-                    0, 1, 1, 80, 20, 0, GameEventTypes.FLOOR_CLEARED, sourceId);
-            case GameEventTypes.BOSS_DEFEATED -> profileService.applyGameDelta(studentNo, courseCode,
-                    0, 3, 3, 250, 80, 2, GameEventTypes.BOSS_DEFEATED, sourceId);
-            case GameEventTypes.ELITE_DEFEATED -> profileService.applyGameDelta(studentNo, courseCode,
-                    0, 2, 1, 120, 40, 1, GameEventTypes.ELITE_DEFEATED, sourceId);
-            case GameEventTypes.FLOOR_FAILED -> profileService.applyGameDelta(studentNo, courseCode,
-                    -5, 0, 0, 10, 0, -1, GameEventTypes.FLOOR_FAILED, sourceId);
+            case GameEventTypes.FLOOR_CLEARED -> {
+                profileService.applyGameDelta(studentNo, courseCode,
+                        0, 1, 1, 80, 20, 0, GameEventTypes.FLOOR_CLEARED, sourceId);
+                updateCompetency(studentNo, courseCode, payload, true);
+            }
+            case GameEventTypes.BOSS_DEFEATED -> {
+                profileService.applyGameDelta(studentNo, courseCode,
+                        0, 3, 3, 250, 80, 2, GameEventTypes.BOSS_DEFEATED, sourceId);
+                updateCompetency(studentNo, courseCode, payload, true);
+            }
+            case GameEventTypes.ELITE_DEFEATED -> {
+                profileService.applyGameDelta(studentNo, courseCode,
+                        0, 2, 1, 120, 40, 1, GameEventTypes.ELITE_DEFEATED, sourceId);
+                updateCompetency(studentNo, courseCode, payload, true);
+            }
+            case GameEventTypes.FLOOR_FAILED -> {
+                profileService.applyGameDelta(studentNo, courseCode,
+                        -5, 0, 0, 10, 0, -1, GameEventTypes.FLOOR_FAILED, sourceId);
+                updateCompetency(studentNo, courseCode, payload, false);
+            }
             case GameEventTypes.SUPPLY_USED -> profileService.applyGameDelta(studentNo, courseCode,
                     30, 0, 0, 0, -10, -1, GameEventTypes.SUPPLY_USED,
                     stringValue(payload, "supply_type", "supplyType", sourceId));

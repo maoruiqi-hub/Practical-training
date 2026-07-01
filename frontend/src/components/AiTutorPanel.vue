@@ -113,16 +113,21 @@ const extractAnswer = response => {
   }
   const data = agentic.data || {}
   if (typeof data === 'string') return data
-  return data.answer ||
+  const text = data.answer ||
     data.content ||
     data.text ||
+    data.result ||
     agentic.answer ||
     agentic.content ||
     agentic.text ||
-    agentic.message ||
-    result.message ||
-    result.msg ||
-    'AI 已返回结果，但没有可显示的文本。'
+    agentic.result
+  if (text) return text
+
+  const statusMessage = agentic.message || result.message || result.msg || ''
+  if (statusMessage && !['ok', 'success'].includes(String(statusMessage).trim().toLowerCase())) {
+    return statusMessage
+  }
+  return 'AI 已返回结果，但没有可显示的文本。'
 }
 
 const reportAiEvent = async () => {

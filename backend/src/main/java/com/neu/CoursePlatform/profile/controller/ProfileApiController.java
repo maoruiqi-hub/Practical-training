@@ -11,6 +11,9 @@ import com.neu.CoursePlatform.profile.service.IncentiveService;
 import com.neu.CoursePlatform.profile.service.ProfileService;
 import com.neu.CoursePlatform.profile.service.RecommendationService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
+import com.neu.CoursePlatform.service.AbilityRadarService;
+import com.neu.CoursePlatform.service.TowerQuestionPackService;
+import com.neu.CoursePlatform.service.TowerRunService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +36,9 @@ public class ProfileApiController {
     private final RecommendationService recommendationService;
     private final IncentiveService incentiveService;
     private final CourseGameConfigService gameConfigService;
+    private final TowerRunService towerRunService;
+    private final TowerQuestionPackService towerQuestionPackService;
+    private final AbilityRadarService abilityRadarService;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Auth auth;
 
@@ -40,12 +46,18 @@ public class ProfileApiController {
                                 RecommendationService recommendationService,
                                 IncentiveService incentiveService,
                                 CourseGameConfigService gameConfigService,
+                                TowerRunService towerRunService,
+                                TowerQuestionPackService towerQuestionPackService,
+                                AbilityRadarService abilityRadarService,
                                 ApplicationEventPublisher applicationEventPublisher,
                                 Auth auth) {
         this.profileService = profileService;
         this.recommendationService = recommendationService;
         this.incentiveService = incentiveService;
         this.gameConfigService = gameConfigService;
+        this.towerRunService = towerRunService;
+        this.towerQuestionPackService = towerQuestionPackService;
+        this.abilityRadarService = abilityRadarService;
         this.applicationEventPublisher = applicationEventPublisher;
         this.auth = auth;
     }
@@ -133,7 +145,168 @@ public class ProfileApiController {
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
+        Map<String, Object> run = towerRunService.getOrCreateActiveRun(String.valueOf(studentNo), String.valueOf(courseNo));
+        Object nodes = run.get("nodes");
+        if (nodes instanceof List<?> list) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> cast = (List<Map<String, Object>>) (List<?>) list;
+            return Result.ok(cast);
+        }
         return Result.ok(profileService.getTowerMap(studentNo, courseNo));
+    }
+
+    @GetMapping("/students/{studentId}/tower-run")
+    public Result<Map<String, Object>> towerRun(@PathVariable String studentId,
+                                                @RequestParam(name = "course_id", required = false) String courseId,
+                                                @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
+        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
+        try {
+            return Result.ok(towerRunService.getOrCreateActiveRun(String.valueOf(studentNo), String.valueOf(courseNo)));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/generate")
+    public Result<Map<String, Object>> generateTowerRun(@PathVariable String studentId,
+                                                        @RequestParam(name = "course_id", required = false) String courseId,
+                                                        @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                        @RequestParam(defaultValue = "false") boolean force,
+                                                        HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
+        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
+        try {
+            return Result.ok(towerRunService.generateRun(String.valueOf(studentNo), String.valueOf(courseNo), force));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @GetMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}")
+    public Result<Map<String, Object>> towerNode(@PathVariable String studentId,
+                                                 @PathVariable String runId,
+                                                 @PathVariable String nodeId,
+                                                 HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerRunService.getNode(String.valueOf(studentNo), runId, nodeId));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/enter")
+    public Result<Map<String, Object>> enterTowerNode(@PathVariable String studentId,
+                                                      @PathVariable String runId,
+                                                      @PathVariable String nodeId,
+                                                      HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerRunService.enterNode(String.valueOf(studentNo), runId, nodeId));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/complete")
+    public Result<Map<String, Object>> completeTowerNode(@PathVariable String studentId,
+                                                         @PathVariable String runId,
+                                                         @PathVariable String nodeId,
+                                                         @RequestBody Map<String, Object> body,
+                                                         HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerRunService.completeNode(String.valueOf(studentNo), runId, nodeId, body));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/diagnose")
+    public Result<Map<String, Object>> diagnoseTowerNode(@PathVariable String studentId,
+                                                         @PathVariable String runId,
+                                                         @PathVariable String nodeId,
+                                                         @RequestBody Map<String, Object> body,
+                                                         HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerRunService.diagnoseNode(String.valueOf(studentNo), runId, nodeId, body));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @GetMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/question-pack")
+    public Result<Map<String, Object>> towerQuestionPack(@PathVariable String studentId,
+                                                         @PathVariable String runId,
+                                                         @PathVariable String nodeId,
+                                                         @RequestParam(defaultValue = "battle") String mode,
+                                                         HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 蹇呴』涓烘暟瀛?");
+        try {
+            return Result.ok(towerQuestionPackService.getOrCreateQuestionPack(String.valueOf(studentNo), runId, nodeId, mode));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/question-pack/regenerate")
+    public Result<Map<String, Object>> regenerateTowerQuestionPack(@PathVariable String studentId,
+                                                                   @PathVariable String runId,
+                                                                   @PathVariable String nodeId,
+                                                                   @RequestParam(defaultValue = "battle") String mode,
+                                                                   HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 蹇呴』涓烘暟瀛?");
+        try {
+            return Result.ok(towerQuestionPackService.regenerateQuestionPack(String.valueOf(studentNo), runId, nodeId, mode));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @GetMapping("/students/{studentId}/ability-deltas")
+    public Result<List<Map<String, Object>>> abilityDeltas(@PathVariable String studentId,
+                                                           @RequestParam(name = "course_id", required = false) String courseId,
+                                                           @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                           @RequestParam(name = "run_id", required = false) String runId,
+                                                           HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
+        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
+        return Result.ok(towerRunService.getAbilityDeltas(String.valueOf(studentNo), String.valueOf(courseNo), runId));
+    }
+
+    @GetMapping("/students/{studentId}/ability-radar")
+    public Result<Map<String, Object>> abilityRadar(@PathVariable String studentId,
+                                                    @RequestParam(name = "course_id", required = false) String courseId,
+                                                    @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                    @RequestParam(name = "run_id", required = false) String runId,
+                                                    @RequestParam(name = "node_id", required = false) String nodeId,
+                                                    HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        Integer studentNo = parseInt(studentId, "studentId");
+        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
+        if (studentNo == null || courseNo == null) return Result.fail("studentId 鍜?course_id 蹇呴』涓烘暟瀛?");
+        return Result.ok(abilityRadarService.getAbilityRadar(String.valueOf(studentNo), String.valueOf(courseNo), runId, nodeId));
     }
 
     @PostMapping("/students/{studentId}/growth/add")

@@ -40,12 +40,12 @@
             class="choice-card reward-card"
             @click="chooseCourse(course)"
           >
-            <small>Knowledge Card</small>
+            <small>知识卡</small>
             <strong>{{ course.courseName || course.name || course.title || courseName }}</strong>
             <span>{{ course.teacher || course.teacherName || '课程资源' }}</span>
           </button>
           <button v-if="!treasureCards.length" type="button" class="choice-card reward-card" @click="complete('金币袋')">
-            <small>Fallback Reward</small>
+            <small>兜底奖励</small>
             <strong>金币袋</strong>
             <span>获得一份临时资源奖励。</span>
           </button>
@@ -53,7 +53,7 @@
 
         <div v-else-if="roomType === 'shop'" class="shop-layout">
           <article class="shop-board">
-            <p class="kicker">Wrong Cards</p>
+            <p class="kicker">错题卡</p>
             <h3>错题商店</h3>
             <ol v-if="mistakes.length" class="compact-list">
               <li v-for="(item, index) in mistakes.slice(0, 5)" :key="item.questionId || index">
@@ -120,13 +120,13 @@ const visible = computed({
 })
 
 const roomCopy = computed(() => ({
-  start: { kicker: 'Neow Choice', title: '开局准备', description: '确认状态，整理补给，然后进入第一条路线。' },
-  rest: { kicker: 'Rest Site', title: '休息点', description: '恢复、复习或整理卡组，只能选择一个主要行动。' },
-  treasure: { kicker: 'Treasure', title: '知识宝箱', description: '打开宝箱，选择一份课程资源或奖励卡。' },
-  shop: { kicker: 'Shop', title: '错题商店', description: '用本局资源购买提示，或处理错题卡。' },
-  progress: { kicker: 'Run Log', title: '路线事件', description: '根据当前学情触发一次路线事件。' },
-  event: { kicker: 'Unknown Event', title: '学习事件', description: '做一个有收益和代价的选择。' }
-})[props.roomType] || { kicker: 'Room', title: '学习房间', description: '完成房间事件后返回地图。' })
+  start: { kicker: '开局选择', title: '开局准备', description: '确认状态，整理补给，然后进入第一条路线。' },
+  rest: { kicker: '休息点', title: '休息点', description: '恢复、复习或整理卡组，只能选择一个主要行动。' },
+  treasure: { kicker: '课程宝箱', title: '知识宝箱', description: '打开宝箱，选择一份课程资源或奖励卡。' },
+  shop: { kicker: '商店', title: '错题商店', description: '用本局资源购买提示，或处理错题卡。' },
+  progress: { kicker: '路线记录', title: '路线事件', description: '根据当前学情触发一次路线事件。' },
+  event: { kicker: '学习事件', title: '学习事件', description: '做一个有收益和代价的选择。' }
+})[props.roomType] || { kicker: '学习房间', title: '学习房间', description: '完成房间事件后返回地图。' })
 
 const backgroundForRoom = computed(() => ({
   start: gameBackgrounds.runEntry,

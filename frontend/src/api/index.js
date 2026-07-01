@@ -18,6 +18,26 @@ export const getStudentProfile = (studentId, courseId) =>
   api.get(`/api/students/${studentId}/profile`, { params: { course_id: courseId } })
 export const getTowerMap = (studentId, courseId) =>
   api.get(`/api/students/${studentId}/tower-map`, { params: { course_id: courseId } })
+export const getTowerRun = (studentId, courseId) =>
+  api.get(`/api/students/${studentId}/tower-run`, { params: { course_id: courseId } })
+export const generateTowerRun = (studentId, courseId, force = false) =>
+  api.post(`/api/students/${studentId}/tower-run/generate`, null, { params: { course_id: courseId, force } })
+export const getTowerNode = (studentId, runId, nodeId) =>
+  api.get(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}`)
+export const enterTowerNode = (studentId, runId, nodeId) =>
+  api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/enter`)
+export const completeTowerNode = (studentId, runId, nodeId, data) =>
+  api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/complete`, data)
+export const diagnoseTowerNode = (studentId, runId, nodeId, data) =>
+  api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/diagnose`, data)
+export const getTowerQuestionPack = (studentId, runId, nodeId, mode = 'battle') =>
+  api.get(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/question-pack`, { params: { mode } })
+export const getAbilityDeltas = (studentId, courseId, runId = '') =>
+  api.get(`/api/students/${studentId}/ability-deltas`, { params: { course_id: courseId, run_id: runId || undefined } })
+export const getAbilityRadar = (studentId, courseId, runId = '', nodeId = '') =>
+  api.get(`/api/students/${studentId}/ability-radar`, {
+    params: { course_id: courseId, run_id: runId || undefined, node_id: nodeId || undefined }
+  })
 export const sendGameEvent = (studentId, body) =>
   api.post(`/api/students/${studentId}/game-event`, body)
 export const getLeaderboard = (courseId, type = 'progress') =>

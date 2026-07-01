@@ -31,3 +31,15 @@ export const referenceTokenIcons = {
   treasureDiamond: require('@/assets/game/icons/slay-spire-reference/tokens/treasure-diamond.png'),
   eventSlime: require('@/assets/game/icons/slay-spire-reference/tokens/event-slime.png')
 }
+
+export const characterSprites = {
+  playerKnightIdle: require('@/assets/game/characters/player-knight-idle.png'),
+  playerKnightGuard: require('@/assets/game/characters/player-knight-guard.png'),
+  playerKnightCasting: require('@/assets/game/characters/player-knight-casting.png')
+}
+
+export const enemySprites = {
+  knowledgeEnemy: require('@/assets/game/enemies/knowledge-slime.png'),
+  eliteEnemy: require('@/assets/game/enemies/corrupt-heart.png'),
+  bossEnemy: require('@/assets/game/enemies/corrupt-heart.png')
+}

@@ -3,19 +3,19 @@
     <GameHud :profile="profile" :course-name="courseName" compact :show-hp="false" />
 
     <main class="tower-shell">
-      <section class="map-stage" aria-label="??????">
+      <section class="map-stage" aria-label="路线地图">
         <div class="act-header">
           <div>
-            <p class="kicker">Act {{ activeAct }} Route Map</p>
+            <p class="kicker">第 {{ activeAct }} 幕 · 路线图</p>
             <h1>{{ actTitle }}</h1>
           </div>
           <div class="act-actions">
-            <el-button class="ghost-button" aria-label="????" @click="loadData">
+            <el-button class="ghost-button" aria-label="刷新路线" @click="loadData">
               <el-icon><Refresh /></el-icon>
             </el-button>
             <el-button class="danger-button" @click="logout">
               <el-icon><SwitchButton /></el-icon>
-              ??
+              退出
             </el-button>
           </div>
         </div>
@@ -49,19 +49,19 @@
         </div>
       </section>
 
-      <aside class="node-panel" aria-label="??????">
+      <aside class="node-panel" aria-label="节点详情">
         <section class="panel-card primary">
-          <p class="kicker">Next Choice</p>
+          <p class="kicker">下一步选择</p>
           <h2>{{ previewTitle }}</h2>
           <p class="panel-copy">{{ previewCopy }}</p>
           <div v-if="selectedNode" class="intel-list">
-            <span>??? <b>{{ selectedNode.kpName }}</b></span>
+            <span>知识点 <b>{{ selectedNode.kpName }}</b></span>
             <span>掌握度 <b>{{ selectedNode.masteryRate }}%</b></span>
             <span v-if="selectedNode.masterySource">来源 <b>{{ masterySourceLabel(selectedNode.masterySource) }}</b></span>
             <span v-if="selectedNode.abilityPointName">关联能力 <b>{{ selectedNode.abilityPointName }}</b></span>
-            <span>?? <b>{{ roomLabel(selectedNode.roomType) }}</b></span>
-            <span>?? <b>{{ riskText(selectedNode.risk) }}</b></span>
-            <span>?? <b>{{ rewardText(selectedNode) }}</b></span>
+            <span>房间 <b>{{ roomLabel(selectedNode.roomType) }}</b></span>
+            <span>风险 <b>{{ riskText(selectedNode.risk) }}</b></span>
+            <span>奖励 <b>{{ rewardText(selectedNode) }}</b></span>
             <span v-if="selectedNode.statusReason">状态原因 <b :title="selectedNode.statusReason">{{ selectedNode.statusReason }}</b></span>
           </div>
           <el-button
@@ -70,7 +70,7 @@
             @click="enterSelected"
           >
             <el-icon><Aim /></el-icon>
-            ????
+            进入房间
           </el-button>
         </section>
 
@@ -141,7 +141,7 @@ import ShopRoom from '../components/ShopRoom.vue'
 import SupplyModal from '../components/SupplyModal.vue'
 import TreasureRoom from '../components/TreasureRoom.vue'
 import { gameBackgrounds, mapLegendIcons, referenceTokenIcons } from '../data/gameAssetManifest'
-import { getLeaderboard, getStudentProfile, getTowerMap, sendGameEvent } from '../api'
+import { completeTowerNode, enterTowerNode, getLeaderboard, getStudentProfile, getTowerRun, sendGameEvent } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -150,6 +150,7 @@ const user = JSON.parse(localStorage.getItem('user') || '{}')
 const loading = ref(false)
 const profile = ref({})
 const floors = ref([])
+const towerRun = ref(null)
 const leaderboard = ref([])
 const selectedNode = ref(null)
 const roomVisible = ref(false)
@@ -158,21 +159,23 @@ const activeRoomType = ref('event')
 
 const roomPattern = ['diagnosis', 'battle', 'treasure', 'battle', 'rest', 'elite', 'event', 'shop', 'battle', 'treasure', 'battle', 'rest', 'elite', 'boss']
 const fallbackNames = [
-  'Python Syntax Basics',
-  'Variables and Data Types',
-  'Expressions and Operators',
-  'Branching Control',
-  'Loop Control',
-  'Functions and Parameters',
-  'Lists and Tuples',
-  'Dictionaries and Sets',
-  'String Processing',
-  'File Processing',
-  'Exception Handling',
-  'Modules and Packages',
-  'Integrated Program Design',
-  'Python Basics Boss'
+  'Python 语法基础',
+  '变量与数据类型',
+  '表达式与运算符',
+  '分支控制',
+  '循环控制',
+  '函数与参数',
+  '列表与元组',
+  '字典与集合',
+  '字符串处理',
+  '文件处理',
+  '异常处理',
+  '模块与包',
+  '综合程序设计',
+  'Python 基础首领'
 ]
+
+const normalizeCourseName = name => String(name || '').trim() === 'Python Program Design' ? 'Python 程序设计' : name
 
 const pageStyle = computed(() => ({
   backgroundImage: `linear-gradient(180deg, rgba(6, 8, 12, .28), rgba(6, 8, 12, .68)), url(${gameBackgrounds.mapAct1})`
@@ -184,9 +187,11 @@ const studentId = computed(() =>
 const courseId = computed(() =>
   route.query.courseId || route.query.course_id || localStorage.getItem('courseId') || '1'
 )
-const courseName = computed(() => route.query.courseName || localStorage.getItem('courseName') || 'Python Program Design')
+const courseName = computed(() => normalizeCourseName(route.query.courseName || localStorage.getItem('courseName') || 'Python 程序设计'))
 
 const fallbackFloors = fallbackNames.map((name, index) => ({
+  runId: '',
+  nodeId: `fallback-${index + 1}`,
   kpId: String(index + 1),
   kpName: name,
   level: index + 1,
@@ -203,7 +208,7 @@ const normalizeStatus = (floor, index) => {
   const raw = String(floor.floorStatus || floor.floor_status || floor.status || '').toLowerCase()
   const mastery = Number(floor.masteryRate ?? floor.mastery_rate ?? floor.mastery ?? 0)
   const accessible = floor.isAccessible ?? floor.is_accessible
-  if (['cleared', 'mastered', 'passed', 'done'].includes(raw) || mastery >= 80) return 'cleared'
+  if (['cleared', 'cleared_by_diagnosis', 'mastered', 'passed', 'done'].includes(raw) || mastery >= 80) return 'cleared'
   if (['weak', 'review', 'remedial'].includes(raw) || (mastery > 0 && mastery < 60)) return 'weak'
   if (raw === 'locked' || accessible === false) return 'locked'
   if (raw === 'available' || raw === 'open' || accessible === true || index === 0) return 'available'
@@ -213,10 +218,14 @@ const normalizeStatus = (floor, index) => {
 const normalizeFloors = list => {
   const source = Array.isArray(list) && list.length ? list : fallbackFloors
   return source.map((item, index) => {
-    const level = Number(item.level || item.floorLevel || index + 1)
+    const level = Number(item.level || item.nodeOrder || item.node_order || item.floorLevel || index + 1)
     const roomType = item.roomType || item.room_type || roomPattern[index % roomPattern.length]
     return {
-      nodeId: `${level}-${item.kpId || item.knowledgePointId || index}`,
+      runId: item.runId || item.run_id || towerRun.value?.runId || '',
+      nodeId: item.nodeId || item.node_id || `${level}-${item.kpId || item.knowledgePointId || index}`,
+      nodeOrder: Number(item.nodeOrder || item.node_order || level),
+      row: Number(item.row || item.rowNo || item.row_no || level),
+      col: Number(item.col || item.colNo || item.col_no || 1),
       kpId: item.kpId || item.knowledgePointId || item.knowledge_point_id || item.id || String(index + 1),
       kpName: item.kpName || item.knowledgePointName || item.name || item.title || `Floor ${index + 1}`,
       level,
@@ -237,23 +246,29 @@ const firstOpenIndex = computed(() => {
   return index >= 0 ? index : 0
 })
 
-const routeRows = computed(() => baseNodes.value.map((node, index) => {
-  const branchTypes = branchRoomTypes(node, index)
-  const nodes = branchTypes.map((roomType, branch) => ({
-    ...node,
-    nodeId: `${node.nodeId}-branch-${branch}`,
-    roomType,
-    risk: roomRisk(roomType, node.status),
-    status: branchStatus(node, index, branch),
-    branch
-  }))
-  return { level: node.level, nodes }
-}))
+const routeRows = computed(() => {
+  const groups = new Map()
+  baseNodes.value.forEach((node, index) => {
+    const row = Number(node.row || node.level || index + 1)
+    if (!groups.has(row)) groups.set(row, [])
+    groups.get(row).push({
+      ...node,
+      risk: roomRisk(node.roomType, node.status),
+      branch: Number(node.col || 1) - 1
+    })
+  })
+  return Array.from(groups.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([level, nodes]) => ({
+      level,
+      nodes: nodes.sort((a, b) => Number(a.col || 1) - Number(b.col || 1))
+    }))
+})
 
 const visualRows = computed(() => routeRows.value.slice().reverse())
 
 const activeAct = computed(() => Math.min(3, Math.max(1, Math.ceil((baseNodes.value[firstOpenIndex.value]?.level || 1) / 5))))
-const actTitle = computed(() => ['Foundation Trail', 'Data Citadel', 'Final Tower'][activeAct.value - 1])
+const actTitle = computed(() => ['基础路线', '数据城堡', '最终高塔'][activeAct.value - 1])
 
 const allVisualNodes = computed(() => routeRows.value.flatMap(row => row.nodes))
 const runStats = computed(() => ({
@@ -263,31 +278,31 @@ const runStats = computed(() => ({
 }))
 
 const canEnterSelected = computed(() => selectedNode.value && selectedNode.value.status !== 'locked')
-const previewTitle = computed(() => selectedNode.value ? roomLabel(selectedNode.value.roomType) : 'Choose Next Node')
+const previewTitle = computed(() => selectedNode.value ? roomLabel(selectedNode.value.roomType) : '选择下一节点')
 const previewCopy = computed(() => {
-  if (!selectedNode.value) return 'Click an unlocked map node to view its knowledge point, risk, and reward.'
+  if (!selectedNode.value) return '点击已解锁的地图节点，查看知识点、风险和奖励。'
   const node = selectedNode.value
-  return roomDescriptions[node.roomType] || `Enter ${node.kpName}, complete the challenge, then return to unlock the next step.`
+  return roomDescriptions[node.roomType] || `进入 ${node.kpName}，完成挑战后返回地图解锁下一步。`
 })
 
 const legendItems = computed(() => [
-  { type: 'battle', label: 'Battle: quiz challenge', icon: mapLegendIcons.enemy },
-  { type: 'elite', label: 'Elite: harder practice', icon: mapLegendIcons.elite },
-  { type: 'treasure', label: 'Treasure: resource reward', icon: mapLegendIcons.treasure },
-  { type: 'rest', label: 'Rest: recover and review', icon: mapLegendIcons.rest },
-  { type: 'shop', label: 'Shop: spend coins', icon: mapLegendIcons.merchant },
-  { type: 'event', label: 'Event: learning choice', icon: mapLegendIcons.unknown }
+  { type: 'battle', label: '战斗：答题挑战', icon: mapLegendIcons.enemy },
+  { type: 'elite', label: '精英：高难练习', icon: mapLegendIcons.elite },
+  { type: 'treasure', label: '宝箱：资源奖励', icon: mapLegendIcons.treasure },
+  { type: 'rest', label: '休息：恢复复盘', icon: mapLegendIcons.rest },
+  { type: 'shop', label: '商店：购买补给', icon: mapLegendIcons.merchant },
+  { type: 'event', label: '事件：学习选择', icon: mapLegendIcons.unknown }
 ])
 
 const roomDescriptions = {
-  diagnosis: 'Run a short diagnosis before the challenge.',
-  battle: 'Answer questions to damage the enemy and earn rewards.',
-  elite: 'A harder mixed challenge with better rewards.',
-  boss: 'A chapter boss challenge that closes this run segment.',
-  treasure: 'Open a chest to gain resources or a knowledge card.',
-  rest: 'Recover, review weak points, and prepare for the next node.',
-  shop: 'Spend coins for hints or cleanup actions.',
-  event: 'Resolve a learning event with a benefit and a cost.'
+  diagnosis: '先完成短诊断，确认当前知识点状态。',
+  battle: '通过答题攻击敌人，并获得通关奖励。',
+  elite: '更难的综合挑战，奖励也更稀有。',
+  boss: '章节首领战，完成后结束本段路线。',
+  treasure: '打开宝箱，获得课程资源或知识卡。',
+  rest: '恢复状态、复盘薄弱点，为下一节点做准备。',
+  shop: '花费金币购买提示或清理错题卡。',
+  event: '处理一次带有收益和代价的学习事件。'
 }
 
 const branchRoomTypes = (node, index) => {
@@ -326,28 +341,29 @@ const iconFor = node => ({
 })[node.roomType] || mapLegendIcons.unknown
 
 const roomLabel = type => ({
-  diagnosis: 'Diagnosis',
-  battle: 'Battle',
-  elite: 'Elite',
-  boss: 'Boss',
-  rest: 'Rest',
-  shop: 'Shop',
-  treasure: 'Treasure',
-  event: 'Event'
-})[type] || 'Room'
+  diagnosis: '诊断',
+  battle: '战斗',
+  elite: '精英',
+  boss: '首领',
+  rest: '休息',
+  shop: '商店',
+  treasure: '宝箱',
+  event: '事件'
+})[type] || '房间'
 
 const statusText = status => ({
-  cleared: 'Cleared',
-  weak: 'Weak',
-  available: 'Available',
-  locked: 'Locked'
+  cleared: '已通过',
+  cleared_by_diagnosis: '诊断跳过',
+  weak: '薄弱',
+  available: '可进入',
+  locked: '未解锁'
 })[status] || status
 
 const riskText = risk => ({
-  low: 'Low',
-  normal: 'Normal',
-  high: 'High'
-})[risk] || 'Normal'
+  low: '低',
+  normal: '中',
+  high: '高'
+})[risk] || '中'
 
 const masterySourceLabel = source => ({
   knowledge_mastery: '来自知识点掌握度',
@@ -357,15 +373,15 @@ const masterySourceLabel = source => ({
 })[source] || source
 
 const rewardText = node => ({
-  diagnosis: 'Initial state',
-  battle: 'Card / coins',
-  elite: 'Rare reward',
-  boss: 'Chapter clear',
-  rest: 'Heal / review',
-  shop: 'Hint / cleanup',
-  treasure: 'Course resource',
-  event: 'Benefit and cost'
-})[node.roomType] || 'Reward'
+  diagnosis: '初始状态',
+  battle: '卡牌 / 金币',
+  elite: '稀有奖励',
+  boss: '章节通关',
+  rest: '恢复 / 复盘',
+  shop: '提示 / 清理',
+  treasure: '课程资源',
+  event: '收益与代价'
+})[node.roomType] || '奖励'
 
 const pickProfile = payload => payload?.profile || payload || {}
 
@@ -383,7 +399,7 @@ const loadData = async () => {
   try {
     const [profileRes, mapRes, rankRes] = await Promise.allSettled([
       getStudentProfile(studentId.value, courseId.value),
-      getTowerMap(studentId.value, courseId.value),
+      getTowerRun(studentId.value, courseId.value),
       getLeaderboard(courseId.value, 'progress')
     ])
 
@@ -391,7 +407,8 @@ const loadData = async () => {
       profile.value = pickProfile(profileRes.value.data.data)
     }
     if (mapRes.status === 'fulfilled' && mapRes.value.data.code === 200) {
-      floors.value = mapRes.value.data.data || []
+      towerRun.value = mapRes.value.data.data || null
+      floors.value = towerRun.value?.nodes || []
     }
     if (rankRes.status === 'fulfilled' && rankRes.value.data.code === 200) {
       leaderboard.value = rankRes.value.data.data || []
@@ -413,7 +430,7 @@ const previewNode = node => {
 
 const selectNode = node => {
   if (node.status === 'locked') {
-    ElMessage.warning('Node is locked')
+    ElMessage.warning('节点尚未解锁')
     return
   }
   selectedNode.value = node
@@ -429,12 +446,17 @@ const enterSelected = () => {
   const node = selectedNode.value
   if (!node || node.status === 'locked') return
   if (['diagnosis', 'battle', 'elite', 'boss'].includes(node.roomType)) {
+    if (node.runId && node.nodeId) {
+      enterTowerNode(studentId.value, node.runId, node.nodeId).catch(() => {})
+    }
     router.push({
       path: `/floor/${node.kpId}`,
       query: {
         courseId: courseId.value,
         courseName: courseName.value,
         floorName: node.kpName,
+        runId: node.runId,
+        nodeId: node.nodeId,
         boss: node.roomType === 'boss' ? '1' : '0',
         roomType: node.roomType
       }
@@ -459,6 +481,20 @@ const roomEventType = roomType => ({
 
 const sendRoomEvent = async (roomType, payload = {}) => {
   const node = selectedNode.value
+  if (node?.runId && node?.nodeId) {
+    const result = roomEventType(roomType)
+    const res = await completeTowerNode(studentId.value, node.runId, node.nodeId, {
+      result,
+      roomType,
+      rewardName: payload.rewardName || payload.reward_name || '',
+      correctRate: 1
+    })
+    if (res.data.code === 200) {
+      towerRun.value = res.data.data || towerRun.value
+      floors.value = towerRun.value?.nodes || floors.value
+    }
+    return
+  }
   const res = await sendGameEvent(studentId.value, {
     course_id: courseId.value,
     event_type: roomEventType(roomType),
@@ -475,9 +511,9 @@ const completeRoom = async payload => {
   try {
     await sendRoomEvent(payload?.roomType || activeRoomType.value, payload || {})
   } catch {
-    ElMessage.warning('Room event sync failed')
+    ElMessage.warning('房间事件同步失败')
   }
-  ElMessage.success('Room completed')
+  ElMessage.success('房间已完成')
   loadData()
 }
 
@@ -489,9 +525,9 @@ const pickCourse = async course => {
   try {
     await sendRoomEvent('treasure', { rewardName: 'course_card' })
   } catch {
-    ElMessage.warning('Treasure event sync failed')
+    ElMessage.warning('宝箱事件同步失败')
   }
-  ElMessage.success('Knowledge card added')
+  ElMessage.success('知识卡已加入')
   loadData()
 }
 

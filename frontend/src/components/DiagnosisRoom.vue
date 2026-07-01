@@ -4,6 +4,11 @@
       <el-skeleton :rows="6" animated />
     </div>
 
+    <div v-else-if="packError" class="scene-loading">
+      <el-empty :description="packError" :image-size="90" />
+      <button type="button" class="confirm-choice" @click="loadQuestions">重新加载题包</button>
+    </div>
+
     <template v-else>
       <div class="scene-vignette" aria-hidden="true"></div>
 
@@ -12,14 +17,14 @@
         <strong>{{ Math.round(correctRate * 100) }}%</strong>
       </div>
 
-      <div class="analyst-actor" aria-label="侦察终端">
+      <div class="analyst-actor" aria-label="学习者">
         <div class="analyst-aura"></div>
         <div class="analyst-core">
-          <span></span>
+          <img :src="characterSprites.playerKnightCasting" alt="" />
         </div>
         <div class="analyst-name">
-          <strong>侦察终端</strong>
-          <em>正在扫描当前知识点</em>
+          <strong>学习者</strong>
+          <em>正在侦察当前知识点</em>
         </div>
       </div>
 
@@ -88,7 +93,7 @@
       </section>
 
       <div class="scene-tools">
-        <button type="button" :disabled="choiceLocked" @click="$emit('diagnosed', { status: 'partial', correctRate })">
+        <button type="button" :disabled="choiceLocked" @click="$emit('diagnosed', { status: 'partial', correctRate, answers: answerSummary(), packId })">
           直接进入战斗
         </button>
       </div>
@@ -99,12 +104,16 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions } from '../api'
+import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, getTowerQuestionPack } from '../api'
+import { characterSprites } from '../data/gameAssetManifest'
 
 const props = defineProps({
   kpId: { type: [String, Number], required: true },
   courseId: { type: [String, Number], required: true },
-  taskNo: { type: [String, Number], default: '' }
+  taskNo: { type: [String, Number], default: '' },
+  studentId: { type: [String, Number], default: '' },
+  runId: { type: [String, Number], default: '' },
+  nodeId: { type: [String, Number], default: '' }
 })
 
 const emit = defineEmits(['diagnosed'])
@@ -119,6 +128,8 @@ const choiceLocked = ref(false)
 const feedback = ref(null)
 const selectedMulti = ref([])
 const freeAnswer = ref('')
+const packId = ref('')
+const packError = ref('')
 
 const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
 const displayOptions = computed(() => parseOptions(activeQuestion.value.options))
@@ -195,8 +206,23 @@ const isCorrect = question => {
 const loadQuestions = async () => {
   loading.value = true
   questions.value = []
+  packId.value = ''
+  packError.value = ''
   try {
-    if (props.taskNo) {
+    if (props.runId && props.nodeId) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const studentId = props.studentId || user.studentNo || user.student_no || user.no || user.id || '1'
+      const packRes = await getTowerQuestionPack(studentId, props.runId, props.nodeId, 'diagnosis')
+      if (packRes.data.code === 200) {
+        packId.value = packRes.data.data?.packId || ''
+        questions.value = packRes.data.data?.questions || []
+      }
+      if (!questions.value.length) {
+        throw new Error(packRes.data.msg || '当前节点题包为空')
+      }
+    }
+
+    if (!questions.value.length && props.taskNo) {
       const taskRes = await getTaskQuestions(props.taskNo)
       if (taskRes.data.code === 200) {
         const details = await Promise.all(
@@ -214,10 +240,13 @@ const loadQuestions = async () => {
       const res = await getQuestionsByKnowledgePoint(props.courseId, props.kpId)
       if (res.data.code === 200) questions.value = (res.data.data || []).slice(0, 3)
     }
-  } catch {
+  } catch (error) {
+    if (props.runId && props.nodeId) {
+      packError.value = error?.message || '题包加载失败，请重试'
+    }
     questions.value = []
   } finally {
-    if (!questions.value.length) questions.value = fallbackQuestions.value
+    if (!questions.value.length && !packError.value) questions.value = fallbackQuestions.value
     questions.value.forEach(question => {
       answers[question.questionId] = question.type === 'multi' ? [] : ''
     })
@@ -280,9 +309,22 @@ const resolveCurrentAnswer = () => {
 }
 
 const finishDiagnosis = () => {
-  const status = correctRate.value >= 0.85 ? 'mastered' : correctRate.value >= 0.4 ? 'partial' : 'weak'
-  emit('diagnosed', { status, correctRate: correctRate.value })
+  const perfect = questions.value.length > 0 && correctCount.value === questions.value.length
+  const status = perfect ? 'mastered' : correctRate.value >= 0.4 ? 'partial' : 'weak'
+  emit('diagnosed', { status, correctRate: correctRate.value, answers: answerSummary(), packId: packId.value })
 }
+
+const answerSummary = () => questions.value.map(question => ({
+  questionId: question.questionId,
+  stem: question.stem,
+  studentAnswer: Array.isArray(answers[question.questionId])
+    ? answers[question.questionId].join(',')
+    : (answers[question.questionId] || ''),
+  correctAnswer: question.answer,
+  correct: isCorrect(question),
+  knowledgePointId: question.knowledgePointId || props.kpId,
+  type: question.type
+}))
 
 onMounted(loadQuestions)
 </script>
@@ -316,7 +358,7 @@ onMounted(loadQuestions)
 .scan-meter {
   position: absolute;
   z-index: 5;
-  top: 18px;
+  top: 76px;
   right: 28px;
   display: grid;
   min-width: 140px;
@@ -352,31 +394,28 @@ onMounted(loadQuestions)
 
 .analyst-aura {
   position: absolute;
-  width: 240px;
+  width: 250px;
   height: 100px;
   bottom: -10px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(82, 231, 239, .24), transparent 68%);
+  background: radial-gradient(circle, rgba(238, 185, 92, .26), transparent 68%);
 }
 
 .analyst-core {
   position: relative;
   display: grid;
-  width: 170px;
-  height: 210px;
+  width: 232px;
+  height: 286px;
   place-items: center;
   filter: drop-shadow(0 28px 30px rgba(0, 0, 0, .56));
 }
 
-.analyst-core span {
-  width: 118px;
-  height: 118px;
-  border: 2px solid rgba(151, 237, 241, .6);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, rgba(228, 255, 250, .96) 0 12px, transparent 13px),
-    radial-gradient(circle, rgba(76, 221, 232, .42), rgba(12, 56, 65, .9) 60%, rgba(8, 14, 20, .96));
-  box-shadow: 0 0 36px rgba(84, 228, 235, .36);
+.analyst-core img {
+  max-width: 232px;
+  max-height: 286px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 0 18px rgba(242, 194, 93, .2));
 }
 
 .analyst-name {
@@ -385,7 +424,7 @@ onMounted(loadQuestions)
   min-width: 170px;
   gap: 3px;
   padding: 8px 14px;
-  border: 1px solid rgba(151, 237, 241, .32);
+  border: 1px solid rgba(244, 202, 118, .36);
   border-radius: 999px;
   text-align: center;
   background: rgba(9, 10, 14, .56);
@@ -397,7 +436,7 @@ onMounted(loadQuestions)
 }
 
 .analyst-name em {
-  color: #bce7e2;
+  color: #d7c09a;
   font-size: 12px;
   font-style: normal;
 }
