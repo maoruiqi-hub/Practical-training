@@ -72,6 +72,7 @@
     <el-dialog v-model="detailVisible" :title="detailTitle" width="900px" top="3vh" @opened="onDetailOpened">
       <template v-if="detailStudent">
         <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <el-button type="success" :loading="interventionLoading" @click="generateIntervention">生成干预建议</el-button>
           <el-button type="primary" @click="openAssignDialog()">分配任务</el-button>
         </div>
         <!-- 教学诊断摘要 -->
@@ -132,6 +133,30 @@
                 <el-tag size="small" :type="recTypeTag(rec.type)">{{ recTypeLabel(rec.type) }}</el-tag>
                 <span style="margin-left:6px;font-weight:bold">{{ rec.targetName }}</span>
                 <div style="color:#999;font-size:12px;margin-top:2px">{{ rec.reason }}</div>
+              </div>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="干预建议" name="intervention">
+            <div style="margin-bottom:12px">
+              <el-button type="primary" :loading="interventionLoading" @click="generateIntervention">生成个别干预建议</el-button>
+            </div>
+            <el-empty v-if="!detailInterventions.length" description="暂无干预建议" />
+            <div
+              v-for="(item, index) in detailInterventions"
+              :key="index"
+              style="padding:10px;margin-bottom:8px;background:#f5f7fa;border-radius:6px"
+            >
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <strong>{{ item.title || item.suggestion_type || item.type || '干预建议' }}</strong>
+                <el-tag size="small" :type="urgencyTag(item.urgency || item.priority || item.level)">
+                  {{ urgencyLabel(item.urgency || item.priority || item.level) }}
+                </el-tag>
+              </div>
+              <div style="color:#606266;font-size:13px;margin-top:6px">
+                {{ item.content || item.suggestion || item.message || item.raw_response || JSON.stringify(item) }}
+              </div>
+              <div v-if="item.generated_at || item.generatedAt" style="color:#999;font-size:12px;margin-top:4px">
+                {{ item.generated_at || item.generatedAt }}
               </div>
             </div>
           </el-tab-pane>
@@ -215,7 +240,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { assignTask, getTaskList, searchCourse } from '../api'
+import { assignTask, generateStudentIntervention, getTaskList, searchCourse } from '../api'
 import {
   getCourseStudentProfiles, getProfileSummary, getCompetency,
   getRecommendations, getAchievements, getTitle,
@@ -234,6 +259,7 @@ const detailStudent = ref(null)
 const detailProfile = ref({})
 const detailCompetency = ref([])
 const detailRecs = ref([])
+const detailInterventions = ref([])
 const detailAchievements = ref([])
 const detailTitleText = ref('')
 const detailBadgeCount = ref(0)
@@ -245,6 +271,7 @@ const detailRadar = ref(null)
 const detailHistoryChart = ref(null)
 const assignVisible = ref(false)
 const assigning = ref(false)
+const interventionLoading = ref(false)
 const taskLibrary = ref([])
 const assignForm = ref({ taskNo: '', note: '' })
 
@@ -290,6 +317,8 @@ const statusTagType = (s) => {
 }
 const recTypeTag = (t) => ({ review_material: 'danger', practice: 'warning', extended_material: 'success', knowledge_point: '' }[t] || '')
 const recTypeLabel = (t) => ({ review_material: '复习', practice: '练习', extended_material: '拓展', knowledge_point: '学习' }[t] || t)
+const urgencyTag = (value) => ({ high: 'danger', medium: 'warning', low: 'info', 高: 'danger', 中: 'warning', 低: 'info' }[value] || 'info')
+const urgencyLabel = (value) => ({ high: '高优先级', medium: '中优先级', low: '低优先级' }[value] || value || '普通')
 const badgeIcon = (n) => ({ '连击王': '🔥', '完美主义': '💎', '速通者': '🏃', 'Pythonic': '🐍', 'Debug之眼': '🔍', '夜枭': '🦉', '助人者': '🤝' }[n] || '🏆')
 const sourceLabel = (s) => ({ quiz: '测验', boss: '综合测验', default: '答题', task_complete: '任务完成', exam_pass: '考试通过', streak: '连续学习' }[s] || s)
 
@@ -463,6 +492,7 @@ const loadDetailData = async () => {
       detailBadgeCount.value = detailAchievements.value.filter(a => a.achievementType === 'badge').length
     }
     if (titleRes.data.code === 200) detailTitleText.value = titleRes.data.data
+    detailInterventions.value = []
   } catch (e) { /* ignore */ }
 }
 
@@ -474,6 +504,23 @@ const onDetailTabChange = (tab) => {
   if (tab === 'growthHistory') loadDetailGrowthHistory(sn, cc)
   if (tab === 'competencyHistory') { loadDetailCompHistory(sn, cc); nextTick(() => renderDetailHistoryChart()) }
   if (tab === 'feedback') loadDetailFeedback(sn, cc)
+}
+
+const generateIntervention = async () => {
+  if (!detailStudent.value || !selectedCourse.value) return
+  interventionLoading.value = true
+  try {
+    const { data } = await generateStudentIntervention(detailStudent.value.studentNo, selectedCourse.value)
+    if (data.code === 200) {
+      detailInterventions.value = data.data || []
+      detailTab.value = 'intervention'
+      ElMessage.success('干预建议已生成')
+    } else {
+      ElMessage.error(data.msg || '干预建议生成失败')
+    }
+  } finally {
+    interventionLoading.value = false
+  }
 }
 
 const onDetailOpened = () => nextTick(() => renderDetailRadar())

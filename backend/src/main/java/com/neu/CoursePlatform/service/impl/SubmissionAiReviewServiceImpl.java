@@ -54,9 +54,10 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
         TaskSubmission submission = submissionService.getById(submissionId);
         if (submission == null) throw new IllegalArgumentException("提交记录不存在");
         LearningTask task = taskService.getById(submission.getTaskNo());
-        if (taskService.isQuizTask(task)) throw new IllegalArgumentException("在线测验请使用系统评阅和教师复核");
 
-        String content = normalize(submission.getContent());
+        String content = taskService.isQuizTask(task)
+                ? buildQuizReviewContent(submission, task)
+                : normalize(submission.getContent());
         boolean hasFile = submission.getFilePath() != null && !submission.getFilePath().isBlank();
         ReviewDraft draft = generateWithAgentic(content, hasFile, task);
         if (draft == null) draft = generateLocalDraft(content, hasFile, task);
@@ -101,6 +102,7 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
     private String buildAgenticPrompt(String content, boolean hasFile, LearningTask task) {
         return """
                 请对学生提交进行辅助评价，评价结果仅供教师复核参考。
+                如果材料中包含填空题、简答题或编程题，请结合题干、参考答案、学生答案和得分点给出评分建议；填空题允许合理同义表达，但不要替代教师最终判断。
                 任务类型：%s
                 任务要求：%s
                 是否包含附件：%s
@@ -127,6 +129,58 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 hasFile ? "是" : "否",
                 content.isBlank() ? "（无文字提交）" : content
         );
+    }
+
+    private String buildQuizReviewContent(TaskSubmission submission, LearningTask task) {
+        Map<String, Object> detail = submissionService.buildGradeDetail(submission.getSubmissionId());
+        Object rawDetails = detail != null ? detail.get("details") : null;
+        if (!(rawDetails instanceof List<?> details)) {
+            throw new IllegalArgumentException("测验作答详情不存在");
+        }
+
+        List<String> questionBlocks = new ArrayList<>();
+        int index = 1;
+        for (Object item : details) {
+            if (!(item instanceof Map<?, ?> rawMap)) continue;
+            Map<String, Object> row = new LinkedHashMap<>();
+            rawMap.forEach((key, value) -> row.put(String.valueOf(key), value));
+            String type = normalize(String.valueOf(row.getOrDefault("type", "")));
+            if (!needsAiQuestionReview(type)) continue;
+            questionBlocks.add("""
+                    %d. 题型：%s
+                    题干：%s
+                    参考答案/评分要点：%s
+                    学生答案：%s
+                    题目满分：%s
+                    系统已给分：%s
+                    """.formatted(
+                    index++,
+                    type,
+                    normalize(String.valueOf(row.getOrDefault("stem", ""))),
+                    normalize(String.valueOf(row.getOrDefault("correctAnswer", ""))),
+                    normalize(String.valueOf(row.getOrDefault("studentAnswer", ""))),
+                    String.valueOf(row.getOrDefault("score", "")),
+                    String.valueOf(row.getOrDefault("earnedScore", ""))
+            ));
+        }
+
+        if (questionBlocks.isEmpty()) {
+            throw new IllegalArgumentException("当前提交没有需要 AI 评价的填空题、简答题或编程题");
+        }
+        return """
+                在线测验主观/半主观题复核材料
+                测验任务：%s
+                说明：请只评价下面列出的填空题、简答题或编程题，不需要评价单选/多选客观题。
+
+                %s
+                """.formatted(
+                task != null ? normalize(task.getDescription()) : "",
+                String.join("\n", questionBlocks)
+        );
+    }
+
+    private boolean needsAiQuestionReview(String type) {
+        return List.of("fill", "essay", "program").contains(type);
     }
 
     private ReviewDraft parseDraft(String json) throws Exception {

@@ -165,9 +165,13 @@ export const removeClassStudent = (id, studentId) => api.delete(`/api/classes/${
 export const getClassRiskAlerts = (id, status = 'active') => api.get(`/api/classes/${id}/risk-alerts`, { params: { status } })
 export const detectClassRisks = (id, courseId) => api.post(`/api/classes/${id}/risk-detect`, null, { params: { courseId } })
 export const resolveRiskAlert = (id) => api.put(`/api/risk-alerts/${id}/resolve`)
+export const generateProblemCluster = (classId, courseId) => api.post(`/api/classes/${classId}/problem-cluster`, null, { params: { courseId } })
+export const getProblemCluster = (classId) => api.get(`/api/classes/${classId}/problem-cluster`)
 export const generateTeachingSuggestions = (classId, courseId) => api.post(`/api/classes/${classId}/teaching-suggestions`, null, { params: { courseId } })
 export const getTeachingSuggestions = (classId) => api.get(`/api/classes/${classId}/teaching-suggestions`)
+export const generateStudentIntervention = (studentId, courseId) => api.post(`/api/students/${studentId}/intervention`, null, { params: { courseId } })
 export const getClassFeedbackSummary = (classId) => api.get(`/api/classes/${classId}/feedback-summary`)
+export const exportClassReport = (classId, data) => api.post(`/api/classes/${classId}/reports/export`, data)
 
 // ============ 错题本与学情分析 (/api/*/mistakes) ============
 export const getStudentWrongQuestions = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/mistakes`, { params })

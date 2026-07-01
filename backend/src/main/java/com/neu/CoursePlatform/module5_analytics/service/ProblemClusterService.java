@@ -1,5 +1,8 @@
 package com.neu.CoursePlatform.module5_analytics.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.module5_analytics.dto.WeakPointDTO;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
@@ -20,6 +23,7 @@ public class ProblemClusterService {
 
     private final AgenticClient agenticClient;
     private final ExternalDataProvider dataProvider;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProblemClusterService(AgenticClient agenticClient,
                                   ExternalDataProvider dataProvider) {
@@ -80,11 +84,31 @@ public class ProblemClusterService {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> parseClusterResponse(String raw) {
-        // 尝试解析 JSON 数组
         try {
-            // 使用简单的字符串处理（生产环境用 Jackson）
-            if (raw != null && raw.trim().startsWith("[")) {
-                return List.of(Map.of("raw", raw, "generated_at", LocalDateTime.now().toString()));
+            String json = extractJson(raw);
+            if (json != null && json.startsWith("[")) {
+                List<Map<String, Object>> items = objectMapper.readValue(json, new TypeReference<>() {});
+                String generatedAt = LocalDateTime.now().toString();
+                return items.stream().map(item -> {
+                    Map<String, Object> normalized = new LinkedHashMap<>(item);
+                    normalized.putIfAbsent("generated_at", generatedAt);
+                    return normalized;
+                }).toList();
+            }
+            if (json != null && json.startsWith("{")) {
+                JsonNode node = objectMapper.readTree(json);
+                JsonNode items = node.path("clusters");
+                if (!items.isArray()) items = node.path("items");
+                if (!items.isArray()) items = node.path("data");
+                if (items.isArray()) {
+                    List<Map<String, Object>> result = objectMapper.convertValue(items, new TypeReference<>() {});
+                    String generatedAt = LocalDateTime.now().toString();
+                    return result.stream().map(item -> {
+                        Map<String, Object> normalized = new LinkedHashMap<>(item);
+                        normalized.putIfAbsent("generated_at", generatedAt);
+                        return normalized;
+                    }).toList();
+                }
             }
         } catch (Exception e) {
             log.warn("解析聚类响应失败: {}", e.getMessage());
@@ -94,5 +118,24 @@ public class ProblemClusterService {
                 "note", "agentic 返回格式待适配",
                 "raw_response", raw
         ));
+    }
+
+    private String extractJson(String raw) {
+        if (raw == null) return null;
+        String text = raw.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```(?:json)?\\s*", "")
+                    .replaceFirst("\\s*```$", "")
+                    .trim();
+        }
+        int arrayStart = text.indexOf('[');
+        int objectStart = text.indexOf('{');
+        int start;
+        if (arrayStart >= 0 && objectStart >= 0) start = Math.min(arrayStart, objectStart);
+        else start = Math.max(arrayStart, objectStart);
+        if (start < 0) return text;
+        int end = text.charAt(start) == '[' ? text.lastIndexOf(']') : text.lastIndexOf('}');
+        if (end < start) return text.substring(start);
+        return text.substring(start, end + 1).trim();
     }
 }
