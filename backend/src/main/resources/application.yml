@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: practical-training-backend
+  sql:
+    init:
+      mode: never
+  datasource:
+    driver-class-name: "${DB_DRIVER:org.postgresql.Driver}"
+    url: "${DB_URL:jdbc:postgresql://219.216.65.31:54321/course_platform}"
+    username: "${DB_USERNAME:system}"
+    password: "${DB_PASSWORD:P@ssw0rd}"
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 3
+      idle-timeout: 600000
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  port: 8081
+  servlet:
+    context-path: /practical-training
+
+course-resource:
+  office-preview:
+    enabled: ${COURSE_RESOURCE_OFFICE_PREVIEW_ENABLED:false}
+    soffice-path: ${COURSE_RESOURCE_SOFFICE_PATH:C:/Program Files/LibreOffice/program/soffice.exe}
+    timeout-seconds: 60
+
+# Agentic AI 服务配置
+# mode: mock(本地模拟) / deepseek(DeepSeek API) / dify(Dify平台) / http(外部agentic微服务)
+agentic:
+  mode: ${AGENTIC_MODE:deepseek}
+  base-url: ${ANTHROPIC_BASE_URL:https://api.deepseek.com/anthropic}
+  api-key: ${ANTHROPIC_AUTH_TOKEN:}
+  model: ${ANTHROPIC_MODEL:deepseek-v4-pro}
+
+# Dify 平台配置（AGENTIC_MODE=dify 时必填）
+# Dify 提供：RAG知识库检索、可视化Workflow、Agent编排、LLMOps监控
+dify:
+  base-url: ${DIFY_BASE_URL:http://localhost}
+  chat-api-key: ${DIFY_CHAT_API_KEY:}
+  completion-api-key: ${DIFY_COMPLETION_API_KEY:}
+  workflow-api-key: ${DIFY_WORKFLOW_API_KEY:}
+  dataset-id: ${DIFY_DATASET_ID:}
+  dataset-api-key: ${DIFY_DATASET_API_KEY:}
+logging:
+  level:
+    "[com.neu.CoursePlatform.mapper]": debug
+    "[com.neu.CoursePlatform.controller]": debug
+
+mybatis-plus:
+  type-aliases-package: com.neu.CoursePlatform.entity
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl

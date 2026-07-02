@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.module5_analytics.mapper.ClassInfoMapper">
+
+    <select id="selectByTeacherId" resultType="com.neu.CoursePlatform.module5_analytics.entity.ClassInfo">
+        SELECT * FROM analytics_class WHERE teacher_id = #{teacherId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="countByNameAndCourse" resultType="int">
+        SELECT COUNT(*) FROM analytics_class
+        WHERE name = #{name} AND course_id = #{courseId}
+        <if test="excludeId != null and excludeId != ''">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+    <select id="selectStudentIdsByClassId" resultType="string">
+        SELECT student_id FROM analytics_class_student WHERE class_id = #{classId}
+    </select>
+
+    <select id="selectStudentsByClassId" resultType="com.neu.CoursePlatform.entity.Student">
+        SELECT s.*
+        FROM analytics_class_student cs
+        JOIN student s ON s.student_no = cs.student_id
+        WHERE cs.class_id = #{classId}
+        ORDER BY s.class_name,
+                 CASE WHEN s.student_no ~ '^[0-9]+$' THEN s.student_no::INTEGER ELSE 2147483647 END,
+                 s.student_no
+    </select>
+
+    <insert id="insertClassStudent">
+        INSERT INTO analytics_class_student (class_id, student_id, enrolled_at)
+        VALUES (#{classId}, #{studentId}, NOW())
+    </insert>
+
+    <delete id="deleteClassStudent">
+        DELETE FROM analytics_class_student
+        WHERE class_id = #{classId} AND student_id = #{studentId}
+    </delete>
+
+    <select id="countStudentsByClassId" resultType="int">
+        SELECT COUNT(*) FROM analytics_class_student WHERE class_id = #{classId}
+    </select>
+
+</mapper>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.mapper.StudentMapper">
+
+    <select id="selectByUsername" resultType="com.neu.CoursePlatform.entity.Student">
+        SELECT * FROM student WHERE username = #{username}
+    </select>
+
+    <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Student">
+        SELECT * FROM student
+        WHERE name LIKE CONCAT('%', #{keyword}, '%')
+           OR CAST(student_no AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
+    </select>
+
+    <select id="selectByClassId" resultType="com.neu.CoursePlatform.entity.Student">
+        SELECT * FROM student WHERE class_name = #{classId}
+    </select>
+
+</mapper>

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+CLAUDE.md
+
+# Env
+.env
+!backend/.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+*.log
+target/
+
+# Test coverage
+frontend/coverage/
+backend/target/
+
+# Backend IDE
+.classpath
+.factorypath
+.project
+.settings/
