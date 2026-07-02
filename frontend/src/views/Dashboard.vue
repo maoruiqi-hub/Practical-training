@@ -141,7 +141,7 @@
         </div>
       </div>
       <div v-if="!gradeDetails.length && !gradeLoading" style="text-align:center;color:#999;padding:20px">非测验提交</div>
-      <div v-if="!gradeDetails.length" class="ai-review-panel">
+      <div v-if="showAiReviewPanel" class="ai-review-panel">
         <div class="ai-review-head">
           <h4>智能辅助评价</h4>
           <el-button size="small" type="primary" :loading="aiReviewLoading" @click="requestAiReview">请求智能评价</el-button>
@@ -505,7 +505,7 @@ const openGrade = async (row) => {
       gradeDetails.value = res.data.data.details || []
       gradeForm.score = res.data.data.score ?? row.score ?? null
       gradeForm.feedback = res.data.data.feedback || row.feedback || ''
-      if (!gradeDetails.value.length) loadAiReview(row.submissionId, false)
+      if (!gradeDetails.value.length || hasAiReviewableQuestions.value) loadAiReview(row.submissionId, false)
     }
     else ElMessage.error(res.data.msg)
   } catch {
@@ -546,6 +546,7 @@ const requestAiReview = async () => {
 
 const parseJson = (value, fallback) => {
   if (!value) return fallback
+  if (Array.isArray(value) || typeof value === 'object') return value
   try {
     return JSON.parse(value)
   } catch {
@@ -561,6 +562,14 @@ const reviewDimensions = computed(() => {
 const reviewSuggestions = computed(() => parseJson(aiReview.value?.suggestions, []))
 
 const riskLabel = risk => ({ low: '低风险', medium: '中风险', high: '高风险' }[risk] || risk || '-')
+
+const hasAiReviewableQuestions = computed(() => {
+  return gradeDetails.value.some(item => ['fill', 'essay', 'program'].includes(item.type))
+})
+
+const showAiReviewPanel = computed(() => {
+  return !gradeLoading.value && (!gradeDetails.value.length || hasAiReviewableQuestions.value)
+})
 
 const useAiSuggestions = () => {
   const lines = []

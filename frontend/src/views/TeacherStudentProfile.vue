@@ -12,47 +12,55 @@
     <el-card v-if="selectedCourse" style="margin-top:16px" v-loading="loading">
       <template #header>
         <span>学生画像总览（{{ students.length }}人）</span>
-        <el-tag style="margin-left:8px" size="small">按经验值排序</el-tag>
+        <el-tag style="margin-left:8px" size="small">教学视角</el-tag>
         <el-input v-model="searchKey" placeholder="搜索学生姓名/学号" style="width:220px;margin-left:16px;float:right" clearable />
       </template>
       <el-empty v-if="!filteredStudents.length && !loading" description="暂无学生数据" />
       <el-table v-else :data="filteredStudents" stripe highlight-current-row @row-click="selectStudent" style="cursor:pointer">
-        <el-table-column prop="studentNo" label="学号" width="90" />
-        <el-table-column prop="name" label="姓名" width="90" />
+        <el-table-column label="学生" min-width="150">
+          <template #default="{ row }">
+            <div style="font-weight:600">{{ row.name || '-' }}</div>
+            <div style="font-size:12px;color:#909399">{{ row.studentNo }}</div>
+          </template>
+        </el-table-column>
         <el-table-column prop="className" label="班级" width="120" />
-        <el-table-column label="状态" width="100">
+        <el-table-column label="学习状态" width="120">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ row.status || '未激活' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="等级" width="70">
+        <el-table-column label="学习投入" width="130">
           <template #default="{ row }">
-            <el-tag size="small" :type="levelTagType(row.level)">{{ levelNames[row.level] || '入门' }}</el-tag>
+            <el-tag size="small" :type="engagementTagType(row)">{{ engagementLabel(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="HP" width="65">
+        <el-table-column label="解题表现" min-width="150">
           <template #default="{ row }">
-            <span :style="{color: row.hp < 30 ? '#f56c6c' : row.hp < 60 ? '#e6a23c' : '#67c23a', fontWeight:'bold'}">{{ row.hp }}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <el-progress :percentage="row.competencyAverage || 0" :stroke-width="6" :show-text="false" style="width:72px" />
+              <span>{{ performanceLabel(row) }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="ATK" width="65">
+        <el-table-column label="基础掌握" width="120">
           <template #default="{ row }">
-            <el-progress :percentage="row.atk || 0" :stroke-width="6" :show-text="false" :color="'#e6a23c'" />
+            <el-tag size="small" :type="foundationTagType(row)">{{ foundationLabel(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="DEF" width="65">
+        <el-table-column label="成长趋势" width="120">
           <template #default="{ row }">
-            <el-progress :percentage="row.def || 0" :stroke-width="6" :show-text="false" :color="'#409eff'" />
+            <el-tag size="small" :type="growthTagType(row)">{{ growthLabel(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="exp" label="EXP" width="70" />
-        <el-table-column prop="coins" label="金币" width="70" />
-        <el-table-column label="徽章" width="60">
-          <template #default="{ row }">{{ row.badgeCount || 0 }}</template>
-        </el-table-column>
-        <el-table-column label="最近活动" width="110">
+        <el-table-column label="最近活动" width="130">
           <template #default="{ row }">
             <span style="font-size:12px;color:#999">{{ row.lastActivityDate ? new Date(row.lastActivityDate).toLocaleDateString() : '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click.stop="selectStudent(row)">查看</el-button>
+            <el-button size="small" type="primary" plain @click.stop="openAssignDialog(row)">分配</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -63,21 +71,38 @@
     <!-- 学生画像详情弹窗 -->
     <el-dialog v-model="detailVisible" :title="detailTitle" width="900px" top="3vh" @opened="onDetailOpened">
       <template v-if="detailStudent">
-        <!-- 属性面板 -->
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <el-button type="success" :loading="interventionLoading" @click="generateIntervention">生成干预建议</el-button>
+          <el-button type="primary" @click="openAssignDialog()">分配任务</el-button>
+        </div>
+        <!-- 教学诊断摘要 -->
         <el-row :gutter="16">
           <el-col :span="16">
             <el-card shadow="never">
               <template #header>
-                <span>属性面板</span>
+                <span>教学诊断摘要</span>
                 <el-tag style="margin-left:8px" :type="detailStatusType">{{ detailProfile.status || '正常学习' }}</el-tag>
-                <el-tag style="margin-left:8px">{{ detailTitleText }}</el-tag>
               </template>
               <el-row :gutter="12">
-                <el-col :span="6" v-for="attr in detailAttrs" :key="attr.key">
+                <el-col :span="8">
                   <div style="text-align:center">
-                    <div style="font-size:24px;font-weight:bold" :style="{color:attr.color}">{{ detailProfile[attr.key] || 0 }}</div>
-                    <div style="color:#999;font-size:12px">{{ attr.label }}</div>
-                    <el-progress :percentage="attr.percent(detailProfile)" :color="attr.color" :show-text="false" :stroke-width="5" />
+                    <div style="font-size:24px;font-weight:bold;color:#409eff">{{ detailAverageScore }}</div>
+                    <div style="color:#999;font-size:12px">能力均分</div>
+                    <el-progress :percentage="detailAverageScore" :show-text="false" :stroke-width="5" />
+                  </div>
+                </el-col>
+                <el-col :span="8">
+                  <div style="text-align:center">
+                    <div style="font-size:24px;font-weight:bold;color:#e6a23c">{{ detailWeakCount }}</div>
+                    <div style="color:#999;font-size:12px">薄弱能力点</div>
+                    <el-progress :percentage="Math.min(100, detailWeakCount * 20)" color="#e6a23c" :show-text="false" :stroke-width="5" />
+                  </div>
+                </el-col>
+                <el-col :span="8">
+                  <div style="text-align:center">
+                    <div style="font-size:24px;font-weight:bold;color:#67c23a">{{ detailBadgeCount }}</div>
+                    <div style="color:#999;font-size:12px">激励记录</div>
+                    <el-progress :percentage="Math.min(100, detailBadgeCount * 20)" color="#67c23a" :show-text="false" :stroke-width="5" />
                   </div>
                 </el-col>
               </el-row>
@@ -85,12 +110,12 @@
           </el-col>
           <el-col :span="8">
             <el-card shadow="never">
-              <template #header><span>成长数据</span></template>
-              <div>等级：<el-tag :type="levelTagType(detailProfile.level)">{{ levelNames[detailProfile.level] || '入门' }}</el-tag></div>
-              <div style="margin-top:6px">金币：{{ detailProfile.coins || 0 }}</div>
-              <div style="margin-top:6px">称号：{{ detailTitleText }}</div>
-              <div style="margin-top:6px">徽章：{{ detailBadgeCount }} 个</div>
-              <div style="margin-top:6px;font-size:12px;color:#999">最近活动：{{ detailProfile.lastActivityDate ? new Date(detailProfile.lastActivityDate).toLocaleString() : '-' }}</div>
+              <template #header><span>近期判断</span></template>
+              <div>学习投入：<el-tag size="small" :type="engagementTagType(detailStudent)">{{ engagementLabel(detailStudent) }}</el-tag></div>
+              <div style="margin-top:8px">解题表现：{{ performanceLabel(detailStudent) }}</div>
+              <div style="margin-top:8px">基础掌握：{{ foundationLabel(detailStudent) }}</div>
+              <div style="margin-top:8px">成长趋势：{{ growthLabel(detailStudent) }}</div>
+              <div style="margin-top:8px;font-size:12px;color:#999">最近活动：{{ detailProfile.lastActivityDate ? new Date(detailProfile.lastActivityDate).toLocaleString() : '-' }}</div>
             </el-card>
           </el-col>
         </el-row>
@@ -108,6 +133,30 @@
                 <el-tag size="small" :type="recTypeTag(rec.type)">{{ recTypeLabel(rec.type) }}</el-tag>
                 <span style="margin-left:6px;font-weight:bold">{{ rec.targetName }}</span>
                 <div style="color:#999;font-size:12px;margin-top:2px">{{ rec.reason }}</div>
+              </div>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="干预建议" name="intervention">
+            <div style="margin-bottom:12px">
+              <el-button type="primary" :loading="interventionLoading" @click="generateIntervention">生成个别干预建议</el-button>
+            </div>
+            <el-empty v-if="!detailInterventions.length" description="暂无干预建议" />
+            <div
+              v-for="(item, index) in detailInterventions"
+              :key="index"
+              style="padding:10px;margin-bottom:8px;background:#f5f7fa;border-radius:6px"
+            >
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <strong>{{ item.title || item.suggestion_type || item.type || '干预建议' }}</strong>
+                <el-tag size="small" :type="urgencyTag(item.urgency || item.priority || item.level)">
+                  {{ urgencyLabel(item.urgency || item.priority || item.level) }}
+                </el-tag>
+              </div>
+              <div style="color:#606266;font-size:13px;margin-top:6px">
+                {{ item.content || item.suggestion || item.message || item.raw_response || JSON.stringify(item) }}
+              </div>
+              <div v-if="item.generated_at || item.generatedAt" style="color:#999;font-size:12px;margin-top:4px">
+                {{ item.generated_at || item.generatedAt }}
               </div>
             </div>
           </el-tab-pane>
@@ -129,7 +178,7 @@
               <el-timeline-item v-for="(g, i) in detailGrowthHistory" :key="i"
                 :timestamp="g.createdAt ? new Date(g.createdAt).toLocaleString() : ''"
                 :color="g.amount > 0 ? '#67c23a' : '#f56c6c'">
-                {{ g.type === 'exp' ? '经验' : '金币' }} {{ g.amount > 0 ? '+' : '' }}{{ g.amount }}
+                {{ g.type === 'exp' ? '成长记录' : '激励值' }} {{ g.amount > 0 ? '+' : '' }}{{ g.amount }}
                 ({{ sourceLabel(g.source) }})
               </el-timeline-item>
             </el-timeline>
@@ -143,11 +192,9 @@
             <div v-else>
               <el-descriptions :column="2" border size="small">
                 <el-descriptions-item label="学习状态">{{ detailFeedback.status }}</el-descriptions-item>
-                <el-descriptions-item label="HP信心值">{{ detailFeedback.hp }}</el-descriptions-item>
-                <el-descriptions-item label="ATK解题力">{{ detailFeedback.atk }}</el-descriptions-item>
-                <el-descriptions-item label="DEF基础度">{{ detailFeedback.def }}</el-descriptions-item>
-                <el-descriptions-item label="等级">{{ detailFeedback.level }}</el-descriptions-item>
-                <el-descriptions-item label="经验值">{{ detailFeedback.exp }}</el-descriptions-item>
+                <el-descriptions-item label="能力均分">{{ detailAverageScore }}</el-descriptions-item>
+                <el-descriptions-item label="薄弱能力点">{{ detailWeakCount }}</el-descriptions-item>
+                <el-descriptions-item label="最近活动">{{ detailProfile.lastActivityDate ? new Date(detailProfile.lastActivityDate).toLocaleString() : '-' }}</el-descriptions-item>
               </el-descriptions>
               <div v-if="detailFeedback.weakPoints && detailFeedback.weakPoints.length" style="margin-top:12px">
                 <p style="font-weight:bold;color:#f56c6c">薄弱知识点：</p>
@@ -161,6 +208,31 @@
         </el-tabs>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="assignVisible" title="分配任务" width="560px">
+      <el-form :model="assignForm" label-width="90px">
+        <el-form-item label="目标学生">
+          <el-input :model-value="detailStudent ? `${detailStudent.name}（${detailStudent.studentNo}）` : ''" disabled />
+        </el-form-item>
+        <el-form-item label="任务/测试" required>
+          <el-select v-model="assignForm.taskNo" filterable placeholder="选择任务库中的任务" style="width:100%">
+            <el-option
+              v-for="task in taskLibrary"
+              :key="task.taskNo"
+              :label="`${task.taskName || task.description}｜${task.taskType}`"
+              :value="task.taskNo"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="assignForm.note" type="textarea" :rows="3" placeholder="如：函数基础薄弱，安排补救练习" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assignVisible=false">取消</el-button>
+        <el-button type="primary" :loading="assigning" @click="submitAssignment">分配</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -168,7 +240,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { searchCourse } from '../api'
+import { assignTask, generateStudentIntervention, getTaskList, searchCourse } from '../api'
 import {
   getCourseStudentProfiles, getProfileSummary, getCompetency,
   getRecommendations, getAchievements, getTitle,
@@ -187,6 +259,7 @@ const detailStudent = ref(null)
 const detailProfile = ref({})
 const detailCompetency = ref([])
 const detailRecs = ref([])
+const detailInterventions = ref([])
 const detailAchievements = ref([])
 const detailTitleText = ref('')
 const detailBadgeCount = ref(0)
@@ -196,8 +269,11 @@ const detailFeedback = ref(null)
 const detailTab = ref('competency')
 const detailRadar = ref(null)
 const detailHistoryChart = ref(null)
-
-const levelNames = { 1: '入门', 2: '初级', 3: '中级', 4: '熟练', 5: '精通' }
+const assignVisible = ref(false)
+const assigning = ref(false)
+const interventionLoading = ref(false)
+const taskLibrary = ref([])
+const assignForm = ref({ taskNo: '', note: '' })
 
 const filteredStudents = computed(() => {
   if (!searchKey.value) return students.value
@@ -207,12 +283,17 @@ const filteredStudents = computed(() => {
   )
 })
 
-const detailAttrs = [
-  { key: 'hp', label: 'HP 信心值', color: '#f56c6c', percent: p => (p.hp || 0) },
-  { key: 'atk', label: 'ATK 解题力', color: '#e6a23c', percent: p => (p.atk || 0) },
-  { key: 'def', label: 'DEF 基础度', color: '#409eff', percent: p => (p.def || 0) },
-  { key: 'exp', label: 'EXP 经验值', color: '#67c23a', percent: p => Math.min(100, (p.exp || 0) / 20) }
-]
+const detailAverageScore = computed(() => {
+  const scores = detailCompetency.value.map(item => item.score).filter(score => score != null)
+  if (!scores.length) return detailStudent.value?.competencyAverage || 0
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+})
+
+const detailWeakCount = computed(() => {
+  const scores = detailCompetency.value.map(item => item.score).filter(score => score != null)
+  if (!scores.length) return detailStudent.value?.weakPointCount || 0
+  return scores.filter(score => score < 60).length
+})
 
 const detailTitle = computed(() => {
   if (!detailStudent.value) return ''
@@ -234,11 +315,78 @@ const statusTagType = (s) => {
   if (s === '正常学习') return ''
   return 'info'
 }
-const levelTagType = (lv) => lv >= 5 ? 'success' : lv >= 3 ? 'warning' : ''
 const recTypeTag = (t) => ({ review_material: 'danger', practice: 'warning', extended_material: 'success', knowledge_point: '' }[t] || '')
 const recTypeLabel = (t) => ({ review_material: '复习', practice: '练习', extended_material: '拓展', knowledge_point: '学习' }[t] || t)
+const urgencyTag = (value) => ({ high: 'danger', medium: 'warning', low: 'info', 高: 'danger', 中: 'warning', 低: 'info' }[value] || 'info')
+const urgencyLabel = (value) => ({ high: '高优先级', medium: '中优先级', low: '低优先级' }[value] || value || '普通')
 const badgeIcon = (n) => ({ '连击王': '🔥', '完美主义': '💎', '速通者': '🏃', 'Pythonic': '🐍', 'Debug之眼': '🔍', '夜枭': '🦉', '助人者': '🤝' }[n] || '🏆')
 const sourceLabel = (s) => ({ quiz: '测验', boss: '综合测验', default: '答题', task_complete: '任务完成', exam_pass: '考试通过', streak: '连续学习' }[s] || s)
+
+const daysSince = (dateValue) => {
+  if (!dateValue) return null
+  const time = new Date(dateValue).getTime()
+  if (Number.isNaN(time)) return null
+  return Math.floor((Date.now() - time) / 86400000)
+}
+
+const engagementLabel = (row) => {
+  if (!row || !row.hasProfile) return '未激活'
+  const days = daysSince(row.lastActivityDate)
+  if (days == null) return '待观察'
+  if (days <= 3) return '活跃'
+  if (days <= 7) return '稳定'
+  if (days <= 14) return '偏低'
+  return '需关注'
+}
+
+const engagementTagType = (row) => {
+  const label = engagementLabel(row)
+  if (label === '活跃' || label === '稳定') return 'success'
+  if (label === '偏低' || label === '待观察') return 'warning'
+  if (label === '需关注') return 'danger'
+  return 'info'
+}
+
+const performanceLabel = (row) => {
+  const score = row?.competencyAverage || 0
+  if (!row?.hasProfile || score <= 0) return '待观察'
+  if (score >= 85) return '优秀'
+  if (score >= 70) return '良好'
+  if (score >= 60) return '待巩固'
+  return '需关注'
+}
+
+const foundationLabel = (row) => {
+  if (!row?.hasProfile) return '待观察'
+  const weakCount = row.weakPointCount || 0
+  if (weakCount >= 3) return '薄弱点较多'
+  if (weakCount > 0) return `${weakCount} 个薄弱点`
+  return '较稳定'
+}
+
+const foundationTagType = (row) => {
+  const weakCount = row?.weakPointCount || 0
+  if (!row?.hasProfile) return 'info'
+  if (weakCount >= 3) return 'danger'
+  if (weakCount > 0) return 'warning'
+  return 'success'
+}
+
+const growthLabel = (row) => {
+  const status = row?.status
+  if (!row?.hasProfile) return '未激活'
+  if (status === '能力提升') return '上升'
+  if (status === '进度滞后' || status === '存在风险') return '需关注'
+  return '平稳'
+}
+
+const growthTagType = (row) => {
+  const label = growthLabel(row)
+  if (label === '上升') return 'success'
+  if (label === '需关注') return 'danger'
+  if (label === '平稳') return ''
+  return 'info'
+}
 
 const loadCourses = async () => {
   try {
@@ -267,13 +415,59 @@ const loadStudents = async () => {
   loading.value = false
 }
 
-const onCourseChange = () => loadStudents()
+const onCourseChange = () => {
+  taskLibrary.value = []
+  loadStudents()
+}
 
 const selectStudent = async (row) => {
   detailStudent.value = row
   detailVisible.value = true
   detailTab.value = 'competency'
   await loadDetailData()
+}
+
+const loadTaskLibrary = async () => {
+  if (!selectedCourse.value) return
+  try {
+    const { data } = await getTaskList(selectedCourse.value)
+    if (data.code === 200) taskLibrary.value = data.data || []
+    else ElMessage.error(data.msg || '任务库加载失败')
+  } catch {
+    ElMessage.error('任务库加载失败')
+  }
+}
+
+const openAssignDialog = async (row = null) => {
+  if (row) detailStudent.value = row
+  if (!detailStudent.value) return
+  assignForm.value = { taskNo: '', note: '' }
+  assignVisible.value = true
+  if (!taskLibrary.value.length) await loadTaskLibrary()
+}
+
+const submitAssignment = async () => {
+  if (!detailStudent.value || !assignForm.value.taskNo) {
+    ElMessage.warning('请选择要分配的任务')
+    return
+  }
+  assigning.value = true
+  try {
+    const { data } = await assignTask(assignForm.value.taskNo, {
+      studentNo: String(detailStudent.value.studentNo),
+      note: assignForm.value.note
+    })
+    if (data.code === 200) {
+      ElMessage.success('任务已分配')
+      assignVisible.value = false
+    } else {
+      ElMessage.error(data.msg || '任务分配失败')
+    }
+  } catch {
+    ElMessage.error('任务分配失败')
+  } finally {
+    assigning.value = false
+  }
 }
 
 const loadDetailData = async () => {
@@ -298,6 +492,7 @@ const loadDetailData = async () => {
       detailBadgeCount.value = detailAchievements.value.filter(a => a.achievementType === 'badge').length
     }
     if (titleRes.data.code === 200) detailTitleText.value = titleRes.data.data
+    detailInterventions.value = []
   } catch (e) { /* ignore */ }
 }
 
@@ -309,6 +504,23 @@ const onDetailTabChange = (tab) => {
   if (tab === 'growthHistory') loadDetailGrowthHistory(sn, cc)
   if (tab === 'competencyHistory') { loadDetailCompHistory(sn, cc); nextTick(() => renderDetailHistoryChart()) }
   if (tab === 'feedback') loadDetailFeedback(sn, cc)
+}
+
+const generateIntervention = async () => {
+  if (!detailStudent.value || !selectedCourse.value) return
+  interventionLoading.value = true
+  try {
+    const { data } = await generateStudentIntervention(detailStudent.value.studentNo, selectedCourse.value)
+    if (data.code === 200) {
+      detailInterventions.value = data.data || []
+      detailTab.value = 'intervention'
+      ElMessage.success('干预建议已生成')
+    } else {
+      ElMessage.error(data.msg || '干预建议生成失败')
+    }
+  } finally {
+    interventionLoading.value = false
+  }
 }
 
 const onDetailOpened = () => nextTick(() => renderDetailRadar())

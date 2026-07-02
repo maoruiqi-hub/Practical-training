@@ -152,6 +152,27 @@
         </div>
       </div>
       <div v-else-if="!gradeLoading" style="margin-top:16px;text-align:center;color:#999;padding:20px">非在线测验提交：{{ grading.content || '附件提交' }}</div>
+      <div v-if="showAiReviewPanel" class="ai-review-panel">
+        <div class="ai-review-head">
+          <h4>AI 智能评价</h4>
+          <div>
+            <el-button size="small" :loading="aiReviewLoading" @click="loadAiReview(grading.submissionId)">查看已有评价</el-button>
+            <el-button size="small" type="primary" :loading="aiReviewLoading" @click="requestAiReview">请求智能评价</el-button>
+          </div>
+        </div>
+        <template v-if="aiReview">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="建议分数">{{ aiReview.aiScore ?? '-' }} 分</el-descriptions-item>
+            <el-descriptions-item label="风险等级">{{ riskLabel(aiReview.riskLevel) }}</el-descriptions-item>
+            <el-descriptions-item label="评价摘要" :span="2">{{ aiReview.summary || '-' }}</el-descriptions-item>
+          </el-descriptions>
+          <div v-if="reviewSuggestions.length" class="ai-suggestions">
+            <div v-for="(item, index) in reviewSuggestions" :key="index">- {{ item }}</div>
+          </div>
+          <el-button size="small" type="success" plain @click="applyAiReview">采用到复核表单</el-button>
+        </template>
+        <el-empty v-else description="暂无智能评价" :image-size="48" />
+      </div>
       <el-form label-width="80px" style="margin-top:20px" v-if="grading.status !== 'graded' || gradeDetails.some(d => !d.autoGradable)">
         <el-form-item label="最终得分"><el-input-number v-model="grading.score" :min="0" :max="100" /></el-form-item>
         <el-form-item label="反馈"><el-input v-model="grading.feedback" type="textarea" :rows="2" /></el-form-item>
@@ -168,7 +189,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { submitTask, getSubmissionsByTask, getGradeDetail, gradeSubmission, getTaskDetail, getMySubmissions } from '../api'
+import { submitTask, getSubmissionsByTask, getGradeDetail, gradeSubmission, getTaskDetail, getMySubmissions, generateAiReview, getAiReview } from '../api'
 
 const route = useRoute()
 const taskNo = route.params.taskNo
@@ -185,6 +206,8 @@ const dialogVisible = ref(false)
 const grading = ref({ submissionId: '', studentName: '', content: '', score: null, feedback: '' })
 const gradeLoading = ref(false)
 const gradeDetails = ref([])
+const aiReview = ref(null)
+const aiReviewLoading = ref(false)
 const typeLabel = t => ({single:'单选',multi:'多选',fill:'填空',essay:'简答',program:'编程'}[t]||t)
 
 const isOverdue = computed(() => {
@@ -274,6 +297,7 @@ const loadMySubmissions = async () => {
 const openGradeDialog = async (row) => {
   grading.value = { ...row, score: row.score ?? null, feedback: row.feedback || '' }
   gradeDetails.value = []
+  aiReview.value = null
   dialogVisible.value = true
   gradeLoading.value = true
   try {
@@ -283,6 +307,7 @@ const openGradeDialog = async (row) => {
       grading.value.score = res.data.data.score ?? row.score ?? null
       grading.value.feedback = res.data.data.feedback || row.feedback || ''
       grading.value.status = res.data.data.status || row.status
+      if (!gradeDetails.value.length) loadAiReview(row.submissionId, false)
     } else ElMessage.error(res.data.msg)
   } catch {
     ElMessage.error('评阅详情加载失败')
@@ -305,6 +330,58 @@ const systemScoreText = computed(() => {
   return `${grading.value.score} 分`
 })
 
+const hasAiReviewableQuestions = computed(() => {
+  return gradeDetails.value.some(item => ['fill', 'essay', 'program'].includes(item.type))
+})
+
+const showAiReviewPanel = computed(() => {
+  return !gradeLoading.value && (!gradeDetails.value.length || hasAiReviewableQuestions.value)
+})
+
+const parseJson = (value, fallback) => {
+  if (!value) return fallback
+  if (Array.isArray(value) || typeof value === 'object') return value
+  try { return JSON.parse(value) } catch { return fallback }
+}
+
+const reviewSuggestions = computed(() => parseJson(aiReview.value?.suggestions, []))
+const riskLabel = level => ({ low: '低', medium: '中', high: '高' }[level] || level || '-')
+
+const loadAiReview = async (submissionId, showError = true) => {
+  if (!submissionId) return
+  aiReviewLoading.value = true
+  try {
+    const res = await getAiReview(submissionId)
+    if (res.data.code === 200) aiReview.value = res.data.data
+    else if (showError) ElMessage.warning(res.data.msg || '暂无智能评价')
+  } catch {
+    if (showError) ElMessage.error('智能评价加载失败')
+  } finally { aiReviewLoading.value = false }
+}
+
+const requestAiReview = async () => {
+  if (!grading.value.submissionId) return
+  aiReviewLoading.value = true
+  try {
+    const res = await generateAiReview(grading.value.submissionId)
+    if (res.data.code === 200) {
+      aiReview.value = res.data.data
+      if (grading.value.score == null) grading.value.score = res.data.data.aiScore
+      ElMessage.success('智能评价已生成')
+    } else ElMessage.error(res.data.msg)
+  } catch { ElMessage.error('智能评价生成失败') }
+  finally { aiReviewLoading.value = false }
+}
+
+const applyAiReview = () => {
+  if (!aiReview.value) return
+  const lines = []
+  if (aiReview.value.summary) lines.push(aiReview.value.summary)
+  reviewSuggestions.value.forEach(item => lines.push(item))
+  grading.value.feedback = lines.join('\n')
+  if (grading.value.score == null && aiReview.value.aiScore != null) grading.value.score = aiReview.value.aiScore
+}
+
 const reloadSubmissions = async () => {
   if (userRole !== 'student') {
     subLoading.value = true
@@ -323,3 +400,28 @@ onMounted(async () => {
   await reloadSubmissions()
 })
 </script>
+
+<style scoped>
+.ai-review-panel {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+  background: #fafafa;
+}
+.ai-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ai-review-head h4 {
+  margin: 0;
+}
+.ai-suggestions {
+  margin: 10px 0;
+  line-height: 1.8;
+  color: #606266;
+}
+</style>

@@ -4,10 +4,13 @@ import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dto.TaskUpdateRequest;
 import com.neu.CoursePlatform.entity.LearningTask;
+import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.StudentService;
+import com.neu.CoursePlatform.service.TaskAssignmentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
+import com.neu.CoursePlatform.entity.TaskAssignment;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
@@ -27,14 +30,17 @@ public class TaskController {
     private final FileStorageService fileStorageService;
     private final TaskSubmissionService submissionService;
     private final StudentService studentService;
+    private final TaskAssignmentService assignmentService;
     private final Auth auth;
 
     public TaskController(LearningTaskService taskService, FileStorageService fileStorageService,
-                          TaskSubmissionService submissionService, StudentService studentService, Auth auth) {
+                          TaskSubmissionService submissionService, StudentService studentService,
+                          TaskAssignmentService assignmentService, Auth auth) {
         this.taskService = taskService;
         this.fileStorageService = fileStorageService;
         this.submissionService = submissionService;
         this.studentService = studentService;
+        this.assignmentService = assignmentService;
         this.auth = auth;
     }
 
@@ -46,17 +52,25 @@ public class TaskController {
                                                      @RequestParam(required = false) String status,
                                                      @RequestParam(required = false) String lessonNo,
                                                      HttpSession session) {
-        return list(courseId, taskType, status, lessonNo, session);
+        return list(courseId, student_id, taskType, status, lessonNo, session);
     }
 
     /** 查看某课程的任务列表（兼容旧前端路径）| 登录用户 */
     @GetMapping("/course/{courseCode}")
     public Result<List<LearningTask>> list(@PathVariable String courseCode,
+                                           @RequestParam(required = false) String student_id,
                                            @RequestParam(required = false) String taskType,
                                            @RequestParam(required = false) String status,
                                            @RequestParam(required = false) String lessonNo,
                                            HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Student student = auth.getStudent(session);
+        if (student != null) {
+            return Result.ok(assignmentService.listAssignedTasks(student.getStudentNo(), courseCode, taskType, status, lessonNo));
+        }
+        if (student_id != null && !student_id.isBlank()) {
+            return Result.ok(assignmentService.listAssignedTasks(student_id, courseCode, taskType, status, lessonNo));
+        }
         Map<String, String> filters = new HashMap<>();
         filters.put("courseCode", courseCode);
         if (taskType != null) filters.put("taskType", taskType);
@@ -70,6 +84,11 @@ public class TaskController {
     public Result<LearningTask> detail(@PathVariable String taskNo, HttpSession session) {
         if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         LearningTask t = taskService.getById(taskNo);
+        Student student = auth.getStudent(session);
+        if (t != null && student != null
+                && assignmentService.getActiveAssignment(taskNo, student.getStudentNo()) == null) {
+            return Result.fail("该任务未分配给当前学生");
+        }
         return t != null ? Result.ok(t) : Result.fail("任务不存在");
     }
 
@@ -198,6 +217,7 @@ public class TaskController {
             result.put("message", "该任务下有学生提交记录，确认删除吗？提交记录不会被物理删除。");
             return Result.ok(result);
         }
+        assignmentService.cancelByTaskNo(taskNo);
         taskService.removeById(taskNo);
         result.put("hasSubmissions", hasSubmissions);
         result.put("message", "任务已删除");
@@ -226,7 +246,7 @@ public class TaskController {
                 .filter(s -> !"superseded".equals(s.getStatus()))
                 .toList();
         int totalSubmissions = activeSubs.size();
-        long totalStudents = studentService.count();
+        long totalStudents = assignmentService.countActiveByTaskNo(taskNo);
         long submittedStudents = activeSubs.stream()
                 .map(TaskSubmission::getStudentNo)
                 .filter(studentNo -> studentNo != null && !studentNo.isBlank())
@@ -259,5 +279,70 @@ public class TaskController {
         LearningTask task = taskService.getById(taskNo);
         if (task == null) return Result.fail("任务不存在");
         return taskStats(task.getCourseCode(), taskNo, session);
+    }
+
+    @PostMapping("/{taskNo}/assign")
+    public Result<TaskAssignment> assign(@PathVariable String taskNo,
+                                         @RequestBody Map<String, Object> body,
+                                         HttpSession session) {
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        if (!auth.canModifyCourse(session, task.getCourseCode())) return Result.fail("无权限");
+        String studentNo = firstNonBlank(stringValue(body, "studentNo"), stringValue(body, "student_id"));
+        if (studentNo == null) return Result.fail("目标学生不能为空");
+        if (studentService.getById(studentNo) == null) return Result.fail("目标学生不存在");
+        TaskAssignment assignment = assignmentService.assignTask(task, studentNo, auth.getTeacherId(session), stringValue(body, "note"));
+        return Result.ok(assignment);
+    }
+
+    @PostMapping("/assignments")
+    public Result<List<TaskAssignment>> assignBatch(@RequestBody Map<String, Object> body,
+                                                    HttpSession session) {
+        String taskNo = stringValue(body, "taskNo");
+        if (taskNo == null) return Result.fail("任务编号不能为空");
+        LearningTask task = taskService.getById(taskNo);
+        if (task == null) return Result.fail("任务不存在");
+        if (!auth.canModifyCourse(session, task.getCourseCode())) return Result.fail("无权限");
+        List<String> studentNos = studentNos(body);
+        if (studentNos.isEmpty()) return Result.fail("目标学生不能为空");
+        List<TaskAssignment> assignments = new java.util.ArrayList<>();
+        for (String studentNo : studentNos) {
+            if (studentService.getById(studentNo) == null) return Result.fail("目标学生不存在：" + studentNo);
+            assignments.add(assignmentService.assignTask(task, studentNo, auth.getTeacherId(session), stringValue(body, "note")));
+        }
+        return Result.ok(assignments);
+    }
+
+    @DeleteMapping("/assignments/{assignmentId}")
+    public Result<String> cancelAssignment(@PathVariable String assignmentId, HttpSession session) {
+        TaskAssignment assignment = assignmentService.getById(assignmentId);
+        if (assignment == null) return Result.fail("任务分配不存在");
+        if (!auth.canModifyCourse(session, assignment.getCourseCode())) return Result.fail("无权限");
+        assignment.setStatus("cancelled");
+        assignmentService.updateById(assignment);
+        return Result.ok("任务分配已撤回");
+    }
+
+    private String stringValue(Map<String, Object> body, String key) {
+        if (body == null || body.get(key) == null) return null;
+        String value = String.valueOf(body.get(key));
+        return value.isBlank() ? null : value;
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> studentNos(Map<String, Object> body) {
+        Object many = body == null ? null : body.get("studentNos");
+        if (many instanceof List<?> list) {
+            return list.stream().map(String::valueOf).filter(value -> !value.isBlank()).toList();
+        }
+        String one = firstNonBlank(stringValue(body, "studentNo"), stringValue(body, "student_id"));
+        return one == null ? List.of() : List.of(one);
     }
 }

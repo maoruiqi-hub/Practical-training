@@ -61,7 +61,8 @@ const props = defineProps({
   knowledgePointName: { type: String, default: '' },
   courseId: { type: [String, Number], default: '' },
   resourceId: { type: [String, Number], default: '' },
-  mode: { type: String, default: 'qa' }
+  mode: { type: String, default: 'qa' },
+  initialQuestion: { type: String, default: '' }
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -87,6 +88,13 @@ watch(() => [props.knowledgePointId, props.resourceId, props.mode], () => {
   messages.value = []
   draft.value = ''
   errorMessage.value = ''
+})
+
+watch(() => [props.modelValue, props.initialQuestion], ([open, question]) => {
+  if (open && question) {
+    draft.value = question
+    nextTick(() => sendQuestion())
+  }
 })
 
 const getStudentId = () => {

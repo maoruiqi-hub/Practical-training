@@ -1,5 +1,8 @@
 package com.neu.CoursePlatform.module5_analytics.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.module5_analytics.dto.ScoreOverviewDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.WeakPointDTO;
@@ -24,6 +27,7 @@ public class TeachingSuggestionService {
     private final ExternalDataProvider dataProvider;
     private final ScoreAnalysisService scoreAnalysisService;
     private final RiskAlertService riskAlertService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TeachingSuggestionService(AgenticClient agenticClient,
                                       @Lazy ExternalDataProvider dataProvider,
@@ -111,6 +115,25 @@ public class TeachingSuggestionService {
 
     private List<Map<String, Object>> parseSuggestionResponse(String raw) {
         if (raw == null) return List.of();
+        try {
+            String json = extractJson(raw);
+            if (json != null && json.startsWith("[")) {
+                return withGeneratedAt(objectMapper.readValue(json, new TypeReference<>() {}));
+            }
+            if (json != null && json.startsWith("{")) {
+                JsonNode node = objectMapper.readTree(json);
+                JsonNode items = node.path("suggestions");
+                if (!items.isArray()) items = node.path("items");
+                if (!items.isArray()) items = node.path("data");
+                if (items.isArray()) {
+                    return withGeneratedAt(objectMapper.convertValue(items, new TypeReference<>() {}));
+                }
+                Map<String, Object> single = objectMapper.convertValue(node, new TypeReference<>() {});
+                if (!single.isEmpty()) return withGeneratedAt(List.of(single));
+            }
+        } catch (Exception e) {
+            log.warn("解析教学建议响应失败: {}", e.getMessage());
+        }
         return List.of(Map.of(
                 "suggestion_type", "reteach",
                 "content", "agentic 返回的建议内容待适配",
@@ -120,5 +143,32 @@ public class TeachingSuggestionService {
                 "generated_at", LocalDateTime.now().toString(),
                 "raw_response", raw
         ));
+    }
+
+    private List<Map<String, Object>> withGeneratedAt(List<Map<String, Object>> items) {
+        String generatedAt = LocalDateTime.now().toString();
+        return items.stream().map(item -> {
+            Map<String, Object> normalized = new LinkedHashMap<>(item);
+            normalized.putIfAbsent("generated_at", generatedAt);
+            return normalized;
+        }).toList();
+    }
+
+    private String extractJson(String raw) {
+        String text = raw.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```(?:json)?\\s*", "")
+                    .replaceFirst("\\s*```$", "")
+                    .trim();
+        }
+        int arrayStart = text.indexOf('[');
+        int objectStart = text.indexOf('{');
+        int start;
+        if (arrayStart >= 0 && objectStart >= 0) start = Math.min(arrayStart, objectStart);
+        else start = Math.max(arrayStart, objectStart);
+        if (start < 0) return text;
+        int end = text.charAt(start) == '[' ? text.lastIndexOf(']') : text.lastIndexOf('}');
+        if (end < start) return text.substring(start);
+        return text.substring(start, end + 1).trim();
     }
 }

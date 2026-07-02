@@ -141,6 +141,7 @@
                       <span v-if="cell.status === 'completed'" style="color:#67c23a;font-weight:bold;font-size:13px">{{ cell.score ?? '✓' }}</span>
                       <span v-else-if="cell.status === 'submitted'" style="color:#e6a23c;font-size:13px">待批</span>
                       <span v-else-if="cell.status === 'overdue_missing'" style="color:#f56c6c;font-size:13px">✗</span>
+                      <span v-else-if="cell.status === 'unassigned'" style="color:#c0c4cc;font-size:13px">未分</span>
                       <span v-else style="color:#c0c4cc">-</span>
                     </el-tooltip>
                   </span>
@@ -208,6 +209,7 @@ const cellStatusText = (cell) => {
   if (cell.status === 'completed') return `已完成 · 得分${cell.score ?? '-'}`
   if (cell.status === 'submitted') return '已提交，待批改'
   if (cell.status === 'overdue_missing') return '逾期未提交'
+  if (cell.status === 'unassigned') return '暂未分配'
   return '未开始'
 }
 

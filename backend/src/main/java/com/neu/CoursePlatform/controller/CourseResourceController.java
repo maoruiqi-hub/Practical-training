@@ -77,21 +77,18 @@ public class CourseResourceController {
                           @RequestParam(required = false) String knowledgePointId,
                           @RequestParam(required = false) String resourceType,
                           HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         if (courseService.getById(courseCode) == null) return Result.fail("课程不存在");
         return Result.ok(courseResourceService.listByFilters(courseCode, chapter, knowledgePointId, resourceType));
     }
 
     @GetMapping("/{resourceId}")
     public Result<CourseResource> detail(@PathVariable String resourceId, HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         CourseResource resource = courseResourceService.getById(resourceId);
         return resource == null ? Result.fail("课程资源不存在") : Result.ok(resource);
     }
 
     @GetMapping("/{resourceId}/preview")
     public Result<ResourcePreviewDTO> preview(@PathVariable String resourceId, HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         CourseResource resource = courseResourceService.getById(resourceId);
         if (resource == null) return Result.fail("课程资源不存在");
         String contentUrl = "/course-resource/" + resourceId + "/content";
@@ -108,7 +105,6 @@ public class CourseResourceController {
                                           @RequestParam(defaultValue = "false") boolean download,
                                           @RequestParam(defaultValue = "false") boolean preview,
                                           HttpSession session) {
-        if (!auth.isLoggedIn(session)) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         CourseResource resource = courseResourceService.getById(resourceId);
         if (resource == null) return ResponseEntity.notFound().build();
         if (preview && (resource.getPreviewFileUrl() == null || !"ready".equals(resource.getPreviewStatus()))) {

@@ -9,6 +9,7 @@ CREATE SEQUENCE IF NOT EXISTS ability_knowledge_point_id_seq START WITH 1000 INC
 CREATE SEQUENCE IF NOT EXISTS knowledge_extraction_candidate_id_seq START WITH 1000 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS lesson_no_seq START WITH 1000 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS learning_task_no_seq START WITH 1000 INCREMENT BY 1;
+CREATE SEQUENCE IF NOT EXISTS task_assignment_id_seq START WITH 1000 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS task_submission_id_seq START WITH 1000 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS submission_ai_review_id_seq START WITH 1000 INCREMENT BY 1;
 CREATE SEQUENCE IF NOT EXISTS submission_answer_id_seq START WITH 1000 INCREMENT BY 1;
@@ -172,6 +173,21 @@ CREATE TABLE IF NOT EXISTS learning_task (
 );
 CREATE INDEX IF NOT EXISTS idx_learning_task_course ON learning_task(course_code);
 CREATE INDEX IF NOT EXISTS idx_learning_task_lesson ON learning_task(lesson_no);
+
+CREATE TABLE IF NOT EXISTS task_assignment (
+    assignment_id VARCHAR(64) PRIMARY KEY DEFAULT CAST(nextval('task_assignment_id_seq') AS VARCHAR(64)),
+    task_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    assigned_by VARCHAR(64),
+    assigned_at TIMESTAMP NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'assigned',
+    note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_task_assignment_student_task ON task_assignment(task_no, student_no);
+CREATE INDEX IF NOT EXISTS idx_task_assignment_student ON task_assignment(student_no);
+CREATE INDEX IF NOT EXISTS idx_task_assignment_task ON task_assignment(task_no);
+CREATE INDEX IF NOT EXISTS idx_task_assignment_course ON task_assignment(course_code);
 
 CREATE TABLE IF NOT EXISTS task_submission (
     submission_id VARCHAR(64) PRIMARY KEY DEFAULT CAST(nextval('task_submission_id_seq') AS VARCHAR(64)),

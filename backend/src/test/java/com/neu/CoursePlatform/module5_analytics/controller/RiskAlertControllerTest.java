@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -68,5 +69,40 @@ class RiskAlertControllerTest {
 
         verify(riskAlertService).receiveEvent(eq("student-1"), eq("course-1"),
                 eq(GameEventTypes.STUCK_DETECTED), eq("medium"), contains("loop"));
+    }
+
+    // ======================== boundary / exception ========================
+
+    @Test
+    void hpCriticalEventWithNullPayload_DoesNotThrow() {
+        assertDoesNotThrow(() -> controller.receiveGameEvent(GameEvent.builder()
+                .eventType(GameEventTypes.HP_CRITICAL)
+                .studentId("student-1")
+                .courseId("course-1")
+                .occurredAt(LocalDateTime.now())
+                .build()));
+    }
+
+    @Test
+    void stuckEventWithNullPayload_DoesNotThrow() {
+        assertDoesNotThrow(() -> controller.receiveGameEvent(GameEvent.builder()
+                .eventType(GameEventTypes.STUCK_DETECTED)
+                .studentId("student-1")
+                .courseId("course-1")
+                .build()));
+    }
+
+    @Test
+    void unknownEventType_StillProcesses() {
+        controller.receiveGameEvent(GameEvent.builder()
+                .eventType(GameEventTypes.HP_CRITICAL)
+                .studentId("")
+                .courseId("")
+                .occurredAt(LocalDateTime.now())
+                .payload(Map.of())
+                .build());
+
+        verify(riskAlertService).receiveEvent(eq(""), eq(""),
+                eq(GameEventTypes.HP_CRITICAL), eq("high"), eq("{}"));
     }
 }

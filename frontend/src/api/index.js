@@ -82,6 +82,9 @@ export const addTask = (data) => {
   Object.entries(data).forEach(([key, value]) => formData.append(key, value ?? ''))
   return api.post('/api/tasks', formData)
 }
+export const assignTask = (taskNo, data) => api.post(`/api/tasks/${taskNo}/assign`, data)
+export const getAssignedTasks = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/assigned-tasks`, { params })
+export const cancelTaskAssignment = (assignmentId) => api.delete(`/api/task-assignments/${assignmentId}`)
 export const getTaskDetail = (taskNo) => api.get('/api/tasks/' + taskNo)
 export const updateTask = (code, no, data) => api.put(`/api/tasks/${code}/${no}`, data, {
   headers: { 'Content-Type': 'application/json' }
@@ -139,6 +142,10 @@ export const getAiReview = (id) => api.get(`/submission/ai-review/${id}`)
 export const getCourseResources = (courseCode, params = {}) => api.get('/api/resources', {
   params: { ...params, courseCode }
 })
+export const uploadCourseResource = (data) => api.post('/api/resources', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
+export const deleteCourseResource = (resourceId) => api.delete(`/api/resources/${resourceId}`)
 export const getCourseResourcePreview = (resourceId) => api.get(`/api/resources/${resourceId}/preview`)
 export const recordCourseResourceView = (resourceId, data) => api.post(`/api/resources/${resourceId}/view-events`, data)
 export const getKnowledgeGraph = (courseCode) => api.get('/api/knowledge-graph', { params: { courseCode } })
@@ -184,9 +191,13 @@ export const removeClassStudent = (id, studentId) => api.delete(`/api/classes/${
 export const getClassRiskAlerts = (id, status = 'active') => api.get(`/api/classes/${id}/risk-alerts`, { params: { status } })
 export const detectClassRisks = (id, courseId) => api.post(`/api/classes/${id}/risk-detect`, null, { params: { courseId } })
 export const resolveRiskAlert = (id) => api.put(`/api/risk-alerts/${id}/resolve`)
+export const generateProblemCluster = (classId, courseId) => api.post(`/api/classes/${classId}/problem-cluster`, null, { params: { courseId } })
+export const getProblemCluster = (classId) => api.get(`/api/classes/${classId}/problem-cluster`)
 export const generateTeachingSuggestions = (classId, courseId) => api.post(`/api/classes/${classId}/teaching-suggestions`, null, { params: { courseId } })
 export const getTeachingSuggestions = (classId) => api.get(`/api/classes/${classId}/teaching-suggestions`)
+export const generateStudentIntervention = (studentId, courseId) => api.post(`/api/students/${studentId}/intervention`, null, { params: { courseId } })
 export const getClassFeedbackSummary = (classId) => api.get(`/api/classes/${classId}/feedback-summary`)
+export const exportClassReport = (classId, data) => api.post(`/api/classes/${classId}/reports/export`, data)
 
 // ============ 错题本与学情分析 (/api/*/mistakes) ============
 export const getStudentWrongQuestions = (studentNo, params = {}) => api.get(`/api/students/${studentNo}/mistakes`, { params })

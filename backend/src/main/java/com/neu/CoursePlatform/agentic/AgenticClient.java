@@ -400,7 +400,7 @@ public class AgenticClient {
     @SuppressWarnings("unchecked")
     private Map<String, Object> parseDeepSeekResponse(String capability, String raw) {
         // 尝试解析为 JSON；解析失败则将原始文本作为 result 返回
-        String trimmed = raw.trim();
+        String trimmed = extractJson(raw);
         if (trimmed.startsWith("{")) {
             try {
                 JsonNode node = objectMapper.readTree(trimmed);
@@ -419,13 +419,33 @@ public class AgenticClient {
         return Map.of("result", raw);
     }
 
+    private String extractJson(String raw) {
+        String text = raw == null ? "" : raw.trim();
+        if (text.startsWith("```")) {
+            text = text.replaceFirst("^```(?:json)?\\s*", "")
+                    .replaceFirst("\\s*```$", "")
+                    .trim();
+        }
+        int arrayStart = text.indexOf('[');
+        int objectStart = text.indexOf('{');
+        int start;
+        if (arrayStart >= 0 && objectStart >= 0) start = Math.min(arrayStart, objectStart);
+        else start = Math.max(arrayStart, objectStart);
+        if (start < 0) return text;
+        int end = text.charAt(start) == '[' ? text.lastIndexOf(']') : text.lastIndexOf('}');
+        if (end < start) return text.substring(start);
+        return text.substring(start, end + 1).trim();
+    }
+
     private String getSystemPrompt(String capability) {
         return switch (capability) {
             case "lecture" -> "你是一个大学课程AI讲师，根据PPT内容和知识点为学生讲解概念。用清晰易懂的语言，结合例子说明。回答使用中文。";
             case "qa" -> "你是一个课程答疑助手，回答学生关于知识点的问题。回答应准确、简洁，引用课程资料中的内容。回答使用中文。";
             case "ability-map" -> """
-                    根据知识点列表生成能力图谱JSON。返回格式：
-                    {"nodes": [{"id": "kp1", "name": "知识点名称", "importance": 3}], "edges": [{"source": "kp1", "target": "kp2", "relation": "prerequisite"}]}
+                    根据课程知识点列表生成能力图谱JSON。请把知识点归纳为4-8个能力点，每个能力点绑定相关知识点。
+                    严格返回如下格式，不要返回 Markdown：
+                    {"abilityPoints": [{"name": "能力点名称", "description": "能力说明", "knowledgePointIds": ["输入中的knowledgePointId"]}]}
+                    knowledgePointIds 只能使用输入知识点里的 knowledgePointId。
                     """;
             case "extract" -> """
                     从课程资源中提取知识点。严格返回如下JSON：

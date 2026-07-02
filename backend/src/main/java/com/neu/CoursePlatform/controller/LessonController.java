@@ -30,15 +30,12 @@ public class LessonController {
     /** 课时详情（含课程名、教师名） | 登录用户 */
     @GetMapping("/detail/{lessonNo}")
     public Result<LessonDTO> detail(@PathVariable String lessonNo, HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         LessonDTO dto = lessonService.getDetailDto(lessonNo);
         return dto != null ? Result.ok(dto) : Result.fail("课时不存在");
     }
 
-    /** 查看某课程的课时列表 | 登录用户 */
     @GetMapping("/{courseCode}")
     public Result<List<Lesson>> list(@PathVariable String courseCode, HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
         return Result.ok(lessonService.listByCourseCode(courseCode));
     }
 
