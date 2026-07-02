@@ -108,7 +108,7 @@ class Module2ServiceTest {
             if ("count".equals(method)) return 4L;
             return defaultValue(method);
         });
-        TaskController controller = new TaskController(taskService, null, submissionService, studentService, new Auth(null));
+        TaskController controller = new TaskController(taskService, null, submissionService, studentService, null, new Auth(null));
         MockHttpSession session = adminSession();
 
         Result<Map<String, Object>> result = controller.taskStats("course-1", "task-1", session);
@@ -129,7 +129,7 @@ class Module2ServiceTest {
             case "getTaskCourseCode" -> "task-1".equals(args[0]) ? "course-1" : "course-2";
             default -> defaultValue(method);
         });
-        TaskSubmissionController controller = new TaskSubmissionController(submissionService, null, null, new Auth(null));
+        TaskSubmissionController controller = new TaskSubmissionController(submissionService, null, null, null, new Auth(null));
         MockHttpSession session = adminSession();
 
         Result<List<TaskSubmission>> result = controller.listByStudent("student-1", null, "course-1", session);

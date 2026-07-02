@@ -3,6 +3,7 @@ package com.neu.CoursePlatform.service;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.impl.StatsServiceImpl;
+import com.neu.CoursePlatform.service.TaskAssignmentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -63,7 +64,11 @@ class StatsServiceTest {
                     return null;
                 });
 
-        service = new StatsServiceImpl(subProxy, taskProxy, logProxy);
+        TaskAssignmentService assignmentProxy = (TaskAssignmentService) Proxy.newProxyInstance(
+                TaskAssignmentService.class.getClassLoader(), new Class<?>[]{TaskAssignmentService.class},
+                (p, method, args) -> List.of());
+
+        service = new StatsServiceImpl(subProxy, taskProxy, assignmentProxy, logProxy);
     }
 
     @Test

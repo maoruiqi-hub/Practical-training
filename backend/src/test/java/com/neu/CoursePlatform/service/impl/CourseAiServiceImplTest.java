@@ -12,6 +12,8 @@ import com.neu.CoursePlatform.entity.CourseResource;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.service.CourseResourceService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
+import com.neu.CoursePlatform.service.AbilityPointService;
+import com.neu.CoursePlatform.service.AbilityMapService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -244,7 +246,8 @@ class CourseAiServiceImplTest {
         KnowledgePointService emptyKpService = createKnowledgePointService(List.of());
         AgenticClient aiClient = createMockAgenticClient(true);
         CourseResourceService resService = createCourseResourceService();
-        service = new CourseAiServiceImpl(aiClient, emptyKpService, resService);
+        service = new CourseAiServiceImpl(aiClient, emptyKpService, resService,
+                createAbilityPointService(), createAbilityMapService());
 
         Result<AgenticResponse> result = service.generateAbilityMap("CS999");
         assertEquals(200, result.getCode());
@@ -294,7 +297,8 @@ class CourseAiServiceImplTest {
         ));
         courseResourceService = createCourseResourceService();
         AgenticClient aiClient = createMockAgenticClient(aiAvailable);
-        service = new CourseAiServiceImpl(aiClient, knowledgePointService, courseResourceService);
+        service = new CourseAiServiceImpl(aiClient, knowledgePointService, courseResourceService,
+                createAbilityPointService(), createAbilityMapService());
     }
 
     // ============ 模拟依赖 ============
@@ -337,6 +341,21 @@ class CourseAiServiceImplTest {
                     }
                     return null;
                 });
+    }
+
+    private static AbilityPointService createAbilityPointService() {
+        return (AbilityPointService) Proxy.newProxyInstance(
+                AbilityPointService.class.getClassLoader(),
+                new Class<?>[]{AbilityPointService.class},
+                (proxy, method, args) -> args != null && args.length > 0 && "getById".equals(method.getName())
+                        ? new com.neu.CoursePlatform.entity.AbilityPoint() : List.of());
+    }
+
+    private static AbilityMapService createAbilityMapService() {
+        return (AbilityMapService) Proxy.newProxyInstance(
+                AbilityMapService.class.getClassLoader(),
+                new Class<?>[]{AbilityMapService.class},
+                (proxy, method, args) -> List.of());
     }
 
     /** 使用匿名子类模拟 AgenticClient（具体类，不是接口） */
