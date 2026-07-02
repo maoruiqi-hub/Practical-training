@@ -79,6 +79,32 @@ public class AgenticClient {
         }
     }
 
+    public boolean isMockMode() {
+        return "mock".equalsIgnoreCase(mode);
+    }
+
+    public boolean isConfiguredForRealAi() {
+        if ("deepseek".equalsIgnoreCase(mode)) {
+            return apiKey != null && !apiKey.isBlank()
+                    && baseUrl != null && !baseUrl.isBlank();
+        }
+        if ("dify".equalsIgnoreCase(mode)) {
+            return difyClient.isConfigured();
+        }
+        if ("http".equalsIgnoreCase(mode)) {
+            return baseUrl != null && !baseUrl.isBlank();
+        }
+        return false;
+    }
+
+    public String configurationMessage() {
+        if (isMockMode()) return "当前为 mock 模式，仅用于开发联调";
+        if ("deepseek".equalsIgnoreCase(mode)) return "DeepSeek/Anthropic API token 或 base-url 未配置";
+        if ("dify".equalsIgnoreCase(mode)) return "Dify API key 或服务地址未配置";
+        if ("http".equalsIgnoreCase(mode)) return "外部 agentic 服务地址未配置";
+        return "agentic.mode 未配置为 deepseek、dify 或 http";
+    }
+
     /**
      * 共性问题聚类（供模块5 T8 使用）
      */
@@ -421,6 +447,11 @@ public class AgenticClient {
             case "riskDetect" -> """
                     分析学生学习数据，检测学习风险。返回JSON：
                     {"risks": [{"type": "procrastination|low_score|inactive|progress_lag", "level": "high|medium|low", "detail": "详细描述"}]}
+                    """;
+            case "tower-diagnosis-report" -> """
+                    你是课程爬塔系统的 AI 诊断导师。根据学生在侦察房或战斗房的答题记录，返回严格 JSON：
+                    {"summary":"一句话诊断","weaknesses":["薄弱点1"],"recommendedAction":"下一步建议","reviewFocus":["复习重点1"],"source":"real_ai"}
+                    只输出 JSON，不要输出 Markdown。回答使用中文，建议必须针对错题和知识点。
                     """;
             default -> "你是一个教育AI助手，帮助教师和学生完成教学任务。回答使用中文，简洁准确。";
         };

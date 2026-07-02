@@ -135,7 +135,7 @@
       <div v-if="gradeDetails.length">
         <div v-for="(d,i) in gradeDetails" :key="i" style="margin-bottom:12px;padding:10px;background:#f9f9f9;border-radius:6px;text-align:left">
           <div><b>{{ i+1 }}.</b> {{ d.stem }} <el-tag size="small" style="margin-left:6px">{{ d.type }}</el-tag> <span style="color:#999;font-size:12px">{{ d.score }}分</span></div>
-          <div style="margin-top:4px">📝 学生答案：<span :style="{color:d.studentAnswer===d.correctAnswer?'green':'red'}">{{ d.studentAnswer || '(空)' }}</span></div>
+          <div style="margin-top:4px">📝 学生答案：<span :style="{ color: answerColor(d) }">{{ d.studentAnswer || '(空)' }}</span></div>
           <div v-if="d.type==='single'||d.type==='multi'" style="color:#67c23a">✅ 正确答案：{{ d.correctAnswer }}</div>
           <div v-else style="color:#909399">✅ 参考答案：{{ d.correctAnswer }}</div>
         </div>
@@ -254,6 +254,13 @@ const gradeDetails = ref([])
 const gradeForm = reactive({ submissionId:'', studentName:'', content:'', score:null, feedback:'' })
 const aiReview = ref(null)
 const aiReviewLoading = ref(false)
+
+const answerColor = detail => {
+  if (detail?.autoGradable === false) return '#606266'
+  if (detail?.correct === true) return 'green'
+  if (detail?.correct === false) return 'red'
+  return '#606266'
+}
 
 const unsubmittedCount = computed(() => myTasks.value.filter(t => t.status === '未提交').length)
 const suggestion = ref(null)

@@ -1,6 +1,6 @@
 <template>
   <div class="floor-page" v-loading="loading" :style="pageStyle">
-    <GameHud :profile="profile" :course-name="courseName" compact />
+    <GameHud :profile="profile" :course-name="courseName" compact :show-hp="false" />
 
     <main class="floor-shell" :class="{ 'scene-shell': scenePhase }">
       <header class="floor-header" :class="{ 'scene-header': scenePhase }">
@@ -21,7 +21,7 @@
             补给
           </el-button>
           <el-button
-            v-if="phase === 'diagnosis'"
+            v-if="false"
             class="spire-button"
             @click="startBattle"
           >
@@ -59,25 +59,28 @@
           :course-id="courseId"
           :student-id="studentId"
           :task-no="taskNo"
-          :floor-name="floor.kpName || floorName"
+          :floor-name="activeFloorName"
           :initial-hp="playerInitialHp"
           :max-hp="playerMaxHp"
+          :run-id="activeRunId"
+          :node-id="activeNodeId"
           @boss-end="handleBattleEnd"
           @profile-refresh="refreshProfile"
         />
 
         <BattleRoom
           v-else-if="phase === 'battle'"
+          :key="activeNodeId || nodeId"
           :kp-id="kpId"
           :course-id="courseId"
           :student-id="studentId"
           :task-no="taskNo"
-          :floor-name="floor.kpName || floorName"
-          :room-type="roomType"
+          :floor-name="activeFloorName"
+          :room-type="activeRoomType"
           :initial-hp="playerInitialHp"
           :max-hp="playerMaxHp"
-          :run-id="runId"
-          :node-id="nodeId"
+          :run-id="activeRunId"
+          :node-id="activeNodeId"
           @battle-end="handleBattleEnd"
           @profile-refresh="refreshProfile"
           @ai-help="openAiTutor"
@@ -87,7 +90,7 @@
           v-else-if="phase === 'reward'"
           :battle-result="battleResult"
           :floor-name="floor.kpName || floorName"
-          :room-type="roomType"
+          :room-type="activeRoomType"
           @reward-picked="handleRewardPicked"
         />
 
@@ -126,16 +129,16 @@
           <p class="kicker">诊断</p>
           <h2>诊断结果</h2>
           <div v-if="diagnosisSyncing" class="diagnosis-card syncing">
-            <strong>诊断结果生成中</strong>
+            <strong>AI 诊断生成中</strong>
             <span>{{ Math.round((diagnosisResult?.correctRate || battleResult.correctRate || 0) * 100) }}%</span>
-            <p>AI 诊断报告和能力变化正在生成，页面会在完成后自动刷新。</p>
+            <p>AI 正在分析本次答题记录，生成完成后会自动显示诊断方案。</p>
             <el-skeleton :rows="2" animated />
           </div>
           <div v-else-if="diagnosisSyncError" class="diagnosis-card weak">
-            <strong>诊断同步待确认</strong>
+            <strong>AI 诊断生成失败</strong>
             <p>{{ diagnosisSyncError }}</p>
           </div>
-          <div v-if="diagnosisResult" class="diagnosis-card" :class="diagnosisResult.status">
+          <div v-else-if="diagnosisResult" class="diagnosis-card" :class="diagnosisResult.status">
             <strong>{{ diagnosisText }}</strong>
             <span>{{ Math.round((diagnosisResult.correctRate || 0) * 100) }}%</span>
             <p v-if="diagnosisResult.report?.summary">{{ diagnosisResult.report.summary }}</p>
@@ -154,8 +157,8 @@
             :key="radarRefreshKey"
             :student-no="studentId"
             :course-code="courseId"
-            :run-id="runId"
-            :node-id="nodeId"
+            :run-id="activeRunId"
+            :node-id="activeNodeId"
             compact
           />
         </section>
@@ -214,6 +217,7 @@ const profile = ref({})
 const floor = ref({})
 const run = ref(null)
 const node = ref(null)
+const activeCombatNode = ref(null)
 const taskNo = ref('')
 const diagnosisResult = ref(null)
 const diagnosisSyncing = ref(false)
@@ -230,6 +234,15 @@ const kpId = computed(() => route.params.kpId)
 const runId = computed(() => route.query.runId || floor.value.runId || node.value?.runId || '')
 const nodeId = computed(() => route.query.nodeId || floor.value.nodeId || node.value?.nodeId || '')
 const roomType = computed(() => String(route.query.roomType || node.value?.roomType || (route.query.boss === '1' ? 'boss' : 'battle')))
+const activeRunId = computed(() => activeCombatNode.value?.runId || runId.value)
+const activeNodeId = computed(() => activeCombatNode.value?.nodeId || nodeId.value)
+const activeRoomType = computed(() => String(activeCombatNode.value?.roomType || roomType.value))
+const activeFloorName = computed(() =>
+  activeCombatNode.value?.kpName ||
+  activeCombatNode.value?.knowledgePointName ||
+  floor.value.kpName ||
+  floorName.value
+)
 const courseId = computed(() => route.query.courseId || route.query.course_id || localStorage.getItem('courseId') || '1')
 const normalizeCourseName = name => {
   const value = String(name || '').trim()
@@ -257,7 +270,7 @@ const backgroundForPhase = computed(() => {
   if (phase.value === 'boss') return gameBackgrounds.boss
   if (phase.value === 'reward') return gameBackgrounds.reward
   if (phase.value === 'settlement') return gameBackgrounds.mapAct1
-  return isBossFloor.value ? gameBackgrounds.boss : gameBackgrounds.combat
+  return activeRoomType.value === 'boss' ? gameBackgrounds.boss : gameBackgrounds.combat
 })
 
 const pageStyle = computed(() => ({
@@ -274,7 +287,7 @@ const roomKicker = computed(() => {
   if (phase.value === 'diagnosis') return '诊断房'
   if (phase.value === 'reward') return '奖励选择'
   if (phase.value === 'settlement') return '结算'
-  return isBossFloor.value ? '首领房' : roomType.value === 'elite' ? '精英房' : '战斗房'
+  return activeRoomType.value === 'boss' ? '首领房' : activeRoomType.value === 'elite' ? '精英房' : '战斗房'
 })
 
 const roomLabel = computed(() => ({
@@ -285,11 +298,11 @@ const roomLabel = computed(() => ({
   treasure: '宝箱',
   rest: '休息点',
   shop: '商店'
-})[roomType.value] || '房间')
+})[activeRoomType.value] || '房间')
 
 const progressItems = computed(() => [
   { key: 'diagnosis', label: '诊断', done: Boolean(diagnosisResult.value) },
-  { key: isBossFloor.value ? 'boss' : 'battle', label: isBossFloor.value ? '首领' : roomType.value === 'elite' ? '精英' : '战斗', done: ['reward', 'settlement'].includes(phase.value) },
+  { key: activeRoomType.value === 'boss' ? 'boss' : 'battle', label: activeRoomType.value === 'boss' ? '首领' : activeRoomType.value === 'elite' ? '精英' : '战斗', done: ['reward', 'settlement'].includes(phase.value) },
   { key: 'reward', label: '奖励', done: Boolean(pickedReward.value) },
   { key: 'settlement', label: '结算', done: phase.value === 'settlement' }
 ])
@@ -397,7 +410,7 @@ const openAiTutor = question => {
   aiVisible.value = true
 }
 
-const handleDiagnosed = async result => {
+const legacyHandleDiagnosed = async result => {
   diagnosisResult.value = result
   diagnosisSyncError.value = ''
   const perfect = result.status === 'mastered' || Number(result.correctRate || 0) >= 0.999
@@ -444,7 +457,7 @@ const handleDiagnosed = async result => {
   })
 }
 
-const syncDiagnosisResult = async (result, optimisticReward) => {
+const legacySyncDiagnosisResult = async (result, optimisticReward) => {
   diagnosisSyncing.value = true
   diagnosisSyncError.value = ''
   try {
@@ -458,11 +471,40 @@ const syncDiagnosisResult = async (result, optimisticReward) => {
       throw new Error(res.data.msg || '诊断同步失败')
     }
     const payload = res.data.data || {}
+    if (payload.aiReportStatus === 'pending') {
+      diagnosisResult.value = {
+        ...result,
+        status: payload.status || result.status,
+        correctRate: payload.correctRate ?? result.correctRate,
+        report: null,
+        aiReportStatus: 'pending'
+      }
+      if (optimisticReward) {
+        battleResult.value = { ...battleResult.value, pendingReport: true }
+      }
+      return
+    }
+    if (payload.aiReportStatus === 'failed') {
+      diagnosisResult.value = {
+        ...result,
+        status: payload.status || result.status,
+        correctRate: payload.correctRate ?? result.correctRate,
+        report: null,
+        aiReportStatus: 'failed'
+      }
+      diagnosisSyncError.value = payload.errorMessage || 'AI 诊断生成失败，请稍后重试。'
+      if (optimisticReward) {
+        battleResult.value = { ...battleResult.value, pendingReport: false }
+      }
+      return
+    }
     diagnosisResult.value = {
       ...result,
       status: payload.status || result.status,
       correctRate: payload.correctRate ?? result.correctRate,
-      report: payload.diagnosis || null
+      report: payload.diagnosis || payload.report || null,
+      aiReportStatus: payload.aiReportStatus || 'success',
+      reportSource: payload.reportSource || ''
     }
     if (payload.battleBypassed || optimisticReward) {
       battleResult.value = {
@@ -487,68 +529,148 @@ const syncDiagnosisResult = async (result, optimisticReward) => {
   }
 }
 
+const handleDiagnosed = async result => {
+  diagnosisResult.value = { ...result, report: null, aiReportStatus: 'skipped' }
+  diagnosisSyncError.value = ''
+  if (runId.value && nodeId.value) {
+    await syncDiagnosisResult(result)
+    return
+  }
+
+  phase.value = isBossFloor.value ? 'boss' : 'battle'
+  sendEvent('diagnosis_finished', {
+    correct_rate: result.correctRate,
+    status: result.status
+  })
+}
+
+const syncDiagnosisResult = async result => {
+  diagnosisSyncing.value = true
+  diagnosisSyncError.value = ''
+  try {
+    const res = await diagnoseTowerNode(studentId.value, runId.value, nodeId.value, {
+      correctRate: result.correctRate,
+      status: result.status,
+      answers: result.answers || [],
+      packId: result.packId || ''
+    })
+    if (res.data.code !== 200) {
+      throw new Error(res.data.msg || '诊断同步失败')
+    }
+
+    const payload = res.data.data || {}
+    const serverRate = payload.correctRate ?? result.correctRate ?? 0
+    diagnosisResult.value = {
+      ...result,
+      status: payload.status || result.status,
+      correctRate: serverRate,
+      report: null,
+      aiReportStatus: 'skipped'
+    }
+
+    if (payload.eliteBypassed || payload.battleBypassed) {
+      activeCombatNode.value = null
+      battleResult.value = {
+        cleared: true,
+        correctRate: serverRate || 1,
+        diagnosisBypass: true,
+        pendingReport: false
+      }
+      diagnosisResult.value = {
+        status: 'perfect',
+        correctRate: serverRate || 1,
+        aiReportStatus: 'skipped',
+        report: {
+          summary: '诊断全对，已跳过对应精英关卡。',
+          weaknesses: [],
+          recommendedAction: '返回地图继续推进'
+        }
+      }
+      phase.value = 'settlement'
+      await refreshProfile()
+      radarRefreshKey.value += 1
+      return
+    }
+
+    if (payload.nextNode) {
+      activeCombatNode.value = payload.nextNode
+      phase.value = payload.nextRoomType === 'boss' ? 'boss' : 'battle'
+      ElMessage.success('诊断完成，进入对应精英关卡')
+      return
+    }
+
+    throw new Error('诊断完成，但后端没有返回可进入的精英关卡')
+  } catch (error) {
+    diagnosisSyncError.value = error?.message || '诊断结果同步失败，请稍后重试。'
+    ElMessage.warning(diagnosisSyncError.value)
+  } finally {
+    diagnosisSyncing.value = false
+  }
+}
+
 const handleBattleEnd = async result => {
-  battleResult.value = { ...result, pendingReport: true }
+  battleResult.value = {
+    ...result,
+    correctRate: result.battleCorrectRate ?? result.correctRate ?? 0,
+    pendingReport: true
+  }
   if (Number.isFinite(Number(result.hpLeft))) {
     profile.value = { ...profile.value, hp: Number(result.hpLeft), maxHp: playerMaxHp.value }
   }
   diagnosisSyncError.value = ''
   diagnosisSyncing.value = true
-  diagnosisResult.value = {
-    status: result.cleared ? 'cleared' : 'failed',
-    correctRate: result.correctRate || 0,
-    report: {
-      summary: result.cleared
-        ? '挑战已完成，AI 正在生成诊断结果和能力变化说明。'
-        : '挑战未通过，系统正在整理本次薄弱点。',
-      weaknesses: [],
-      recommendedAction: result.cleared ? '等待报告生成后返回地图继续推进' : '查看错题后重试本节点'
-    }
-  }
+  diagnosisResult.value = null
   phase.value = 'settlement'
 
   const syncBattle = async () => {
-    if (runId.value && nodeId.value) {
-      const res = await completeTowerNode(studentId.value, runId.value, nodeId.value, {
+    if (activeRunId.value && activeNodeId.value) {
+      const res = await completeTowerNode(studentId.value, activeRunId.value, activeNodeId.value, {
         result: result.cleared ? 'cleared' : 'failed',
         correctRate: result.correctRate,
         cleared: result.cleared,
-        roomType: roomType.value,
+        roomType: activeRoomType.value,
         hpLeft: result.hpLeft,
         packId: result.packId || '',
         answerSummary: result.answerSummary || []
       })
       if (res.data.code !== 200) throw new Error(res.data.msg || '通关记录同步失败')
       const payload = res.data.data || {}
+      const serverCorrectRate = payload.battleCorrectRate ?? payload.correctRate ?? result.battleCorrectRate ?? result.correctRate ?? 0
+      battleResult.value = {
+        ...battleResult.value,
+        correctRate: serverCorrectRate,
+        correctRateSource: payload.correctRateSource || '',
+        gradedCount: payload.gradedCount,
+        correctCount: payload.correctCount,
+        pendingReport: payload.aiReportStatus === 'pending'
+      }
+      if (payload.aiReportStatus === 'pending') {
+        diagnosisResult.value = null
+        return
+      }
+      if (payload.aiReportStatus === 'failed') {
+        diagnosisResult.value = null
+        diagnosisSyncError.value = payload.errorMessage || 'AI 诊断生成失败，请稍后重试。'
+        battleResult.value = { ...battleResult.value, pendingReport: false }
+        return
+      }
       const report = payload.diagnosis || payload.report || null
       diagnosisResult.value = {
         status: result.cleared ? 'cleared' : 'failed',
-        correctRate: result.correctRate || 0,
-        report: report || {
-          summary: result.cleared
-            ? '通关记录已同步。本次表现已用于更新诊断结果和能力图谱。'
-            : '挑战记录已同步。本次错误会作为后续练习推荐依据。',
-          weaknesses: result.cleared ? [] : ['本节点仍有题目未掌握'],
-          recommendedAction: result.cleared ? '返回地图继续推进' : '复盘后重试'
-        }
+        correctRate: serverCorrectRate,
+        report,
+        aiReportStatus: payload.aiReportStatus || 'success',
+        reportSource: payload.reportSource || ''
       }
       battleResult.value = { ...battleResult.value, pendingReport: false }
     } else {
       await sendEvent(battleResultEvent(result), {
         correct_rate: result.correctRate,
         cleared: result.cleared,
-        room_type: roomType.value,
+        room_type: activeRoomType.value,
         hp_left: result.hpLeft
       })
-      diagnosisResult.value = {
-        status: result.cleared ? 'cleared' : 'failed',
-        correctRate: result.correctRate || 0,
-        report: {
-          summary: result.cleared ? '本地通关记录已完成。' : '本地挑战记录已完成。',
-          weaknesses: result.cleared ? [] : ['请复盘本次错题'],
-          recommendedAction: result.cleared ? '返回地图继续推进' : '重试诊断或战斗'
-        }
-      }
+      diagnosisSyncError.value = '当前没有爬塔 runId/nodeId，无法生成 AI 诊断报告。'
       battleResult.value = { ...battleResult.value, pendingReport: false }
     }
     await refreshProfile()
@@ -599,8 +721,8 @@ const applyProfileDelta = delta => {
 
 const battleResultEvent = result => {
   if (!result.cleared) return 'floor_failed'
-  if (isBossFloor.value) return 'boss_defeated'
-  if (roomType.value === 'elite') return 'elite_defeated'
+  if (activeRoomType.value === 'boss') return 'boss_defeated'
+  if (activeRoomType.value === 'elite') return 'elite_defeated'
   return 'floor_cleared'
 }
 

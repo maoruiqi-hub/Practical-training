@@ -166,11 +166,23 @@ public class TowerRunServiceImpl implements TowerRunService {
 
         String result = stringValue(request, "result");
         if (result == null || result.isBlank()) result = Boolean.TRUE.equals(request.get("cleared")) ? "cleared" : "failed";
-        double correctRate = doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D));
+        String reportStage = reportStageFor(node);
+        RateStats rateStats = calculateBattleCorrectRate(request,
+                doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D)),
+                expectedAnswerSources(reportStage));
+        double correctRate = rateStats.correctRate;
         boolean cleared = isClearedResult(result);
-        recordAttempt(run, node, studentNo, result, correctRate, request, null);
+        Map<String, Object> reportEnvelope = buildTowerDiagnosisReport(run, node, request, correctRate, cleared, reportStage);
+        recordAttempt(run, node, studentNo, result, correctRate, request, reportEnvelope);
         applyCompletion(run, node, result, cleared, correctRate, intValue(request.get("hpLeft"), intValue(request.get("hp_left"), 0)));
-        return toRunDto(runMapper.selectById(runId), nodes(runId));
+        Map<String, Object> response = new LinkedHashMap<>(toRunDto(runMapper.selectById(runId), nodes(runId)));
+        response.put("correctRate", correctRate);
+        response.put("battleCorrectRate", correctRate);
+        response.put("correctRateSource", rateStats.source);
+        response.put("gradedCount", rateStats.gradedCount);
+        response.put("correctCount", rateStats.correctCount);
+        response.putAll(reportEnvelope);
+        return response;
     }
 
     @Override
@@ -178,26 +190,38 @@ public class TowerRunServiceImpl implements TowerRunService {
     public Map<String, Object> diagnoseNode(String studentNo, String runId, String nodeId, Map<String, Object> request) {
         StudentTowerRun run = requireRun(studentNo, runId);
         StudentTowerNode node = requireNode(runId, nodeId);
-        double correctRate = doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D));
-        if (request.get("answers") instanceof List<?> answers && !answers.isEmpty()) {
-            long correct = answers.stream().filter(item -> item instanceof Map<?, ?> map && Boolean.TRUE.equals(map.get("correct"))).count();
-            correctRate = correct / (double) answers.size();
-        }
+        RateStats rateStats = calculateBattleCorrectRate(request,
+                doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D)),
+                Set.of("diagnosis_room"));
+        double correctRate = rateStats.gradedCount > 0 ? rateStats.correctRate : 0D;
         boolean perfect = correctRate >= 0.999D;
-        Map<String, Object> report = diagnosisReport(run, node, request, correctRate, perfect);
-        recordAttempt(run, node, studentNo, perfect ? "diagnosis_perfect" : "diagnosis_partial", correctRate, request, report);
+        StudentTowerNode elite = boundEliteNode(runId, node);
+        recordAttempt(run, node, studentNo, perfect ? "diagnosis_perfect" : "diagnosis_partial", correctRate, request, null);
         applyCompletion(run, node, perfect ? "diagnosis_perfect" : "diagnosis_partial", true, correctRate, 0);
-        StudentTowerNode battle = boundBattleNode(runId, node);
-        if (perfect && battle != null && !"cleared".equals(battle.getStatus())) {
-            recordAttempt(run, battle, studentNo, "diagnosis_perfect", correctRate, request, report);
-            applyCompletion(run, battle, "diagnosis_perfect", true, correctRate, 0);
+        if (perfect && elite != null && !"cleared".equals(elite.getStatus())) {
+            recordAttempt(run, elite, studentNo, "diagnosis_perfect", correctRate, request, null);
+            applyCompletion(run, elite, "diagnosis_perfect", true, correctRate, 0);
+        } else if (!perfect && elite != null && "locked".equals(elite.getStatus())) {
+            elite.setStatus("available");
+            elite.setUpdatedAt(LocalDateTime.now());
+            nodeMapper.updateById(elite);
+            updateCurrentNode(run);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", perfect ? "perfect" : correctRate >= 0.5D ? "partial" : "weak");
         result.put("correctRate", correctRate);
-        result.put("battleBypassed", perfect && battle != null);
-        result.put("diagnosis", report);
+        result.put("correctRateSource", rateStats.source);
+        result.put("gradedCount", rateStats.gradedCount);
+        result.put("correctCount", rateStats.correctCount);
+        result.put("diagnosisPassed", perfect);
+        result.put("eliteBypassed", perfect && elite != null);
+        result.put("battleBypassed", perfect && elite != null);
+        result.put("clearedEliteNodeId", perfect && elite != null ? elite.getNodeId() : null);
+        result.put("nextNodeId", !perfect && elite != null ? elite.getNodeId() : null);
+        result.put("nextRoomType", !perfect && elite != null ? elite.getRoomType() : null);
+        result.put("nextNode", !perfect && elite != null ? toNodeDto(elite, supportIndexes(run.getCourseCode())) : null);
+        result.putAll(reportEnvelope("skipped", null, "diagnosis_gate", null, true, false));
         result.put("run", toRunDto(runMapper.selectById(runId), nodes(runId)));
         return result;
     }
@@ -343,7 +367,7 @@ public class TowerRunServiceImpl implements TowerRunService {
                 previousMain = diagnosis.getNodeId();
             }
 
-            String battleType = i == selected.size() - 1 ? "boss" : score < 40 ? "elite" : "battle";
+            String battleType = i == selected.size() - 1 ? "boss" : needsDiagnosis || score < 40 ? "elite" : "battle";
             StudentTowerNode battle = newNode(run.getRunId(), order++, row++, 1, battleType, kpId,
                     firstAbility(kpId, abilityByKp), battleType.equals("elite") ? 2 : battleType.equals("boss") ? 3 : 1,
                     "根据当前掌握度安排的主线挑战。");
@@ -529,33 +553,178 @@ public class TowerRunServiceImpl implements TowerRunService {
         return delta >= 0 ? "本次表现提升了相关能力掌握度。" : "本次挑战暴露出薄弱点，建议复习后重试。";
     }
 
-    private Map<String, Object> diagnosisReport(StudentTowerRun run, StudentTowerNode node,
-                                                Map<String, Object> request, double correctRate, boolean perfect) {
+    private Map<String, Object> buildTowerDiagnosisReport(StudentTowerRun run, StudentTowerNode node,
+                                                          Map<String, Object> request, double correctRate,
+                                                          boolean cleared, String sourceStage) {
+        List<Map<String, Object>> answers = answerList(request);
+        List<Map<String, Object>> validAnswers = validReportAnswers(answers, expectedAnswerSources(sourceStage));
+        if (validAnswers.isEmpty()) {
+            return reportEnvelope("failed", null, "invalid_answer_summary",
+                    "未检测到有效的战斗房答题记录，无法生成 AI 诊断。", false, false);
+        }
+
+        if (agenticClient.isMockMode()) {
+            Map<String, Object> report = new LinkedHashMap<>();
+            report.put("summary", "模拟 AI 诊断：当前为开发联调模式，未调用真实 AI。");
+            report.put("weaknesses", cleared ? List.of() : List.of("模拟结果不能作为真实学习诊断依据"));
+            report.put("recommendedAction", cleared ? "配置真实 AI 后重新生成诊断" : "配置真实 AI 后再查看针对性复盘建议");
+            report.put("reviewFocus", List.of());
+            report.put("source", "mock_ai");
+            return reportEnvelope("mock", report, "mock_ai", null, true, true);
+        }
+
+        if (!agenticClient.isConfiguredForRealAi()) {
+            return reportEnvelope("failed", null, "ai_unconfigured", agenticClient.configurationMessage(), false, true);
+        }
+
         try {
             AgenticRequest aiRequest = new AgenticRequest();
             aiRequest.setCourseCode(run.getCourseCode());
             aiRequest.setKnowledgePointId(node.getKnowledgePointId());
-            aiRequest.setContext(Map.of("node", toNodeDto(node, supportIndexes(run.getCourseCode())),
-                    "answers", request.getOrDefault("answers", List.of()),
-                    "correctRate", correctRate,
-                    "perfect", perfect));
+            aiRequest.setContent("请基于本次爬塔答题记录生成学习诊断 JSON。");
+            Map<String, Object> context = new LinkedHashMap<>();
+            context.put("studentNo", run.getStudentNo());
+            context.put("courseCode", run.getCourseCode());
+            context.put("knowledgePointId", safe(node.getKnowledgePointId()));
+            context.put("abilityPointId", safe(node.getAbilityPointId()));
+            context.put("roomType", safe(node.getRoomType()));
+            context.put("stage", sourceStage);
+            context.put("correctRate", correctRate);
+            context.put("cleared", cleared);
+            context.put("answers", validAnswers);
+            context.put("wrongAnswers", wrongAnswers(validAnswers));
+            context.put("questionCount", validAnswers.size());
+            context.put("node", toNodeDto(node, supportIndexes(run.getCourseCode())));
+            aiRequest.setContext(context);
             AgenticResponse response = agenticClient.invoke("tower-diagnosis-report", aiRequest);
             if (response != null && response.isSuccess() && response.getData() != null) {
-                String raw = firstText(response.getData().get("answer"), response.getData().get("result"), response.getData().get("content"));
-                if (raw != null && raw.trim().startsWith("{")) {
-                    return objectMapper.readValue(extractJson(raw), new TypeReference<Map<String, Object>>() {});
+                if (response.getData().containsKey("summary") || response.getData().containsKey("weaknesses")) {
+                    Map<String, Object> report = new LinkedHashMap<>(response.getData());
+                    report.putIfAbsent("source", "real_ai");
+                    return reportEnvelope("success", report, String.valueOf(report.get("source")), null, true, false);
                 }
-                if (raw != null) return Map.of("summary", raw, "weaknesses", List.of(), "recommendedAction", perfect ? "可跳过战斗" : "进入战斗巩固");
+                String raw = firstText(response.getData().get("answer"), response.getData().get("result"),
+                        response.getData().get("content"), response.getData().get("summary"));
+                if (raw != null && raw.trim().startsWith("{")) {
+                    Map<String, Object> report = objectMapper.readValue(extractJson(raw), new TypeReference<Map<String, Object>>() {});
+                    report.putIfAbsent("source", "real_ai");
+                    return reportEnvelope("success", report, String.valueOf(report.get("source")), null, true, false);
+                }
+                if (raw != null) {
+                    Map<String, Object> report = new LinkedHashMap<>();
+                    report.put("summary", raw);
+                    report.put("weaknesses", List.of());
+                    report.put("recommendedAction", cleared ? "返回地图继续推进" : "复盘错题后重试本节点");
+                    report.put("reviewFocus", List.of());
+                    report.put("source", "ai_text");
+                    return reportEnvelope("success", report, "ai_text", null, true, false);
+                }
             }
-        } catch (Exception ignored) {
+            return reportEnvelope("failed", null, "ai_empty_response", "AI 未返回有效诊断内容", false, true);
+        } catch (Exception e) {
+            return reportEnvelope("failed", null, "ai_error", "AI 诊断生成失败：" + e.getMessage(), false, true);
         }
-        return Map.of(
-                "summary", perfect ? "诊断题全部答对，可以跳过当前普通战斗。" : "诊断显示仍有需要巩固的内容，请进入战斗继续练习。",
-                "weaknesses", perfect ? List.of() : List.of("诊断中存在错误或不确定题目"),
-                "recommendedAction", perfect ? "进入下一节点" : "进入战斗巩固",
-                "abilityDeltas", perfect ? List.of(Map.of("abilityPointId", safe(node.getAbilityPointId()), "delta", 3,
-                        "reason", "诊断全对，小幅提升相关能力。")) : List.of()
-        );
+    }
+
+    private Map<String, Object> reportEnvelope(String status, Map<String, Object> report, String source,
+                                               String errorMessage, boolean aiAvailable, boolean retryable) {
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        envelope.put("aiReportStatus", status);
+        envelope.put("aiAvailable", aiAvailable);
+        envelope.put("reportSource", source);
+        envelope.put("errorMessage", errorMessage);
+        envelope.put("retryable", retryable);
+        envelope.put("diagnosis", report);
+        envelope.put("report", report);
+        return envelope;
+    }
+
+    private RateStats calculateBattleCorrectRate(Map<String, Object> request, double fallback, Set<String> acceptedSources) {
+        List<Map<String, Object>> answers = answerList(request);
+        int graded = 0;
+        int correct = 0;
+        for (Map<String, Object> answer : answers) {
+            String source = String.valueOf(answer.getOrDefault("source", "battle_room"));
+            if (!acceptedSources.contains(source)) continue;
+            boolean autoGradable = answer.containsKey("autoGradable")
+                    ? Boolean.TRUE.equals(answer.get("autoGradable"))
+                    : isAutoGradableType(String.valueOf(answer.get("type")));
+            boolean answered = answer.containsKey("answered")
+                    ? Boolean.TRUE.equals(answer.get("answered"))
+                    : String.valueOf(answer.getOrDefault("studentAnswer", "")).trim().length() > 0;
+            if (!answered) continue;
+            if (!autoGradable) continue;
+            graded++;
+            if (Boolean.TRUE.equals(answer.get("correct"))) correct++;
+        }
+        if (graded <= 0) {
+            return new RateStats(Math.max(0D, Math.min(1D, fallback)), 0, 0, "client_fallback");
+        }
+        return new RateStats(correct / (double) graded, correct, graded, "answer_summary");
+    }
+
+    private String reportStageFor(StudentTowerNode node) {
+        if ("boss".equals(node.getRoomType())) return "boss_room";
+        if ("elite".equals(node.getRoomType())) return "elite_room";
+        return "battle_room";
+    }
+
+    private Set<String> expectedAnswerSources(String sourceStage) {
+        if ("elite_room".equals(sourceStage)) return Set.of("elite_room", "battle_room");
+        if ("boss_room".equals(sourceStage)) return Set.of("boss_room");
+        if ("diagnosis_room".equals(sourceStage)) return Set.of("diagnosis_room");
+        return Set.of("battle_room");
+    }
+
+    private List<Map<String, Object>> validReportAnswers(List<Map<String, Object>> answers, Set<String> acceptedSources) {
+        return answers.stream()
+                .filter(answer -> acceptedSources.contains(String.valueOf(answer.getOrDefault("source", "battle_room"))))
+                .filter(answer -> answer.containsKey("answered")
+                        ? Boolean.TRUE.equals(answer.get("answered"))
+                        : String.valueOf(answer.getOrDefault("studentAnswer", "")).trim().length() > 0)
+                .filter(answer -> answer.containsKey("autoGradable")
+                        ? Boolean.TRUE.equals(answer.get("autoGradable"))
+                        : isAutoGradableType(String.valueOf(answer.get("type"))))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> answerList(Map<String, Object> request) {
+        Object raw = request.getOrDefault("answerSummary", request.getOrDefault("answers", List.of()));
+        if (!(raw instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> answers = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Map<String, Object> answer = new LinkedHashMap<>();
+                map.forEach((key, value) -> answer.put(String.valueOf(key), value));
+                answers.add(answer);
+            }
+        }
+        return answers;
+    }
+
+    private List<Map<String, Object>> wrongAnswers(List<Map<String, Object>> answers) {
+        return answers.stream()
+                .filter(answer -> Boolean.FALSE.equals(answer.get("correct")))
+                .toList();
+    }
+
+    private boolean isAutoGradableType(String type) {
+        return "single".equals(type) || "multi".equals(type) || "fill".equals(type);
+    }
+
+    private static class RateStats {
+        private final double correctRate;
+        private final int correctCount;
+        private final int gradedCount;
+        private final String source;
+
+        private RateStats(double correctRate, int correctCount, int gradedCount, String source) {
+            this.correctRate = correctRate;
+            this.correctCount = correctCount;
+            this.gradedCount = gradedCount;
+            this.source = source;
+        }
     }
 
     private void recordAttempt(StudentTowerRun run, StudentTowerNode node, String studentNo, String result,
@@ -577,11 +746,17 @@ public class TowerRunServiceImpl implements TowerRunService {
         attemptMapper.insert(attempt);
     }
 
-    private StudentTowerNode boundBattleNode(String runId, StudentTowerNode diagnosis) {
+    private StudentTowerNode boundEliteNode(String runId, StudentTowerNode diagnosis) {
         if (diagnosis.getParentNodeId() != null && !diagnosis.getParentNodeId().isBlank()) {
             StudentTowerNode parent = nodeMapper.selectById(diagnosis.getParentNodeId());
             if (parent != null && BATTLE_TYPES.contains(parent.getRoomType())) return parent;
         }
+        StudentTowerNode elite = nodes(runId).stream()
+                .filter(node -> "elite".equals(node.getRoomType()))
+                .filter(node -> Objects.equals(node.getKnowledgePointId(), diagnosis.getKnowledgePointId()))
+                .findFirst()
+                .orElse(null);
+        if (elite != null) return elite;
         return nodes(runId).stream()
                 .filter(node -> BATTLE_TYPES.contains(node.getRoomType()))
                 .filter(node -> Objects.equals(node.getKnowledgePointId(), diagnosis.getKnowledgePointId()))

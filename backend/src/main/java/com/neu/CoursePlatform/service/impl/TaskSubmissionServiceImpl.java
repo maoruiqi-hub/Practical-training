@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.common.GameEventTypes;
@@ -28,11 +29,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper, TaskSubmission> implements TaskSubmissionService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final List<String> OPTION_LETTERS = List.of(
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
+            "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+            "U", "V", "W", "X", "Y", "Z");
+    private static final Pattern MARKED_OPTION_PATTERN =
+            Pattern.compile("^\\s*([A-Za-z])\\s*(?:[.)]|[:：]|\\u3001|\\uFF0E)\\s*(.*)$");
+    private static final Pattern SPACED_OPTION_PATTERN =
+            Pattern.compile("^\\s*([A-Za-z])\\s+(.+)$");
     private final LearningTaskService taskService;
     private final StudentService studentService;
     private final QuestionService questionService;
@@ -425,20 +436,159 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
 
     private boolean isAnswerCorrect(Question q, Object response) {
         if (q.getAnswer() == null) return false;
-        String studentAnswer = response == null ? "" : String.valueOf(response).trim();
-        String correctAnswer = q.getAnswer().trim();
-        if ("multi".equals(q.getType())) {
-            return splitAnswerSet(correctAnswer).equals(splitAnswerSet(studentAnswer));
+        String type = q.getType() == null ? "" : q.getType();
+        if ("single".equals(type)) {
+            String expected = canonicalChoiceToken(q.getAnswer(), q);
+            String actual = canonicalChoiceToken(response, q);
+            return !expected.isBlank() && expected.equals(actual);
         }
-        return correctAnswer.equalsIgnoreCase(studentAnswer);
+        if ("multi".equals(q.getType())) {
+            Set<String> expected = choiceTokenSet(q.getAnswer(), q);
+            Set<String> actual = choiceTokenSet(response, q);
+            return !expected.isEmpty() && expected.equals(actual);
+        }
+        return normalizeFillText(response).equals(normalizeFillText(q.getAnswer()));
     }
 
-    private Set<String> splitAnswerSet(String answer) {
-        return Arrays.stream(answer.split(","))
-                .map(String::trim)
+    private Set<String> choiceTokenSet(Object answer, Question question) {
+        return splitAnswerTokens(answer).stream()
+                .map(token -> canonicalChoiceToken(token, question))
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toCollection(TreeSet::new));
     }
+
+    private List<String> splitAnswerTokens(Object answer) {
+        if (answer == null) return List.of();
+        if (answer instanceof Collection<?> collection) {
+            return collection.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::valueOf)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+        }
+        return Arrays.stream(String.valueOf(answer).split("[,，;；]"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    private String canonicalChoiceToken(Object value, Question question) {
+        String text = value == null ? "" : String.valueOf(value).trim();
+        if (text.isEmpty()) return "";
+        if (text.matches("[A-Z]")) return "option:" + text;
+
+        MarkedOption marked = markedOption(text);
+        if (marked != null && marked.letter() != null && marked.letter().matches("[A-Z]")) {
+            return "option:" + marked.letter();
+        }
+
+        String normalized = normalizeChoiceText(text);
+        for (OptionEntry option : optionEntries(question)) {
+            if (option.aliases().contains(normalized)) return "option:" + option.letter();
+        }
+        return "text:" + normalized;
+    }
+
+    private List<OptionEntry> optionEntries(Question question) {
+        String options = question == null ? null : question.getOptions();
+        if (options == null || options.isBlank()) return List.of();
+        try {
+            JsonNode root = objectMapper.readTree(options);
+            if (root.isArray()) {
+                List<OptionEntry> entries = new ArrayList<>();
+                for (int i = 0; i < root.size(); i++) {
+                    entries.add(optionEntry(fallbackLetter(i), root.get(i).asText(""), ""));
+                }
+                return entries;
+            }
+            if (root.isObject()) {
+                List<OptionEntry> entries = new ArrayList<>();
+                int index = 0;
+                Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
+                while (fields.hasNext()) {
+                    Map.Entry<String, JsonNode> field = fields.next();
+                    entries.add(optionEntry(fallbackLetter(index++), field.getValue().asText(""), field.getKey()));
+                }
+                return entries;
+            }
+        } catch (Exception ignored) {
+        }
+
+        String[] lines = options.split("\\R");
+        List<OptionEntry> entries = new ArrayList<>();
+        for (String line : lines) {
+            if (line == null || line.trim().isEmpty()) continue;
+            entries.add(optionEntry(fallbackLetter(entries.size()), line, ""));
+        }
+        return entries;
+    }
+
+    private OptionEntry optionEntry(String fallbackLetter, Object rawValue, Object key) {
+        String raw = rawValue == null ? "" : String.valueOf(rawValue).trim();
+        String keyText = key == null ? "" : String.valueOf(key).trim();
+        MarkedOption marked = markedOption(raw);
+        String keyLetter = keyText.matches("[A-Za-z]") ? keyText.toUpperCase(Locale.ROOT) : "";
+        String letter = marked != null ? marked.letter() : (!keyLetter.isBlank() ? keyLetter : fallbackLetter);
+        String display = marked != null && !marked.rest().isBlank() ? marked.rest() : raw;
+        Set<String> aliases = new TreeSet<>();
+
+        addAlias(aliases, raw);
+        addAlias(aliases, display);
+        if (!keyText.isBlank()) {
+            addAlias(aliases, keyText);
+            addAlias(aliases, keyText + ". " + display);
+            addAlias(aliases, keyText + "、" + display);
+        }
+        if (!letter.isBlank()) {
+            addAlias(aliases, letter + ". " + display);
+            addAlias(aliases, letter + "、" + display);
+        }
+        return new OptionEntry(letter, display, aliases);
+    }
+
+    private void addAlias(Set<String> aliases, String value) {
+        String normalized = normalizeChoiceText(value);
+        if (!normalized.isBlank()) aliases.add(normalized);
+    }
+
+    private MarkedOption markedOption(String value) {
+        if (value == null) return null;
+        Matcher marked = MARKED_OPTION_PATTERN.matcher(value);
+        if (marked.matches()) {
+            return new MarkedOption(marked.group(1).toUpperCase(Locale.ROOT), safeTrim(marked.group(2)));
+        }
+        Matcher spaced = SPACED_OPTION_PATTERN.matcher(value);
+        if (spaced.matches()) {
+            return new MarkedOption(spaced.group(1).toUpperCase(Locale.ROOT), safeTrim(spaced.group(2)));
+        }
+        return null;
+    }
+
+    private String fallbackLetter(int index) {
+        return index >= 0 && index < OPTION_LETTERS.size() ? OPTION_LETTERS.get(index) : String.valueOf(index + 1);
+    }
+
+    private String normalizeChoiceText(Object value) {
+        if (value == null) return "";
+        return String.valueOf(value)
+                .replace('\u3000', ' ')
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeFillText(Object value) {
+        return normalizeChoiceText(value);
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private record OptionEntry(String letter, String display, Set<String> aliases) {}
+
+    private record MarkedOption(String letter, String rest) {}
 
     private String knowledgeName(String knowledgePointId) {
         if (knowledgePointId == null || knowledgePointId.isBlank()) return "";

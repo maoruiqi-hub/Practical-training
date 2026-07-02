@@ -92,7 +92,7 @@
         </div>
       </section>
 
-      <div class="scene-tools">
+      <div v-if="false" class="scene-tools">
         <button type="button" :disabled="choiceLocked" @click="$emit('diagnosed', { status: 'partial', correctRate, answers: answerSummary(), packId })">
           直接进入战斗
         </button>
@@ -106,6 +106,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, getTowerQuestionPack } from '../api'
 import { characterSprites } from '../data/gameAssetManifest'
+import { isQuestionAnswerCorrect, parseQuestionOptions } from '../utils/answerMatcher'
 
 const props = defineProps({
   kpId: { type: [String, Number], required: true },
@@ -132,7 +133,7 @@ const packId = ref('')
 const packError = ref('')
 
 const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
-const displayOptions = computed(() => parseOptions(activeQuestion.value.options))
+const displayOptions = computed(() => parseQuestionOptions(activeQuestion.value.options))
 const typeLabel = type => ({ single: '单选', multi: '多选', fill: '填空', essay: '简答', program: '编程' })[type] || type
 const fallbackQuestions = computed(() => [
   {
@@ -169,38 +170,8 @@ watch(activeIndex, () => {
   freeAnswer.value = typeof answers[question.questionId] === 'string' ? answers[question.questionId] : ''
 })
 
-const parseOptions = options => {
-  if (!options) return []
-  if (Array.isArray(options)) return options
-  try {
-    const parsed = JSON.parse(options)
-    if (Array.isArray(parsed)) return parsed
-    if (parsed && typeof parsed === 'object') return Object.values(parsed)
-    return []
-  } catch {
-    return String(options).split(/\r?\n/).map(item => item.trim()).filter(Boolean)
-  }
-}
-
-const normalize = value => String(value || '').trim().toLowerCase()
-
-const matchesAnswer = (actual, expected) => {
-  const actualValue = normalize(actual)
-  const expectedValue = normalize(expected)
-  return actualValue === expectedValue ||
-    actualValue.startsWith(`${expectedValue}.`) ||
-    actualValue.startsWith(`${expectedValue}、`) ||
-    (expectedValue.length <= 2 && actualValue.startsWith(expectedValue))
-}
-
 const isCorrect = question => {
-  const answer = answers[question.questionId]
-  if (question.type === 'multi') {
-    const expected = normalize(question.answer).split(',').map(item => item.trim()).filter(Boolean).sort()
-    const actual = Array.isArray(answer) ? answer.map(item => normalize(item)).sort() : normalize(answer).split(',').sort()
-    return expected.length > 0 && expected.every((item, index) => matchesAnswer(actual[index], item))
-  }
-  return matchesAnswer(answer, question.answer)
+  return isQuestionAnswerCorrect(question, answers[question.questionId])
 }
 
 const loadQuestions = async () => {
@@ -322,9 +293,21 @@ const answerSummary = () => questions.value.map(question => ({
     : (answers[question.questionId] || ''),
   correctAnswer: question.answer,
   correct: isCorrect(question),
+  autoGradable: isAutoGradable(question),
+  answered: isAnswered(question),
+  skipped: false,
   knowledgePointId: question.knowledgePointId || props.kpId,
-  type: question.type
+  abilityPointId: question.abilityPointId || props.kpId,
+  type: question.type,
+  source: 'diagnosis_room'
 }))
+
+const isAutoGradable = question => ['single', 'multi', 'fill'].includes(question?.type)
+
+const isAnswered = question => {
+  const value = answers[question.questionId]
+  return Array.isArray(value) ? value.length > 0 : String(value || '').trim().length > 0
+}
 
 onMounted(loadQuestions)
 </script>

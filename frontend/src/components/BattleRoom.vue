@@ -22,11 +22,6 @@
           <b>{{ playerHp }}/{{ playerMaxHp }}</b>
           <i><em :style="{ width: playerHpPercent + '%' }"></em></i>
         </div>
-        <div class="hud-pill enemy-pill">
-          <span>{{ enemyName }} HP</span>
-          <b>{{ enemyHp }}/{{ enemyMaxHp }}</b>
-          <i><em :style="{ width: enemyHpPercent + '%' }"></em></i>
-        </div>
       </div>
 
       <div class="scene-actor player-actor" :class="{ damaged: hurtFlash }" aria-label="学习者">
@@ -41,6 +36,11 @@
       </div>
 
       <div class="scene-actor enemy-actor" :class="{ hit: hitFlash }" aria-label="知识敌人">
+        <div class="enemy-overhead-hp">
+          <span>{{ enemyName }} HP</span>
+          <b>{{ enemyHp }}/{{ enemyMaxHp }}</b>
+          <i><em :style="{ width: enemyHpPercent + '%' }"></em></i>
+        </div>
         <div class="actor-aura"></div>
         <div class="enemy-sprite">
           <img :src="enemyToken" :alt="enemyName" />
@@ -119,13 +119,6 @@
           </template>
         </div>
       </section>
-
-      <div class="scene-tools">
-        <button type="button" :disabled="hinting || choiceLocked" @click="useHint">提示</button>
-        <button type="button" :disabled="!activeQuestion.questionId" @click="emit('ai-help', activeQuestion)">AI 导师</button>
-        <button type="button" :disabled="choiceLocked" @click="gainBlock">护盾</button>
-        <button type="button" :disabled="skipping || choiceLocked" @click="skipQuestion">跳过</button>
-      </div>
     </template>
   </section>
 </template>
@@ -135,6 +128,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, getTowerQuestionPack, sendGameEvent, submitTask } from '../api'
 import { characterSprites, enemySprites } from '../data/gameAssetManifest'
+import { isQuestionAnswerCorrect, parseQuestionOptions } from '../utils/answerMatcher'
 
 const props = defineProps({
   kpId: { type: [String, Number], required: true },
@@ -154,10 +148,9 @@ const emit = defineEmits(['battle-end', 'profile-refresh', 'ai-help'])
 
 const loading = ref(true)
 const submitting = ref(false)
-const hinting = ref(false)
-const skipping = ref(false)
 const questions = ref([])
 const answers = reactive({})
+const answerRecords = ref([])
 const activeIndex = ref(0)
 const playerBlock = ref(0)
 const playerHp = ref(Math.max(1, props.initialHp || props.maxHp || 100))
@@ -178,8 +171,9 @@ const packError = ref('')
 
 const playerMaxHp = computed(() => Math.max(1, props.maxHp || props.initialHp || 100))
 const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
-const displayOptions = computed(() => parseOptions(activeQuestion.value.options))
+const displayOptions = computed(() => parseQuestionOptions(activeQuestion.value.options))
 const enemyName = computed(() => props.bossMode ? '章节首领' : props.roomType === 'elite' ? '精英知识敌人' : '知识敌人')
+const answerSource = computed(() => props.bossMode ? 'boss_room' : props.roomType === 'elite' ? 'elite_room' : 'battle_room')
 const enemyToken = computed(() => {
   if (props.bossMode) return enemySprites.bossEnemy
   if (props.roomType === 'elite') return enemySprites.eliteEnemy
@@ -270,39 +264,8 @@ watch(activeIndex, () => {
   freeAnswer.value = typeof answers[question.questionId] === 'string' ? answers[question.questionId] : ''
 })
 
-const parseOptions = options => {
-  if (!options) return []
-  if (Array.isArray(options)) return options
-  try {
-    const parsed = JSON.parse(options)
-    if (Array.isArray(parsed)) return parsed
-    if (parsed && typeof parsed === 'object') return Object.values(parsed)
-    return []
-  } catch {
-    return String(options).split(/\r?\n/).map(item => item.trim()).filter(Boolean)
-  }
-}
-
-const normalize = value => String(value || '').trim().toLowerCase()
-
-const matchesAnswer = (actual, expected) => {
-  const actualValue = normalize(actual)
-  const expectedValue = normalize(expected)
-  if (!expectedValue) return false
-  return actualValue === expectedValue ||
-    actualValue.startsWith(`${expectedValue}.`) ||
-    actualValue.startsWith(`${expectedValue}、`) ||
-    (expectedValue.length <= 2 && actualValue.startsWith(expectedValue))
-}
-
 const isCorrect = question => {
-  const answer = answers[question.questionId]
-  if (question.type === 'multi') {
-    const expected = normalize(question.answer).split(',').map(item => item.trim()).filter(Boolean).sort()
-    const actual = Array.isArray(answer) ? answer.map(item => normalize(item)).sort() : normalize(answer).split(',').sort()
-    return expected.length > 0 && expected.every((item, index) => matchesAnswer(actual[index], item))
-  }
-  return matchesAnswer(answer, question.answer)
+  return isQuestionAnswerCorrect(question, answers[question.questionId])
 }
 
 const setupBattleState = () => {
@@ -313,6 +276,7 @@ const setupBattleState = () => {
   playerBlock.value = 0
   correctCount.value = 0
   resolvedCount.value = 0
+  answerRecords.value = []
   activeIndex.value = 0
   choiceLocked.value = false
   finished.value = false
@@ -414,8 +378,13 @@ const resolveCurrentAnswer = async ({ skipped = false } = {}) => {
   choiceLocked.value = true
 
   const question = activeQuestion.value
-  const correct = !skipped && isCorrect(question)
+  const autoGradable = isAutoGradable(question)
+  const correct = autoGradable && !skipped && isCorrect(question)
   resolvedCount.value += 1
+  answerRecords.value = [
+    ...answerRecords.value,
+    answerRecord(question, correct, skipped, autoGradable)
+  ]
 
   if (correct) {
     correctCount.value += 1
@@ -460,9 +429,29 @@ const applyDamage = () => {
 }
 
 const currentCorrectRate = () => {
-  const gradable = questions.value.filter(question => ['single', 'multi', 'fill'].includes(question.type))
-  const denominator = Math.max(1, Math.min(gradable.length || questions.value.length, resolvedCount.value || questions.value.length))
-  return correctCount.value / denominator
+  const gradableRecords = answerRecords.value.filter(record => record.source === answerSource.value && record.autoGradable)
+  if (!gradableRecords.length) return 0
+  return gradableRecords.filter(record => record.correct).length / gradableRecords.length
+}
+
+const isAutoGradable = question => ['single', 'multi', 'fill'].includes(question?.type)
+
+const answerRecord = (question, correct, skipped, autoGradable = isAutoGradable(question)) => {
+  const rawAnswer = answers[question.questionId]
+  return {
+    questionId: question.questionId,
+    stem: question.stem,
+    studentAnswer: Array.isArray(rawAnswer) ? rawAnswer.join(',') : (rawAnswer || ''),
+    correctAnswer: question.answer,
+    correct,
+    autoGradable,
+    answered: !skipped && (Array.isArray(rawAnswer) ? rawAnswer.length > 0 : String(rawAnswer || '').trim().length > 0),
+    skipped,
+    knowledgePointId: question.knowledgePointId || props.kpId,
+    abilityPointId: question.abilityPointId || props.kpId,
+    type: question.type,
+    source: answerSource.value
+  }
 }
 
 const finishBattle = async forcedCleared => {
@@ -502,20 +491,10 @@ const submitBattle = async forcedCleared => {
     emit('battle-end', {
       cleared: Boolean(forcedCleared) && playerHp.value > 0,
       correctRate,
+      battleCorrectRate: correctRate,
       hpLeft: playerHp.value,
       packId: packId.value,
-      answerSummary: questions.value.map(question => ({
-        questionId: question.questionId,
-        stem: question.stem,
-        studentAnswer: Array.isArray(answers[question.questionId])
-          ? answers[question.questionId].join(',')
-          : (answers[question.questionId] || ''),
-        correctAnswer: question.answer,
-        correct: isCorrect(question),
-        knowledgePointId: question.knowledgePointId || props.kpId,
-        abilityPointId: question.abilityPointId || props.kpId,
-        type: question.type
-      }))
+      answerSummary: answerRecords.value
     })
   } catch {
     ElMessage.error('挑战提交失败')
@@ -540,41 +519,6 @@ const recordAnswerEvent = async (correct, skipped) => {
     })
   } catch {
     // 行为记录失败不阻断战斗流程。
-  }
-}
-
-const useHint = async () => {
-  hinting.value = true
-  try {
-    if (usingFallbackQuestions.value) {
-      ElMessage.success('提示：先定位题干里的核心概念，再排除明显不符合语法的选项')
-      return
-    }
-    await sendGameEvent(props.studentId, {
-      course_id: props.courseId,
-      event_type: 'hint_used',
-      question_id: activeQuestion.value.questionId
-    })
-    emit('profile-refresh')
-    ElMessage.success('提示已记录')
-  } catch {
-    ElMessage.error('提示使用失败')
-  } finally {
-    hinting.value = false
-  }
-}
-
-const gainBlock = () => {
-  playerBlock.value += 8
-  ElMessage.success('获得 8 点护盾，本题答错可抵消伤害')
-}
-
-const skipQuestion = async () => {
-  skipping.value = true
-  try {
-    await resolveCurrentAnswer({ skipped: true })
-  } finally {
-    skipping.value = false
   }
 }
 
@@ -612,10 +556,7 @@ onMounted(loadQuestions)
   z-index: 5;
   top: 76px;
   left: clamp(22px, 2.4vw, 46px);
-  right: clamp(22px, 2.4vw, 46px);
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
+  display: block;
   pointer-events: none;
 }
 
@@ -663,10 +604,6 @@ onMounted(loadQuestions)
   transition: width .24s ease;
 }
 
-.enemy-pill em {
-  background: linear-gradient(90deg, #9d2326, #e16a3f);
-}
-
 .scene-actor {
   position: absolute;
   z-index: 3;
@@ -683,6 +620,57 @@ onMounted(loadQuestions)
 .enemy-actor {
   right: clamp(340px, 31vw, 660px);
   bottom: 190px;
+}
+
+.enemy-overhead-hp {
+  position: absolute;
+  z-index: 4;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  width: min(330px, 34vw);
+  min-width: 240px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 203, 118, .42);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(30, 19, 17, .78), rgba(9, 10, 14, .6));
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .34);
+  transform: translateX(-50%);
+  backdrop-filter: blur(5px);
+  pointer-events: none;
+}
+
+.enemy-overhead-hp span,
+.enemy-overhead-hp b {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.enemy-overhead-hp span {
+  color: #e8c884;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.enemy-overhead-hp b {
+  float: right;
+  color: #fff4d6;
+}
+
+.enemy-overhead-hp i {
+  display: block;
+  clear: both;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(25, 10, 9, .74);
+}
+
+.enemy-overhead-hp em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9d2326, #e16a3f);
+  transition: width .24s ease;
 }
 
 .actor-aura {
@@ -772,8 +760,8 @@ onMounted(loadQuestions)
 .intent-bubble {
   position: absolute;
   z-index: 4;
-  top: 150px;
-  right: clamp(470px, 36vw, 720px);
+  top: 180px;
+  right: clamp(220px, 19vw, 430px);
   display: grid;
   gap: 4px;
   min-width: 170px;
@@ -886,8 +874,7 @@ onMounted(loadQuestions)
 }
 
 .choice-button,
-.confirm-choice,
-.scene-tools button {
+.confirm-choice {
   border: 1px solid rgba(255, 239, 198, .22);
   color: #fff7dd;
   background: linear-gradient(90deg, rgba(18, 22, 28, .78), rgba(18, 22, 28, .46));
@@ -908,16 +895,14 @@ onMounted(loadQuestions)
 }
 
 .choice-button:hover,
-.confirm-choice:hover,
-.scene-tools button:hover {
+.confirm-choice:hover {
   border-color: rgba(255, 229, 159, .62);
   transform: translateX(-4px);
   background: linear-gradient(90deg, rgba(43, 48, 58, .86), rgba(18, 22, 28, .56));
 }
 
 .choice-button:disabled,
-.confirm-choice:disabled,
-.scene-tools button:disabled {
+.confirm-choice:disabled {
   cursor: default;
   opacity: .62;
   transform: none;
@@ -960,22 +945,6 @@ onMounted(loadQuestions)
   box-shadow: none;
 }
 
-.scene-tools {
-  position: absolute;
-  z-index: 7;
-  top: 146px;
-  left: clamp(28px, 3vw, 54px);
-  display: flex;
-  gap: 10px;
-}
-
-.scene-tools button {
-  min-width: 64px;
-  min-height: 36px;
-  border-radius: 999px;
-  font-weight: 800;
-}
-
 .hurt-flash::after {
   content: '';
   position: absolute;
@@ -1007,6 +976,14 @@ onMounted(loadQuestions)
     right: 8vw;
     bottom: 160px;
   }
+  .enemy-overhead-hp {
+    width: min(300px, 46vw);
+    min-width: 220px;
+  }
+  .intent-bubble {
+    top: 170px;
+    right: 22px;
+  }
   .player-actor {
     left: 8vw;
   }
@@ -1028,6 +1005,15 @@ onMounted(loadQuestions)
   }
   .enemy-actor {
     right: -10px;
+  }
+  .enemy-overhead-hp {
+    width: 260px;
+    min-width: 0;
+  }
+  .intent-bubble {
+    top: 188px;
+    right: 16px;
+    min-width: 146px;
   }
   .dialogue-layer {
     left: 14px;
