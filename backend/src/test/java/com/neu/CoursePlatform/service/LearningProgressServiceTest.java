@@ -47,7 +47,7 @@ class LearningProgressServiceTest {
         studentStore.put("student-2", s2);
 
         service = new LearningProgressServiceImpl(
-                taskProxy(), submissionProxy(), logProxy(), studentProxy());
+                taskProxy(), submissionProxy(), assignmentProxy(), logProxy(), studentProxy());
     }
 
     @Test
@@ -210,5 +210,11 @@ class LearningProgressServiceTest {
                     }
                     return null;
                 });
+    }
+
+    private TaskAssignmentService assignmentProxy() {
+        return (TaskAssignmentService) Proxy.newProxyInstance(
+                TaskAssignmentService.class.getClassLoader(), new Class<?>[]{TaskAssignmentService.class},
+                (p, method, args) -> List.of());
     }
 }
