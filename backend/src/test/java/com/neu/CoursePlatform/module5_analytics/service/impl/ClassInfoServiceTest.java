@@ -93,6 +93,10 @@ class ClassInfoServiceTest {
     @Test
     void enrollStudentSuccess() {
         saveClass("class-3", "计科203", "course-1");
+        Student s = new Student();
+        s.setStudentNo("student-1");
+        s.setName("张三");
+        students.put("student-1", s);
         assertTrue(service.enrollStudent("class-3", "student-1"));
         assertTrue(service.getStudentIds("class-3").contains("student-1"));
     }

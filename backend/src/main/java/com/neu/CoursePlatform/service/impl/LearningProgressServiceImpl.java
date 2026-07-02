@@ -1,8 +1,10 @@
 package com.neu.CoursePlatform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.neu.CoursePlatform.entity.LearningBehaviorLog;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.entity.TaskAssignment;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.*;
 import org.springframework.stereotype.Service;
@@ -16,20 +18,23 @@ public class LearningProgressServiceImpl implements LearningProgressService {
 
     private final LearningTaskService taskService;
     private final TaskSubmissionService submissionService;
+    private final TaskAssignmentService assignmentService;
     private final BehaviorLogService behaviorLogService;
     private final StudentService studentService;
 
     public LearningProgressServiceImpl(LearningTaskService taskService, TaskSubmissionService submissionService,
-                                BehaviorLogService behaviorLogService, StudentService studentService) {
+                                       TaskAssignmentService assignmentService, BehaviorLogService behaviorLogService,
+                                       StudentService studentService) {
         this.taskService = taskService;
         this.submissionService = submissionService;
+        this.assignmentService = assignmentService;
         this.behaviorLogService = behaviorLogService;
         this.studentService = studentService;
     }
 
     @Override
     public Map<String, Object> buildStudentProgress(String studentNo, String courseCode) {
-        List<LearningTask> tasks = taskService.listByCourseCode(courseCode);
+        List<LearningTask> tasks = assignmentService.listAssignedTasks(studentNo, courseCode, null, null, null);
         List<TaskSubmission> submissions = submissionService.listByStudentNo(studentNo);
 
         // 建立 taskNo → submission 映射（取最新一次提交）
@@ -116,10 +121,23 @@ public class LearningProgressServiceImpl implements LearningProgressService {
     @Override
     public Map<String, Object> buildCourseProgress(String courseCode) {
         List<LearningTask> tasks = taskService.listByCourseCode(courseCode);
+        List<TaskAssignment> assignments = assignmentService.list(new LambdaQueryWrapper<TaskAssignment>()
+                .eq(TaskAssignment::getCourseCode, courseCode)
+                .ne(TaskAssignment::getStatus, "cancelled"));
 
-        // 收集该课程所有任务的所有提交
-        Set<String> studentNoSet = new HashSet<>();
+        // 课程进度矩阵以学生花名册为行来源，再叠加任务分配和提交状态。
+        Set<String> studentNoSet = studentService.list().stream()
+                .map(Student::getStudentNo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         Map<String, Map<String, TaskSubmission>> studentSubMap = new HashMap<>();
+        Map<String, Set<String>> assignedTaskNosByStudent = new HashMap<>();
+
+        for (TaskAssignment assignment : assignments) {
+            studentNoSet.add(assignment.getStudentNo());
+            assignedTaskNosByStudent.computeIfAbsent(assignment.getStudentNo(), key -> new HashSet<>())
+                    .add(assignment.getTaskNo());
+        }
 
         for (LearningTask task : tasks) {
             List<TaskSubmission> submissions = submissionService.listByTaskNo(task.getTaskNo());
@@ -140,12 +158,17 @@ public class LearningProgressServiceImpl implements LearningProgressService {
             int overdueCount = 0;
             LocalDateTime lastActive = null;
             List<Map<String, Object>> taskCells = new ArrayList<>();
+            Set<String> assignedTaskNos = assignedTaskNosByStudent.getOrDefault(studentNo, Collections.emptySet());
 
             for (LearningTask task : tasks) {
                 TaskSubmission sub = subMap.get(task.getTaskNo());
                 Map<String, Object> cell = new LinkedHashMap<>();
                 cell.put("taskNo", task.getTaskNo());
-                if (sub != null) {
+                if (!assignedTaskNos.contains(task.getTaskNo())) {
+                    cell.put("status", "unassigned");
+                    cell.put("score", null);
+                    cell.put("isOverdue", false);
+                } else if (sub != null) {
                     cell.put("status", "graded".equals(sub.getStatus()) ? "completed" : "submitted");
                     cell.put("score", sub.getScore());
                     cell.put("isOverdue", sub.getIsOverdue() != null && sub.getIsOverdue() == 1);
@@ -165,8 +188,9 @@ public class LearningProgressServiceImpl implements LearningProgressService {
                 taskCells.add(cell);
             }
 
-            double completionRate = tasks.size() > 0 ? Math.round((double) completedCount / tasks.size() * 100) : 0;
-            boolean isLagging = completionRate < 50;
+            int assignedCount = assignedTaskNos.size();
+            double completionRate = assignedCount > 0 ? Math.round((double) completedCount / assignedCount * 100) : 0;
+            boolean isLagging = assignedCount > 0 && completionRate < 50;
             boolean hasOverdueRisk = overdueCount >= 2;
 
             Map<String, Object> row = new LinkedHashMap<>();
@@ -174,7 +198,7 @@ public class LearningProgressServiceImpl implements LearningProgressService {
             row.put("studentName", s != null ? s.getName() : "");
             row.put("className", s != null ? s.getClassName() : "");
             row.put("completedCount", completedCount);
-            row.put("totalTasks", tasks.size());
+            row.put("totalTasks", assignedCount);
             row.put("completionRate", completionRate);
             row.put("overdueCount", overdueCount);
             row.put("lastActive", lastActive);
@@ -185,7 +209,9 @@ public class LearningProgressServiceImpl implements LearningProgressService {
         }
 
         // 按完成率排序，落后学生排前面
-        studentRows.sort(Comparator.comparingDouble(r -> (double) r.get("completionRate")));
+        studentRows.sort(Comparator
+                .comparing((Map<String, Object> r) -> String.valueOf(r.getOrDefault("className", "")))
+                .thenComparing(r -> String.valueOf(r.getOrDefault("studentNo", ""))));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("courseCode", courseCode);

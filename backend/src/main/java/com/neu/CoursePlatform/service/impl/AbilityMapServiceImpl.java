@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class AbilityMapServiceImpl implements AbilityMapService {
@@ -18,7 +19,7 @@ public class AbilityMapServiceImpl implements AbilityMapService {
     private final AbilityKnowledgePointMapper mappingMapper;
     public AbilityMapServiceImpl(AbilityPointService abilityPointService, AbilityKnowledgePointMapper mappingMapper) { this.abilityPointService = abilityPointService; this.mappingMapper = mappingMapper; }
     @Override public AbilityMapDTO getByCourseCode(String courseCode) { List<AbilityPoint> points=abilityPointService.listByCourseCode(courseCode); if(points.isEmpty()) return new AbilityMapDTO(points,List.of()); return new AbilityMapDTO(points,mappingMapper.selectList(new LambdaQueryWrapper<AbilityKnowledgePoint>().in(AbilityKnowledgePoint::getAbilityPointId,points.stream().map(AbilityPoint::getAbilityPointId).toList()))); }
-    @Override @Transactional public boolean bindKnowledgePoint(String abilityPointId, String knowledgePointId) { long count=mappingMapper.selectCount(new LambdaQueryWrapper<AbilityKnowledgePoint>().eq(AbilityKnowledgePoint::getAbilityPointId,abilityPointId).eq(AbilityKnowledgePoint::getKnowledgePointId,knowledgePointId)); if(count>0) return false; AbilityKnowledgePoint mapping=new AbilityKnowledgePoint(); mapping.setAbilityPointId(abilityPointId); mapping.setKnowledgePointId(knowledgePointId); mappingMapper.insert(mapping); return true; }
+    @Override @Transactional public boolean bindKnowledgePoint(String abilityPointId, String knowledgePointId) { long count=mappingMapper.selectCount(new LambdaQueryWrapper<AbilityKnowledgePoint>().eq(AbilityKnowledgePoint::getAbilityPointId,abilityPointId).eq(AbilityKnowledgePoint::getKnowledgePointId,knowledgePointId)); if(count>0) return false; AbilityKnowledgePoint mapping=new AbilityKnowledgePoint(); mapping.setId(UUID.randomUUID().toString()); mapping.setAbilityPointId(abilityPointId); mapping.setKnowledgePointId(knowledgePointId); mappingMapper.insertWithId(mapping); return true; }
     @Override public boolean unbindKnowledgePoint(String abilityPointId, String knowledgePointId) { return mappingMapper.delete(new LambdaQueryWrapper<AbilityKnowledgePoint>().eq(AbilityKnowledgePoint::getAbilityPointId, abilityPointId).eq(AbilityKnowledgePoint::getKnowledgePointId, knowledgePointId)) > 0; }
     @Override @Transactional public boolean deleteAbilityPoint(String abilityPointId) { mappingMapper.delete(new LambdaQueryWrapper<AbilityKnowledgePoint>().eq(AbilityKnowledgePoint::getAbilityPointId, abilityPointId)); return abilityPointService.removeById(abilityPointId); }
 }

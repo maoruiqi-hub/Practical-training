@@ -6,6 +6,7 @@ import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.BehaviorLogService;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.StatsService;
+import com.neu.CoursePlatform.service.TaskAssignmentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import org.springframework.stereotype.Service;
 
@@ -17,12 +18,14 @@ public class StatsServiceImpl implements StatsService {
 
     private final TaskSubmissionService submissionService;
     private final LearningTaskService taskService;
+    private final TaskAssignmentService assignmentService;
     private final BehaviorLogService behaviorLogService;
 
     public StatsServiceImpl(TaskSubmissionService submissionService, LearningTaskService taskService,
-                             BehaviorLogService behaviorLogService) {
+                            TaskAssignmentService assignmentService, BehaviorLogService behaviorLogService) {
         this.submissionService = submissionService;
         this.taskService = taskService;
+        this.assignmentService = assignmentService;
         this.behaviorLogService = behaviorLogService;
     }
 
@@ -86,7 +89,7 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public Map<String, Object> buildStudentCourseStats(String studentNo, String courseCode) {
-        List<LearningTask> tasks = taskService.listByCourseCode(courseCode);
+        List<LearningTask> tasks = assignmentService.listAssignedTasks(studentNo, courseCode, null, null, null);
         List<TaskSubmission> submissions = submissionService.listByStudentNo(studentNo);
 
         Set<String> submittedTaskNos = new HashSet<>();
@@ -149,6 +152,7 @@ public class StatsServiceImpl implements StatsService {
             if (tname == null || tname.isEmpty()) tname = "任务#" + task.getTaskNo();
             taskStat.put("taskName", tname);
             taskStat.put("taskType", task.getTaskType());
+            taskStat.put("assignedCount", assignmentService.countActiveByTaskNo(task.getTaskNo()));
             taskStat.put("submittedCount", submissions.size());
             taskStat.put("gradedCount", graded);
             taskStat.put("overdueCount", overdue);

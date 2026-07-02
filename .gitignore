@@ -30,6 +30,10 @@ build/
 *.log
 target/
 
+# Test coverage
+frontend/coverage/
+backend/target/
+
 # Backend IDE
 .classpath
 .factorypath

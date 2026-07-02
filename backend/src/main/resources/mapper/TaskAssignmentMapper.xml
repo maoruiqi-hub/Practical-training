@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.neu.CoursePlatform.mapper.TaskAssignmentMapper">
+
+    <select id="selectAssignedTasks" resultType="com.neu.CoursePlatform.entity.LearningTask">
+        SELECT t.*
+        FROM task_assignment a
+        INNER JOIN learning_task t ON t.task_no = a.task_no
+        <where>
+            a.status != 'cancelled'
+            AND a.student_no = #{studentNo}
+            <if test="courseCode != null and courseCode != ''">
+                AND a.course_code = #{courseCode}
+            </if>
+            <if test="taskType != null and taskType != ''">
+                AND t.task_type = #{taskType}
+            </if>
+            <if test="taskStatus != null and taskStatus != ''">
+                AND t.status = #{taskStatus}
+            </if>
+            <if test="lessonNo != null and lessonNo != ''">
+                AND t.lesson_no = #{lessonNo}
+            </if>
+        </where>
+        ORDER BY a.assigned_at DESC, t.task_no DESC
+    </select>
+
+    <select id="selectActiveByTaskAndStudent" resultType="com.neu.CoursePlatform.entity.TaskAssignment">
+        SELECT *
+        FROM task_assignment
+        WHERE task_no = #{taskNo}
+          AND student_no = #{studentNo}
+          AND status != 'cancelled'
+        ORDER BY assigned_at DESC, assignment_id DESC
+        LIMIT 1
+    </select>
+
+    <select id="countActiveByTaskNo" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM task_assignment
+        WHERE task_no = #{taskNo}
+          AND status != 'cancelled'
+    </select>
+</mapper>

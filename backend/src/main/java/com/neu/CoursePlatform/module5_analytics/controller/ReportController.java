@@ -6,6 +6,7 @@ import com.neu.CoursePlatform.module5_analytics.service.ReportExportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -41,7 +42,8 @@ public class ReportController {
         } else {
             data = reportExportService.generateScoreReport(classId, courseId);
         }
-        data.put("format", format);
-        return Result.ok(data);
+        Map<String, Object> result = new LinkedHashMap<>(data);
+        result.put("format", format);
+        return Result.ok(result);
     }
 }

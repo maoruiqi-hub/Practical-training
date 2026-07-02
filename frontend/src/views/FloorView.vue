@@ -394,6 +394,9 @@ const loadData = async () => {
   try {
     await Promise.all([refreshProfile(), loadFloor()])
     phase.value = initialPhase.value
+    if (phase.value === 'diagnosis') {
+      profile.value = { ...profile.value, hp: playerMaxHp.value }
+    }
     await findTask()
   } finally {
     loading.value = false
@@ -568,7 +571,9 @@ const syncDiagnosisResult = async result => {
       aiReportStatus: 'skipped'
     }
 
-    if (payload.eliteBypassed || payload.battleBypassed) {
+    // 前端自己判断全对：全对 → 跳过精英关直接结算，非全对 → 进精英关
+    const perfect = result.status === 'mastered' || Number(result.correctRate || 0) >= 0.999
+    if (perfect) {
       activeCombatNode.value = null
       battleResult.value = {
         cleared: true,
@@ -592,14 +597,13 @@ const syncDiagnosisResult = async result => {
       return
     }
 
-    if (payload.nextNode) {
-      activeCombatNode.value = payload.nextNode
-      phase.value = payload.nextRoomType === 'boss' ? 'boss' : 'battle'
-      ElMessage.success('诊断完成，进入对应精英关卡')
-      return
+    // 非全对 → 进入精英关卡
+    const nextNode = payload.nextNode
+    if (nextNode) {
+      activeCombatNode.value = nextNode
     }
-
-    throw new Error('诊断完成，但后端没有返回可进入的精英关卡')
+    phase.value = payload.nextRoomType === 'boss' ? 'boss' : 'battle'
+    ElMessage.success('诊断完成，进入对应精英关卡')
   } catch (error) {
     diagnosisSyncError.value = error?.message || '诊断结果同步失败，请稍后重试。'
     ElMessage.warning(diagnosisSyncError.value)
@@ -616,6 +620,10 @@ const handleBattleEnd = async result => {
   }
   if (Number.isFinite(Number(result.hpLeft))) {
     profile.value = { ...profile.value, hp: Number(result.hpLeft), maxHp: playerMaxHp.value }
+  }
+  // 精英关卡结束后回满血
+  if (activeRoomType.value === 'elite' && result.cleared) {
+    profile.value = { ...profile.value, hp: playerMaxHp.value }
   }
   diagnosisSyncError.value = ''
   diagnosisSyncing.value = true

@@ -3,7 +3,7 @@
     <div class="page-head">
       <div>
         <h3>班级运营</h3>
-        <p>管理教学班级、学生名单、风险预警和 AI 教学建议。</p>
+        <p>管理教学班级、学生名单、风险预警和报表导出。</p>
       </div>
       <div class="actions">
         <el-button :loading="loading" @click="loadClasses">刷新</el-button>
@@ -41,7 +41,7 @@
               <div>
                 <el-button size="small" @click="loadClassDetail">刷新详情</el-button>
                 <el-button size="small" type="primary" :loading="detecting" @click="detectRisks">风险检测</el-button>
-                <el-button size="small" type="success" :loading="suggesting" @click="generateSuggestions">生成建议</el-button>
+                <el-button size="small" @click="openReportDialog">导出报表</el-button>
               </div>
             </div>
           </template>
@@ -85,17 +85,6 @@
                   <template #default="{ row }">
                     <el-button size="small" type="primary" text @click="resolveRisk(row.id)">处理</el-button>
                   </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
-
-            <el-tab-pane label="教学建议" name="suggestions">
-              <el-table :data="suggestions" empty-text="暂无教学建议">
-                <el-table-column label="建议内容" min-width="220">
-                  <template #default="{ row }">{{ row.title || row.content || row.suggestion || row.message || JSON.stringify(row) }}</template>
-                </el-table-column>
-                <el-table-column label="优先级" width="100">
-                  <template #default="{ row }">{{ row.priority || row.level || '-' }}</template>
                 </el-table-column>
               </el-table>
             </el-tab-pane>
@@ -167,6 +156,35 @@
         <el-button type="primary" :disabled="!selectedStudents.length" @click="enrollSelectedStudents">加入选中学生</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="reportDialog" title="导出分析报表" width="720px">
+      <el-form :model="reportForm" label-width="90px">
+        <el-form-item label="报表类型">
+          <el-radio-group v-model="reportForm.report_type">
+            <el-radio-button value="scores">成绩报表</el-radio-button>
+            <el-radio-button value="full_analysis">完整分析</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="格式">
+          <el-radio-group v-model="reportForm.format">
+            <el-radio-button value="excel">Excel</el-radio-button>
+            <el-radio-button value="pdf">PDF</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <el-alert
+        v-if="reportResult"
+        title="后端当前返回结构化报表数据，可用于后续接入真实文件下载。"
+        type="success"
+        :closable="false"
+        style="margin-bottom:12px"
+      />
+      <pre v-if="reportResult" class="report-preview">{{ reportText }}</pre>
+      <template #footer>
+        <el-button @click="reportDialog=false">关闭</el-button>
+        <el-button type="primary" :loading="exporting" @click="exportReport">生成报表</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -179,13 +197,12 @@ import {
   detectClassRisks,
   enrollClassStudents,
   enrollClassStudentsByClassName,
-  generateTeachingSuggestions,
+  exportClassReport,
   getClassDetail,
   getClassFeedbackSummary,
   getClassList,
   getClassRiskAlerts,
   getStudentRoster,
-  getTeachingSuggestions,
   removeClassStudent,
   resolveRiskAlert,
   searchCourse,
@@ -197,14 +214,14 @@ const classes = ref([])
 const currentClass = ref(null)
 const detail = ref(null)
 const risks = ref([])
-const suggestions = ref([])
 const feedback = ref([])
 const loading = ref(false)
 const detecting = ref(false)
-const suggesting = ref(false)
+const exporting = ref(false)
 const activeTab = ref('students')
 const classDialog = ref(false)
 const studentDialog = ref(false)
+const reportDialog = ref(false)
 const studentLoading = ref(false)
 const studentKeyword = ref('')
 const studentClassFilter = ref('')
@@ -214,6 +231,8 @@ const filteredStudentCandidates = ref([])
 const selectedStudents = ref([])
 const studentTableRef = ref(null)
 const classForm = reactive({ id: '', name: '', courseId: '', semester: '' })
+const reportForm = reactive({ report_type: 'scores', format: 'excel' })
+const reportResult = ref(null)
 
 const studentRows = computed(() => detail.value?.students || [])
 const enrolledStudentNos = computed(() => new Set(studentRows.value.map(student => student.studentNo)))
@@ -222,6 +241,7 @@ const classNameOptions = computed(() => {
   studentRows.value.forEach(student => { if (student.className) names.add(student.className) })
   return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-CN'))
 })
+const reportText = computed(() => JSON.stringify(reportResult.value, null, 2))
 
 async function loadCourses() {
   const res = await searchCourse('')
@@ -251,15 +271,13 @@ async function selectClass(row) {
 
 async function loadClassDetail() {
   if (!currentClass.value?.id) return
-  const [detailRes, riskRes, suggestionRes, feedbackRes] = await Promise.all([
+  const [detailRes, riskRes, feedbackRes] = await Promise.all([
     getClassDetail(currentClass.value.id),
     getClassRiskAlerts(currentClass.value.id),
-    getTeachingSuggestions(currentClass.value.id),
     getClassFeedbackSummary(currentClass.value.id)
   ])
   if (detailRes.data.code === 200) detail.value = detailRes.data.data
   if (riskRes.data.code === 200) risks.value = riskRes.data.data || []
-  if (suggestionRes.data.code === 200) suggestions.value = suggestionRes.data.data || []
   if (feedbackRes.data.code === 200) feedback.value = feedbackRes.data.data || []
 }
 
@@ -377,17 +395,24 @@ async function resolveRisk(id) {
   } else ElMessage.error(res.data.msg || '处理失败')
 }
 
-async function generateSuggestions() {
-  suggesting.value = true
+function openReportDialog() {
+  reportResult.value = null
+  reportDialog.value = true
+}
+
+async function exportReport() {
+  exporting.value = true
   try {
-    const res = await generateTeachingSuggestions(currentClass.value.id, currentClass.value.courseId)
+    const res = await exportClassReport(currentClass.value.id, {
+      ...reportForm,
+      course_id: String(currentClass.value.courseId)
+    })
     if (res.data.code === 200) {
-      suggestions.value = res.data.data || []
-      ElMessage.success('教学建议已生成')
-      activeTab.value = 'suggestions'
-    } else ElMessage.error(res.data.msg || '生成失败')
+      reportResult.value = res.data.data
+      ElMessage.success('报表已生成')
+    } else ElMessage.error(res.data.msg || '报表生成失败')
   } finally {
-    suggesting.value = false
+    exporting.value = false
   }
 }
 
@@ -411,4 +436,5 @@ onMounted(async () => {
 .inline-form { display:flex; gap:10px; margin-bottom:12px; }
 .row-actions { display:flex; align-items:center; gap:8px; white-space:nowrap; }
 .row-actions :deep(.el-button + .el-button) { margin-left:0; }
+.report-preview { max-height:320px; overflow:auto; padding:12px; border-radius:6px; background:#f6f8fa; color:#303133; white-space:pre-wrap; }
 </style>

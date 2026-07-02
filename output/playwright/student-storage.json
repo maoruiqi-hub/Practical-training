@@ -1,0 +1,13 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:8080",
+      "localStorage": [
+        { "name": "user", "value": "{\"role\":\"student\",\"studentNo\":\"S001\",\"name\":\"课堂体验者\"}" },
+        { "name": "courseId", "value": "python" },
+        { "name": "courseName", "value": "Python 程序设计" }
+      ]
+    }
+  ]
+}

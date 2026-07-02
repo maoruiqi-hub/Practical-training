@@ -8,6 +8,7 @@ import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.TaskAssignmentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
@@ -22,13 +23,16 @@ public class TaskSubmissionController {
 
     private final TaskSubmissionService submissionService;
     private final LearningTaskService taskService;
+    private final TaskAssignmentService assignmentService;
     private final FileStorageService fileStorageService;
     private final Auth auth;
 
     public TaskSubmissionController(TaskSubmissionService submissionService, LearningTaskService taskService,
-                                     FileStorageService fileStorageService, Auth auth) {
+                                    TaskAssignmentService assignmentService, FileStorageService fileStorageService,
+                                    Auth auth) {
         this.submissionService = submissionService;
         this.taskService = taskService;
+        this.assignmentService = assignmentService;
         this.fileStorageService = fileStorageService;
         this.auth = auth;
     }
@@ -48,6 +52,9 @@ public class TaskSubmissionController {
 
         LearningTask task = taskService.getById(resolvedTaskNo);
         if (task == null) return Result.fail("任务不存在");
+        if (assignmentService.getActiveAssignment(resolvedTaskNo, student.getStudentNo()) == null) {
+            return Result.fail("该任务未分配给当前学生");
+        }
 
         // 检查任务状态
         if ("draft".equals(task.getStatus())) return Result.fail("任务尚未发布");
@@ -105,6 +112,7 @@ public class TaskSubmissionController {
         }
 
         submissionService.submitWithGrading(sub);
+        assignmentService.markSubmitted(resolvedTaskNo, student.getStudentNo());
         return Result.ok("提交成功");
     }
 
@@ -178,6 +186,7 @@ public class TaskSubmissionController {
         sub.setFeedback(body.getFeedback());
         sub.setStatus("graded");
         submissionService.updateById(sub);
+        assignmentService.markCompleted(sub.getTaskNo(), sub.getStudentNo());
         return Result.ok();
     }
 
@@ -187,4 +196,5 @@ public class TaskSubmissionController {
         }
         return null;
     }
+
 }
