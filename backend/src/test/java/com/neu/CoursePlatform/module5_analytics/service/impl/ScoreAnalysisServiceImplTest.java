@@ -37,6 +37,16 @@ class ScoreAnalysisServiceImplTest {
     }
 
     @Test
+    void privateDistributionReturnsEmptyForEmptyScores() throws Exception {
+        ScoreAnalysisServiceImpl service = new ScoreAnalysisServiceImpl(new EmptyExternalDataProvider());
+        java.lang.reflect.Method method = ScoreAnalysisServiceImpl.class
+                .getDeclaredMethod("buildDistribution", List.class);
+        method.setAccessible(true);
+
+        assertEquals(List.of(), method.invoke(service, List.of()));
+    }
+
+    @Test
     void classOverviewWithSingleStudentAllPass() {
         ExternalDataProvider provider = new FakeProvider()
                 .addStudent("class-1", "S1", List.of(score("exam1", 85), score("exam2", 90), score("exam3", 88)));

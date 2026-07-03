@@ -55,6 +55,9 @@ class KnowledgeExtractionServiceImplTest {
                     if ("selectById".equals(name)) {
                         return candidateStore.get(String.valueOf(args[0]));
                     }
+                    if ("selectList".equals(name)) {
+                        return new ArrayList<>(candidateStore.values());
+                    }
                     if ("toString".equals(name)) return "ExtractionMapperProxy";
                     if ("hashCode".equals(name)) return System.identityHashCode(proxy);
                     if ("equals".equals(name)) return proxy == args[0];
@@ -179,6 +182,22 @@ class KnowledgeExtractionServiceImplTest {
     }
 
     @Test
+    void extractReadsStringImportanceAndIgnoresInvalidText() {
+        CourseResource res = resource("res-1", "CS101", "课件");
+        when(courseResourceService.getById("res-1")).thenReturn(res);
+        AgenticResponse response = new AgenticResponse(true, Map.of("knowledgePoints", List.of(
+                Map.of("name", "K1", "importance", "4"),
+                Map.of("name", "K2", "importance", "bad")
+        )), "ok");
+        when(agenticClient.invoke(eq("extract"), any(AgenticRequest.class))).thenReturn(response);
+
+        List<KnowledgeExtractionCandidate> result = service.extract("CS101", "res-1");
+
+        assertEquals(4, result.get(0).getImportance());
+        assertNull(result.get(1).getImportance());
+    }
+
+    @Test
     void extractHandlesEmptyAiData() {
         CourseResource res = resource("res-1", "CS101", "课件");
         when(courseResourceService.getById("res-1")).thenReturn(res);
@@ -212,6 +231,20 @@ class KnowledgeExtractionServiceImplTest {
         List<KnowledgeExtractionCandidate> result = service.extract("CS101", "res-1");
         assertEquals("pending", result.get(0).getStatus());
         assertNotNull(result.get(0).getCreatedAt());
+    }
+
+    @Test
+    void listPendingDelegatesToMapper() {
+        KnowledgeExtractionCandidate candidate = new KnowledgeExtractionCandidate();
+        candidate.setCandidateId("c-list");
+        candidate.setCourseCode("CS101");
+        candidate.setStatus("pending");
+        candidateStore.put("c-list", candidate);
+
+        List<KnowledgeExtractionCandidate> result = service.listPending("CS101");
+
+        assertEquals(1, result.size());
+        assertEquals("c-list", result.get(0).getCandidateId());
     }
 
     // ============ accept ============

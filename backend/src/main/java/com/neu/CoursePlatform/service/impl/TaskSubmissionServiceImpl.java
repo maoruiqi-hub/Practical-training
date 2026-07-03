@@ -513,8 +513,12 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                 return entries;
             }
         } catch (Exception ignored) {
+            return plainTextOptionEntries(options);
         }
+        return plainTextOptionEntries(options);
+    }
 
+    private List<OptionEntry> plainTextOptionEntries(String options) {
         String[] lines = options.split("\\R");
         List<OptionEntry> entries = new ArrayList<>();
         for (String line : lines) {

@@ -289,6 +289,51 @@ class TaskSubmissionServiceImplTest {
         assertThrows(IllegalArgumentException.class, () -> service.applyInitialGrading(sub));
     }
 
+    @Test
+    void applyInitialGradingForQuizThrowsWhenAnswerItemIsNotObject() {
+        LearningTask task = task("task-1", "CS101", "quiz", null);
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+
+        TaskSubmission sub = new TaskSubmission();
+        sub.setTaskNo("task-1");
+        sub.setContent("[1]");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.applyInitialGrading(sub));
+        assertTrue(ex.getMessage().contains("答题格式错误"));
+    }
+
+    @Test
+    void applyInitialGradingForQuizThrowsWhenAnswerNoIsMissing() {
+        LearningTask task = task("task-1", "CS101", "quiz", null);
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+
+        TaskSubmission sub = new TaskSubmission();
+        sub.setTaskNo("task-1");
+        sub.setContent("[{\"response\":\"A\"}]");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.applyInitialGrading(sub));
+        assertTrue(ex.getMessage().contains("缺少题目编号"));
+    }
+
+    @Test
+    void applyInitialGradingForQuizThrowsWhenContentIsNotArray() {
+        LearningTask task = task("task-1", "CS101", "quiz", null);
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+
+        TaskSubmission sub = new TaskSubmission();
+        sub.setTaskNo("task-1");
+        sub.setContent("{\"no\":\"q-1\"}");
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.applyInitialGrading(sub));
+        assertTrue(ex.getMessage().contains("答题格式错误"));
+    }
+
     // ============ autoScoreChoices ============
 
     @Test
@@ -368,6 +413,17 @@ class TaskSubmissionServiceImplTest {
         assertEquals("s1", detail.get("submissionId"));
         assertEquals("2024001", detail.get("studentNo"));
         assertNotNull(detail.get("details"));
+    }
+
+    @Test
+    void buildGradeDetailReturnsParseErrorForMalformedQuizAnswers() {
+        TaskSubmission sub = submission("s-parse", "task-1", "2024001", "graded");
+        sub.setContent("[1]");
+        lenient().when(answerService.listBySubmissionId(anyString())).thenReturn(List.of());
+
+        List<Map<String, Object>> details = invokeBuildAnswerDetails(sub);
+
+        assertTrue(String.valueOf(details.get(0).get("parseError")).contains("答题格式错误"));
     }
 
     // ============ submitWithGrading ============
@@ -559,6 +615,18 @@ class TaskSubmissionServiceImplTest {
         answer.setMaxScore(maxScore);
         answer.setScore(correct ? maxScore : 0);
         return answer;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> invokeBuildAnswerDetails(TaskSubmission sub) {
+        try {
+            java.lang.reflect.Method method = TaskSubmissionServiceImpl.class
+                    .getDeclaredMethod("buildAnswerDetails", TaskSubmission.class);
+            method.setAccessible(true);
+            return (List<Map<String, Object>>) method.invoke(service, sub);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // Helper: get baseMapper via reflection

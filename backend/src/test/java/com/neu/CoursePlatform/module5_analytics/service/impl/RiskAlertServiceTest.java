@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
+import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -64,6 +65,39 @@ class RiskAlertServiceTest {
     }
 
     @Test
+    void receiveEventSkipsWhenRecentlyResolvedInCooldown() {
+        RiskAlert resolved = new RiskAlert();
+        resolved.setId("resolved-1");
+        resolved.setStudentId("student-1");
+        resolved.setRiskType("low_score");
+        resolved.setStatus("resolved");
+        resolved.setResolvedAt(LocalDateTime.now().minusDays(2));
+        store.put("resolved-1", resolved);
+
+        RiskAlert alert = service.receiveEvent("student-1", "course-1",
+                "low_score", "high", "{}");
+
+        assertNull(alert);
+    }
+
+    @Test
+    void receiveEventCreatesWhenResolvedOutsideCooldown() {
+        RiskAlert resolved = new RiskAlert();
+        resolved.setId("resolved-1");
+        resolved.setStudentId("student-1");
+        resolved.setRiskType("low_score");
+        resolved.setStatus("resolved");
+        resolved.setResolvedAt(LocalDateTime.now().minusDays(8));
+        store.put("resolved-1", resolved);
+
+        RiskAlert alert = service.receiveEvent("student-1", "course-1",
+                "low_score", "high", "{}");
+
+        assertNotNull(alert);
+        assertEquals("active", alert.getStatus());
+    }
+
+    @Test
     void resolveChangesStatus() {
         RiskAlert alert = new RiskAlert();
         alert.setId("alert-1");
@@ -114,6 +148,19 @@ class RiskAlertServiceTest {
         assertEquals("none", status.highestLevel());
     }
 
+    @Test
+    void getActiveByClassDelegatesToMapper() {
+        RiskAlert alert = new RiskAlert();
+        alert.setId("class-alert");
+        alert.setRiskLevel("medium");
+        store.put("class-alert", alert);
+
+        List<RiskAlert> alerts = service.getActiveByClass("class-1", List.of("student-1"));
+
+        assertEquals(1, alerts.size());
+        assertEquals("class-alert", alerts.get(0).getId());
+    }
+
     // ============ proxy handler ============
 
     static Object riskMapperInvoke(RiskAlertServiceTest self, String name, Object[] args) {
@@ -125,6 +172,7 @@ class RiskAlertServiceTest {
                 return 1;
             }
             case "selectById": return self.store.get(String.valueOf(args[0]));
+            case "selectOne": return self.store.values().stream().findFirst().orElse(null);
             case "updateById": { RiskAlert a = (RiskAlert) args[0]; self.store.put(a.getId(), a); return 1; }
             case "selectList": return new ArrayList<>(self.store.values());
             case "selectCount": return (long) self.store.size();
@@ -137,6 +185,7 @@ class RiskAlertServiceTest {
                     return a;
                 }).toList();
             }
+            case "selectActiveByClass": return new ArrayList<>(self.store.values());
             default: return null;
         }
     }

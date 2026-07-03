@@ -124,6 +124,22 @@ class StudentServiceTest {
     }
 
     @Test
+    void importSkipsShortRowsWithErrorDetail() {
+        String csv = "学号,姓名,学院,班级,用户名,密码\n2024008,缺列";
+        IOException ex = assertThrows(IOException.class,
+                () -> service.importFromExcel(csvFile(csv)));
+        assertTrue(ex.getMessage().contains("列数不足"));
+    }
+
+    @Test
+    void importSkipsMalformedRowsWithErrorDetail() {
+        String csv = "学号,姓名,学院,班级,用户名,密码\nTHROW,坏行,计算机,计科,bad,pw";
+        IOException ex = assertThrows(IOException.class,
+                () -> service.importFromExcel(csvFile(csv)));
+        assertTrue(ex.getMessage().contains("格式错误"));
+    }
+
+    @Test
     void importEmptyFileReturnsZero() throws Exception {
         // 空文件跳过 header 后无数据，返回 0
         String csv = "学号,姓名,学院,班级,用户名,密码\n";
@@ -188,6 +204,7 @@ class StudentServiceTest {
             }
             case "insert": {
                 if (args != null && args.length == 1 && args[0] instanceof Student s) {
+                    if ("THROW".equals(s.getStudentNo())) throw new RuntimeException("mock insert error");
                     if (s.getStudentNo() == null) s.setStudentNo(String.valueOf(store.size() + 1));
                     store.put(s.getStudentNo(), s);
                     return 1;

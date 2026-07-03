@@ -318,6 +318,45 @@ class CourseAiServiceImplTest {
         assertTrue(result.getData().isSuccess());
     }
 
+    @Test
+    void generateAbilityMapThrowsWhenAiReturnsNoCandidates() {
+        knowledgePointService = createKnowledgePointService(List.of(kp("kp-1", "CS101", "Java多态")));
+        service = new CourseAiServiceImpl(createEmptyAbilityMapAgenticClient(), knowledgePointService,
+                createCourseResourceService(), createAbilityPointService(), createAbilityMapService());
+
+        assertThrows(IllegalArgumentException.class, () -> service.generateAbilityMap("CS101"));
+    }
+
+    @Test
+    void generateAbilityMapReusesExistingAbilityAndResolvesKnowledgePointMaps() {
+        knowledgePointService = createKnowledgePointService(List.of(
+                kp("kp-1", "CS101", "Java多态"),
+                kp("kp-2", "CS101", "Java继承")
+        ));
+        var existingAbility = new com.neu.CoursePlatform.entity.AbilityPoint();
+        existingAbility.setAbilityPointId("ap-1");
+        existingAbility.setName("Java能力");
+        existingAbility.setCourseCode("CS101");
+        AbilityPointService abilityPointService = (AbilityPointService) Proxy.newProxyInstance(
+                AbilityPointService.class.getClassLoader(),
+                new Class<?>[]{AbilityPointService.class},
+                (proxy, method, args) -> {
+                    if ("listByCourseCode".equals(method.getName())) return List.of(existingAbility);
+                    if ("save".equals(method.getName())) return true;
+                    return List.of();
+                });
+
+        service = new CourseAiServiceImpl(createAliasAbilityMapAgenticClient(), knowledgePointService,
+                createCourseResourceService(), abilityPointService, createAbilityMapService());
+
+        Result<AgenticResponse> result = service.generateAbilityMap("CS101");
+
+        assertEquals(200, result.getCode());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> saved = (Map<String, Object>) result.getData().getData().get("saved");
+        assertEquals(1, saved.get("reusedAbilityPoints"));
+    }
+
     // ============ normalizeChatResponse 间接测试 ============
 
     @Test
@@ -348,6 +387,68 @@ class CourseAiServiceImplTest {
 
         Result<AgenticResponse> result = service.explainKnowledgePoint("kp-1", req);
         assertEquals(200, result.getCode());
+    }
+
+    @Test
+    void privateAbilityMapFallbacksCoverNullsAliasesAndEmptyNodes() throws Exception {
+        KnowledgePoint nullId = kp(null, "CS101", "无编号");
+        KnowledgePoint blankName = kp("kp-blank", "CS101", " ");
+        KnowledgePoint named = kp("kp-2", "CS101", "Java继承");
+        var existingWithoutName = new com.neu.CoursePlatform.entity.AbilityPoint();
+        existingWithoutName.setAbilityPointId("ap-null");
+        AbilityPointService abilityPointService = (AbilityPointService) Proxy.newProxyInstance(
+                AbilityPointService.class.getClassLoader(),
+                new Class<?>[]{AbilityPointService.class},
+                (proxy, method, args) -> {
+                    if ("listByCourseCode".equals(method.getName())) return List.of(existingWithoutName);
+                    if ("save".equals(method.getName())) {
+                        ((com.neu.CoursePlatform.entity.AbilityPoint) args[0]).setAbilityPointId("ap-new");
+                        return true;
+                    }
+                    return List.of();
+                });
+        service = new CourseAiServiceImpl(createEmptyAbilityMapAgenticClient(),
+                createKnowledgePointService(List.of(nullId, blankName, named)),
+                createCourseResourceService(), abilityPointService, createAbilityMapService());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> saved = (Map<String, Object>) invokePrivate("saveGeneratedAbilityMap",
+                new Class<?>[]{String.class, List.class, Map.class},
+                "CS101", List.of(nullId, blankName, named), Map.of("abilities", List.of(
+                        Map.of("name", " "),
+                        Map.of("label", "新能力", "desc", "描述", "kpIds", "Java继承")
+                )));
+
+        assertEquals(1, saved.get("createdAbilityPoints"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> emptyCandidates = (List<Map<String, Object>>) invokePrivate("extractAbilityCandidates",
+                new Class<?>[]{Map.class, List.class},
+                Map.of("nodes", List.of(Map.of("id", "missing"), Map.of("id", "kp-2", "name", " "))),
+                List.of(named));
+        assertTrue(emptyCandidates.isEmpty());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> noCandidates = (List<Map<String, Object>>) invokePrivate("extractAbilityCandidates",
+                new Class<?>[]{Map.class, List.class}, Map.of("unknown", "value"), List.of(named));
+        assertTrue(noCandidates.isEmpty());
+    }
+
+    @Test
+    void privateNormalizeChatResponseUsesMessageFallbackAndStatusDetection() throws Exception {
+        setupWithMockAi(true);
+
+        AgenticResponse messageFallback = (AgenticResponse) invokePrivate("normalizeChatResponse",
+                new Class<?>[]{AgenticResponse.class},
+                new AgenticResponse(true, Map.of(), "这里是答案"));
+        assertEquals("这里是答案", messageFallback.getData().get("answer"));
+
+        AgenticResponse successMessage = (AgenticResponse) invokePrivate("normalizeChatResponse",
+                new Class<?>[]{AgenticResponse.class},
+                new AgenticResponse(true, null, "success"));
+        assertFalse(successMessage.getData().containsKey("answer"));
+
+        assertNull(invokePrivate("normalizeChatResponse", new Class<?>[]{AgenticResponse.class}, new Object[]{null}));
     }
 
     // ============ helper: 构建测试环境 ============
@@ -545,6 +646,42 @@ class CourseAiServiceImplTest {
         };
     }
 
+    private static AgenticClient createEmptyAbilityMapAgenticClient() {
+        DifyClient dummyClient = new DifyClient() {
+            @Override
+            public boolean isConfigured() { return false; }
+        };
+        DifyKnowledgeService dummyKnowledge = new DifyKnowledgeService(dummyClient);
+        return new AgenticClient(dummyClient, dummyKnowledge) {
+            @Override
+            public AgenticResponse invoke(String capability, AgenticRequest request) {
+                return new AgenticResponse(true, Map.of("abilityPoints", List.of()), "ok");
+            }
+        };
+    }
+
+    private static AgenticClient createAliasAbilityMapAgenticClient() {
+        DifyClient dummyClient = new DifyClient() {
+            @Override
+            public boolean isConfigured() { return false; }
+        };
+        DifyKnowledgeService dummyKnowledge = new DifyKnowledgeService(dummyClient);
+        return new AgenticClient(dummyClient, dummyKnowledge) {
+            @Override
+            public AgenticResponse invoke(String capability, AgenticRequest request) {
+                return new AgenticResponse(true,
+                        Map.of("items", List.of(Map.of(
+                                "title", "Java能力",
+                                "summary", "复用已有能力点",
+                                "knowledge_points", List.of(
+                                        Map.of("id", "kp-1"),
+                                        Map.of("name", "Java继承")
+                                )))),
+                        "ok");
+            }
+        };
+    }
+
     private static AgenticClient createContentFieldAgenticClient() {
         DifyClient dummyClient = new DifyClient() {
             @Override
@@ -578,5 +715,11 @@ class CourseAiServiceImplTest {
                     }
                     return null;
                 });
+    }
+
+    private Object invokePrivate(String methodName, Class<?>[] parameterTypes, Object... args) throws Exception {
+        java.lang.reflect.Method method = CourseAiServiceImpl.class.getDeclaredMethod(methodName, parameterTypes);
+        method.setAccessible(true);
+        return method.invoke(service, args);
     }
 }

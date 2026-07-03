@@ -143,6 +143,22 @@ class SubmissionAiReviewServiceImplTest {
     }
 
     @Test
+    void generateReviewFallsBackWhenAgenticThrows() {
+        TaskSubmission sub = submission("sub-1", "task-1", "一些内容足够长用来触发本地草稿逻辑一二三四五六七八九十一二三四五六七八九十");
+        LearningTask task = task("task-1", "CS101", "report", "任务描述");
+        when(submissionService.getById("sub-1")).thenReturn(sub);
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(false);
+        when(agenticClient.invoke(eq("assessment"), any(AgenticRequest.class)))
+                .thenThrow(new RuntimeException("AI down"));
+
+        SubmissionAiReview review = service.generateReview("sub-1");
+
+        assertNotNull(review);
+        assertEquals("generated", review.getStatus());
+    }
+
+    @Test
     void generateReviewLocalDraftScoresHighForLongContent() {
         TaskSubmission sub = submission("sub-1", "task-1",
                 ("一、实验背景：本实验旨在实现链表数据结构的基本概念。" +
@@ -283,6 +299,69 @@ class SubmissionAiReviewServiceImplTest {
     }
 
     @Test
+    void generateReviewParsesFencedAgenticDataAndNormalizesInvalidRisk() {
+        TaskSubmission sub = submission("sub-1", "task-1", "报告内容足够长，包含实验、结果、分析、代码和数据，能够触发AI评阅解析逻辑。");
+        LearningTask task = task("task-1", "CS101", "report", "实验");
+        when(submissionService.getById("sub-1")).thenReturn(sub);
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(false);
+
+        Map<String, Object> aiData = new LinkedHashMap<>();
+        aiData.put("score", 88);
+        aiData.put("dimensions", Map.of());
+        aiData.put("summary", "");
+        aiData.put("suggestions", List.of());
+        aiData.put("riskLevel", "unknown");
+        when(agenticClient.invoke(eq("assessment"), any(AgenticRequest.class)))
+                .thenReturn(new AgenticResponse(true, aiData, "ok"));
+
+        SubmissionAiReview review = service.generateReview("sub-1");
+
+        assertEquals(88, review.getAiScore());
+        assertEquals("low", review.getRiskLevel());
+        assertFalse(review.getSummary().isBlank());
+    }
+
+    @Test
+    void getLatestBySubmissionIdBuildsQuery() {
+        assertNull(service.getLatestBySubmissionId("sub-1"));
+    }
+
+    @Test
+    void privateParseDraftHandlesFencedJsonAndMissingScore() throws Exception {
+        Object draft = invokePrivate("parseDraft", new Class<?>[]{String.class}, """
+                ```json
+                {
+                  "dimensions": {
+                    "内容完整性": 100,
+                    "知识点覆盖度": 80,
+                    "逻辑结构": 60,
+                    "表达规范": 40,
+                    "任务要求符合度": 20
+                  },
+                  "suggestions": ["继续完善"],
+                  "riskLevel": "medium",
+                  "summary": "结构清楚"
+                }
+                ```
+                """);
+
+        java.lang.reflect.Method score = draft.getClass().getDeclaredMethod("score");
+        score.setAccessible(true);
+        assertEquals(60, score.invoke(draft));
+    }
+
+    @Test
+    void privateToJsonFallsBackToEmptyArrayWhenSerializationFails() throws Exception {
+        Map<String, Object> cyclic = new LinkedHashMap<>();
+        cyclic.put("self", cyclic);
+
+        String json = (String) invokePrivate("toJson", new Class<?>[]{Object.class}, cyclic);
+
+        assertEquals("[]", json);
+    }
+
+    @Test
     void generateReviewAgenticFallsBackWhenDataEmpty() {
         TaskSubmission sub = submission("sub-1", "task-1", "足够的报告内容长度一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
         LearningTask task = task("task-1", "CS101", "report", "任务");
@@ -316,5 +395,11 @@ class SubmissionAiReviewServiceImplTest {
         t.setTaskType(type);
         t.setDescription(description);
         return t;
+    }
+
+    private Object invokePrivate(String methodName, Class<?>[] parameterTypes, Object... args) throws Exception {
+        java.lang.reflect.Method method = SubmissionAiReviewServiceImpl.class.getDeclaredMethod(methodName, parameterTypes);
+        method.setAccessible(true);
+        return method.invoke(service, args);
     }
 }

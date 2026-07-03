@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 class KnowledgeRelationServiceImplTest {
 
@@ -141,6 +142,23 @@ class KnowledgeRelationServiceImplTest {
     }
 
     @Test
+    void createRelationTrimsAndLowercasesExplicitType() {
+        KnowledgePoint from = kp("kp-1", "CS101", "Java");
+        KnowledgePoint to = kp("kp-2", "CS101", "OOP");
+        when(knowledgePointService.getById("kp-1")).thenReturn(from);
+        when(knowledgePointService.getById("kp-2")).thenReturn(to);
+
+        KnowledgeRelation rel = relation("kp-1", "kp-2");
+        rel.setRelationId("rel-related");
+        rel.setRelationType(" Related ");
+
+        service.createRelation("CS101", rel);
+
+        assertEquals("related", rel.getRelationType());
+        assertTrue(relationStore.containsKey("rel-related"));
+    }
+
+    @Test
     void createRelationThrowsWhenDuplicateRelationExists() {
         KnowledgePoint from = kp("kp-1", "CS101", "Java");
         KnowledgePoint to = kp("kp-2", "CS101", "OOP");
@@ -197,6 +215,40 @@ class KnowledgeRelationServiceImplTest {
     }
 
     @Test
+    void wouldCreateCycleFollowsTransitiveEdgesAndSkipsOtherTypes() {
+        relationStore.put("skip", relation("skip", "CS101", "kp-2", "kp-1", "related"));
+        relationStore.put("r1", relation("r1", "CS101", "kp-2", "kp-3", "prerequisite"));
+        relationStore.put("r2", relation("r2", "CS101", "kp-2", "kp-4", "prerequisite"));
+        relationStore.put("r3", relation("r3", "CS101", "kp-4", "kp-3", "prerequisite"));
+        relationStore.put("r4", relation("r4", "CS101", "kp-3", "kp-1", "prerequisite"));
+
+        assertTrue(service.wouldCreateCycle("CS101", "kp-1", "kp-2", "prerequisite"));
+    }
+
+    @Test
+    void realListAndRelationExistsDelegateToBaseMapper() throws Exception {
+        AtomicLong countResult = new AtomicLong(1);
+        KnowledgeRelationMapper mapper = (KnowledgeRelationMapper) Proxy.newProxyInstance(
+                KnowledgeRelationMapper.class.getClassLoader(),
+                new Class<?>[]{KnowledgeRelationMapper.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "selectList" -> List.of(relation("r-real", "CS101", "kp-1", "kp-2", "prerequisite"));
+                    case "selectCount" -> countResult.get();
+                    case "toString" -> "RealRelationMapperProxy";
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "equals" -> proxy == args[0];
+                    default -> null;
+                });
+        KnowledgeRelationServiceImpl realService = new KnowledgeRelationServiceImpl(knowledgePointService);
+        setBaseMapper(realService, mapper);
+
+        assertEquals(1, realService.listByCourse("CS101").size());
+        assertTrue(realService.relationExists("CS101", "kp-1", "kp-2", "prerequisite"));
+        countResult.set(0);
+        assertFalse(realService.relationExists("CS101", "kp-1", "kp-2", "prerequisite"));
+    }
+
+    @Test
     void createRelationThrowsWhenWouldCreateCycle() {
         KnowledgePoint from = kp("kp-1", "CS101", "Java");
         KnowledgePoint to = kp("kp-2", "CS101", "OOP");
@@ -234,6 +286,15 @@ class KnowledgeRelationServiceImplTest {
         KnowledgeRelation r = new KnowledgeRelation();
         r.setFromKnowledgePointId(fromId);
         r.setToKnowledgePointId(toId);
+        return r;
+    }
+
+    private static KnowledgeRelation relation(String id, String courseCode, String fromId,
+                                              String toId, String type) {
+        KnowledgeRelation r = relation(fromId, toId);
+        r.setRelationId(id);
+        r.setCourseCode(courseCode);
+        r.setRelationType(type);
         return r;
     }
 }
