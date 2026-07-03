@@ -31,6 +31,7 @@ import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.FloorProgressService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.TowerRunService;
+import com.neu.CoursePlatform.service.demo.DemoTowerDataService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,6 +64,7 @@ public class TowerRunServiceImpl implements TowerRunService {
     private final FloorProgressService floorProgressService;
     private final GameEventPublisher eventPublisher;
     private final AgenticClient agenticClient;
+    private final DemoTowerDataService demoTowerDataService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TowerRunServiceImpl(StudentTowerRunMapper runMapper,
@@ -76,7 +78,8 @@ public class TowerRunServiceImpl implements TowerRunService {
                                ProfileService profileService,
                                FloorProgressService floorProgressService,
                                GameEventPublisher eventPublisher,
-                               AgenticClient agenticClient) {
+                               AgenticClient agenticClient,
+                               DemoTowerDataService demoTowerDataService) {
         this.runMapper = runMapper;
         this.nodeMapper = nodeMapper;
         this.attemptMapper = attemptMapper;
@@ -89,6 +92,7 @@ public class TowerRunServiceImpl implements TowerRunService {
         this.floorProgressService = floorProgressService;
         this.eventPublisher = eventPublisher;
         this.agenticClient = agenticClient;
+        this.demoTowerDataService = demoTowerDataService;
     }
 
     @Override
@@ -570,6 +574,11 @@ public class TowerRunServiceImpl implements TowerRunService {
         if (validAnswers.isEmpty()) {
             return reportEnvelope("failed", null, "invalid_answer_summary",
                     "未检测到有效的战斗房答题记录，无法生成 AI 诊断。", false, false);
+        }
+
+        if (demoTowerDataService.isPerfectSecondLevelDemo(run, node, validAnswers)) {
+            Map<String, Object> report = demoTowerDataService.perfectSecondLevelDiagnosis(run, node, correctRate, validAnswers);
+            return reportEnvelope("success", report, "demo_fixed", null, true, false);
         }
 
         if (agenticClient.isMockMode()) {

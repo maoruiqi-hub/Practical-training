@@ -17,6 +17,7 @@ import com.neu.CoursePlatform.mapper.StudentTowerQuestionPackMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerRunMapper;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.TowerQuestionPackService;
+import com.neu.CoursePlatform.service.demo.DemoTowerDataService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,7 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
     private final StudentTowerAttemptMapper attemptMapper;
     private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
     private final QuestionService questionService;
+    private final DemoTowerDataService demoTowerDataService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public TowerQuestionPackServiceImpl(StudentTowerQuestionPackMapper packMapper,
@@ -49,13 +51,15 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
                                         StudentTowerNodeMapper nodeMapper,
                                         StudentTowerAttemptMapper attemptMapper,
                                         AbilityKnowledgePointMapper abilityKnowledgePointMapper,
-                                        QuestionService questionService) {
+                                        QuestionService questionService,
+                                        DemoTowerDataService demoTowerDataService) {
         this.packMapper = packMapper;
         this.runMapper = runMapper;
         this.nodeMapper = nodeMapper;
         this.attemptMapper = attemptMapper;
         this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
         this.questionService = questionService;
+        this.demoTowerDataService = demoTowerDataService;
     }
 
     @Override
@@ -63,6 +67,9 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         String normalizedMode = normalizeMode(mode);
         StudentTowerRun run = requireRun(studentNo, runId);
         StudentTowerNode node = requireNode(runId, nodeId);
+        if (demoTowerDataService.isDemoSecondLevel(run, node)) {
+            return demoTowerDataService.secondLevelQuestionPack(run, node, normalizedMode);
+        }
         int targetCount = targetCount(normalizedMode, node.getRoomType());
         StudentTowerQuestionPack existing = packMapper.selectOne(new LambdaQueryWrapper<StudentTowerQuestionPack>()
                 .eq(StudentTowerQuestionPack::getRunId, runId)
@@ -79,6 +86,9 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         String normalizedMode = normalizeMode(mode);
         StudentTowerRun run = requireRun(studentNo, runId);
         StudentTowerNode node = requireNode(runId, nodeId);
+        if (demoTowerDataService.isDemoSecondLevel(run, node)) {
+            return demoTowerDataService.secondLevelQuestionPack(run, node, normalizedMode);
+        }
         int targetCount = targetCount(normalizedMode, node.getRoomType());
         Set<String> recentUsed = recentUsedQuestionIds(studentNo, run.getCourseCode());
         Set<String> runUsed = runUsedQuestionIds(runId, nodeId);
