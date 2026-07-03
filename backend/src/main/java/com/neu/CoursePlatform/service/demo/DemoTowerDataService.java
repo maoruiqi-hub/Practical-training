@@ -52,7 +52,6 @@ public class DemoTowerDataService {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("summary", "第二关 5 道选择题全部答对，说明你已经能稳定识别本关核心概念，并能把判断规则准确应用到具体题目中。");
         report.put("weaknesses", List.of());
-        report.put("recommendedAction", "可以直接进入结算与后续关卡；展示时建议强调本关从诊断后的针对训练中完成了满分修正。");
         report.put("reviewFocus", List.of("保持对题干关键词的定位", "继续用选项排除法验证答案", "把本关规则迁移到下一关综合题"));
         report.put("source", "demo_fixed");
         report.put("fixedScenario", "dangshenghang_level_2_all_correct");
