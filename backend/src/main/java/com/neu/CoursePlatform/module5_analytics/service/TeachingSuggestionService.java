@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.module5_analytics.dto.ScoreOverviewDTO;
 import com.neu.CoursePlatform.module5_analytics.dto.WeakPointDTO;
+import com.neu.CoursePlatform.module5_analytics.dto.external.StudentProgressDTO;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,8 +70,8 @@ public class TeachingSuggestionService {
             String rawResponse = agenticClient.teachingSuggestions(request);
             return parseSuggestionResponse(rawResponse);
         } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 教学建议服务不可用: {}", e.getMessage());
-            return null; // R6.5: 返回 null, Controller 返回 503
+            log.warn("Agentic 教学建议服务不可用，使用学情数据兜底生成建议: {}", e.getMessage());
+            return buildFallbackClassSuggestions(weakPoints, avgRate, riskCount);
         }
     }
 
@@ -100,8 +101,8 @@ public class TeachingSuggestionService {
             String rawResponse = agenticClient.teachingSuggestions(request);
             return parseSuggestionResponse(rawResponse);
         } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 干预建议不可用: {}", e.getMessage());
-            return null;
+            log.warn("Agentic 干预建议不可用，使用学生数据兜底生成建议: {}", e.getMessage());
+            return buildFallbackStudentSuggestions(studentId, progress, riskStatus.highestLevel());
         }
     }
 
@@ -111,6 +112,89 @@ public class TeachingSuggestionService {
      */
     public List<Map<String, Object>> getHistory(String classId) {
         return List.of();
+    }
+
+    private List<Map<String, Object>> buildFallbackClassSuggestions(
+            List<WeakPointDTO> weakPoints,
+            double avgCompletionRate,
+            long riskCount) {
+        String generatedAt = LocalDateTime.now().toString();
+        List<Map<String, Object>> result = new ArrayList<>();
+
+        weakPoints.stream().limit(3).forEach(wp -> {
+            String name = Optional.ofNullable(wp.getKnowledgePointName())
+                    .filter(value -> !value.isBlank())
+                    .orElse("薄弱知识点");
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("suggestion_type", "reteach");
+            item.put("content", String.format(Locale.ROOT,
+                    "针对“%s”安排一次重点讲解和随堂练习，当前得分率约 %.1f%%。",
+                    name, wp.getScoreRate() * 100));
+            item.put("target", "whole_class");
+            item.put("urgency", wp.getScoreRate() < 0.6 ? "high" : "medium");
+            item.put("based_on", "薄弱知识点与错题统计");
+            item.put("generated_at", generatedAt);
+            item.put("source", "fallback");
+            result.add(item);
+        });
+
+        if (avgCompletionRate < 0.8) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("suggestion_type", "pace");
+            item.put("content", String.format(Locale.ROOT,
+                    "班级平均完成率约 %.1f%%，建议检查未完成任务并设置阶段性补交提醒。",
+                    avgCompletionRate * 100));
+            item.put("target", "whole_class");
+            item.put("urgency", avgCompletionRate < 0.5 ? "high" : "medium");
+            item.put("based_on", "学习进度");
+            item.put("generated_at", generatedAt);
+            item.put("source", "fallback");
+            result.add(item);
+        }
+
+        if (riskCount > 0) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("suggestion_type", "individual");
+            item.put("content", "当前存在 " + riskCount + " 名风险学生，建议优先查看预警详情并进行个别沟通。");
+            item.put("target", "individual");
+            item.put("urgency", riskCount >= 3 ? "high" : "medium");
+            item.put("based_on", "风险预警");
+            item.put("generated_at", generatedAt);
+            item.put("source", "fallback");
+            result.add(item);
+        }
+
+        if (result.isEmpty()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("suggestion_type", "practice");
+            item.put("content", "当前未发现明显高风险信号，建议继续安排章节练习并观察后续趋势。");
+            item.put("target", "whole_class");
+            item.put("urgency", "low");
+            item.put("based_on", "当前学情概览");
+            item.put("generated_at", generatedAt);
+            item.put("source", "fallback");
+            result.add(item);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> buildFallbackStudentSuggestions(
+            String studentId,
+            StudentProgressDTO progress,
+            String riskLevel) {
+        String generatedAt = LocalDateTime.now().toString();
+        double completionRate = progress != null ? progress.getCompletionRate() : 0;
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("suggestion_type", "individual");
+        item.put("content", String.format(Locale.ROOT,
+                "学生 %s 当前完成率约 %.1f%%，风险等级为 %s，建议结合近期作业和测验进行一对一跟进。",
+                studentId, completionRate * 100, riskLevel == null ? "unknown" : riskLevel));
+        item.put("target", "individual");
+        item.put("urgency", "high".equalsIgnoreCase(riskLevel) || completionRate < 0.5 ? "high" : "medium");
+        item.put("based_on", "学生进度与风险状态");
+        item.put("generated_at", generatedAt);
+        item.put("source", "fallback");
+        return List.of(item);
     }
 
     private List<Map<String, Object>> parseSuggestionResponse(String raw) {
