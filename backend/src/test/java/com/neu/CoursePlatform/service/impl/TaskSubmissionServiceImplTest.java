@@ -389,6 +389,121 @@ class TaskSubmissionServiceImplTest {
         assertTrue(submissionStore.containsKey(sub.getSubmissionId()));
     }
 
+    @Test
+    void submitWithGradingForQuizSavesAnswerDetails() {
+        LearningTask task = task("task-quiz", "CS101", "quiz", "随堂测验");
+        when(taskService.getById("task-quiz")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+        Question single = question("q-1", "single", "A", "[\"正确\",\"错误\"]");
+        single.setStem("选择题");
+        single.setKnowledgePointId("kp-1");
+        Question fill = question("q-2", "fill", "range", "");
+        fill.setStem("填空题");
+        fill.setKnowledgePointId("kp-2");
+        when(questionService.getById("q-1")).thenReturn(single);
+        when(questionService.getById("q-2")).thenReturn(fill);
+        when(answerService.listBySubmissionId(anyString())).thenReturn(List.of());
+
+        TaskSubmission sub = new TaskSubmission();
+        sub.setTaskNo("task-quiz");
+        sub.setStudentNo("2024001");
+        sub.setContent("[{\"no\":\"q-1\",\"response\":\"正确\"},{\"no\":\"q-2\",\"response\":\" range \"}]");
+
+        service.submitWithGrading(sub);
+
+        assertEquals("graded", sub.getStatus());
+        assertEquals(10, sub.getScore());
+        ArgumentCaptor<List<SubmissionAnswer>> captor = ArgumentCaptor.forClass(List.class);
+        verify(answerService).saveBatch(captor.capture());
+        List<SubmissionAnswer> saved = captor.getValue();
+        assertEquals(2, saved.size());
+        assertTrue(saved.stream().allMatch(answer -> Boolean.TRUE.equals(answer.getCorrect())));
+        assertEquals("kp-1", saved.get(0).getKnowledgePointId());
+    }
+
+    @Test
+    void buildGradeDetailUsesSavedAnswersAndKnowledgeNames() {
+        TaskSubmission sub = submission("s-detail", "task-1", "2024001", "graded");
+        sub.setContent("非测验文本");
+        submissionStore.put("s-detail", sub);
+        LearningTask task = task("task-1", "CS101", "homework", "课后作业");
+        when(taskService.getById("task-1")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(false);
+        SubmissionAnswer answer = new SubmissionAnswer();
+        answer.setQuestionId("q-1");
+        answer.setQuestionStem("保存题干");
+        answer.setQuestionType("essay");
+        answer.setKnowledgePointId("kp-1");
+        answer.setStudentAnswer("学生答案");
+        answer.setCorrectAnswer("参考答案");
+        answer.setScore(8);
+        answer.setMaxScore(10);
+        answer.setAutoGradable(false);
+        when(answerService.listBySubmissionId("s-detail")).thenReturn(List.of(answer));
+        KnowledgePoint point = new KnowledgePoint();
+        point.setKnowledgePointId("kp-1");
+        point.setName("循环");
+        when(knowledgePointService.getById("kp-1")).thenReturn(point);
+
+        Map<String, Object> detail = service.buildGradeDetail("s-detail");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> details = (List<Map<String, Object>>) detail.get("details");
+        assertEquals("课后作业", detail.get("taskName"));
+        assertEquals("循环", details.get(0).get("knowledgePointName"));
+        assertEquals(8, details.get(0).get("earnedScore"));
+        assertEquals(false, details.get(0).get("autoGradable"));
+    }
+
+    @Test
+    void publishAssessmentResultEventsPublishesAnswerFloorAndBossEvents() {
+        LearningTask task = task("boss-task", "CS101", "boss", "Boss测验");
+        when(taskService.getById("boss-task")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+        when(gameConfigService.isEnabled("CS101")).thenReturn(true);
+        SubmissionAnswer correct = answer("a1", "q-1", "kp-1", true, 5);
+        SubmissionAnswer wrong = answer("a2", "q-2", "kp-1", false, 5);
+        when(answerService.listBySubmissionId("sub-boss")).thenReturn(List.of(correct, wrong));
+        when(answerService.listByStudentNo(anyString(), isNull(), anyString(), isNull()))
+                .thenReturn(List.of(correct, wrong));
+        Question q1 = question("q-1", "single", "A", "[\"A\",\"B\"]");
+        q1.setDifficulty(3);
+        Question q2 = question("q-2", "single", "B", "[\"A\",\"B\"]");
+        q2.setDifficulty(2);
+        when(questionService.getById("q-1")).thenReturn(q1);
+        when(questionService.getById("q-2")).thenReturn(q2);
+        TaskSubmission sub = submission("sub-boss", "boss-task", "2024001", "graded");
+
+        service.publishAssessmentResultEvents(sub);
+
+        ArgumentCaptor<com.neu.CoursePlatform.common.event.GameEvent> eventCaptor =
+                ArgumentCaptor.forClass(com.neu.CoursePlatform.common.event.GameEvent.class);
+        verify(gameEventPublisher, times(2)).publish(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream().anyMatch(event -> "answer_correct".equals(event.getEventType())));
+        assertTrue(eventCaptor.getAllValues().stream().anyMatch(event -> "answer_wrong".equals(event.getEventType())));
+        verify(floorProgressService).recordQuizResult("2024001", "CS101", "kp-1", "sub-boss", false, 10);
+    }
+
+    @Test
+    void publishAssessmentResultEventsPublishesBossDefeatedWhenAllCorrect() {
+        LearningTask task = task("boss-task", "CS101", "boss_exam", "Boss测验");
+        when(taskService.getById("boss-task")).thenReturn(task);
+        when(taskService.isQuizTask(task)).thenReturn(true);
+        when(gameConfigService.isEnabled("CS101")).thenReturn(true);
+        SubmissionAnswer correct = answer("a1", "q-1", "kp-1", true, 5);
+        when(answerService.listBySubmissionId("sub-boss")).thenReturn(List.of(correct));
+        when(answerService.listByStudentNo(anyString(), isNull(), anyString(), isNull())).thenReturn(List.of(correct));
+        when(questionService.getById("q-1")).thenReturn(question("q-1", "single", "A", "[\"A\",\"B\"]"));
+        TaskSubmission sub = submission("sub-boss", "boss-task", "2024001", "graded");
+
+        service.publishAssessmentResultEvents(sub);
+
+        ArgumentCaptor<com.neu.CoursePlatform.common.event.GameEvent> eventCaptor =
+                ArgumentCaptor.forClass(com.neu.CoursePlatform.common.event.GameEvent.class);
+        verify(gameEventPublisher, times(2)).publish(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream().anyMatch(event -> "boss_defeated".equals(event.getEventType())));
+    }
+
     // ============ countByStudentAndTask ============
 
     @Test
@@ -429,6 +544,21 @@ class TaskSubmissionServiceImplTest {
         q.setOptions(options);
         q.setScore(5);
         return q;
+    }
+
+    private static SubmissionAnswer answer(String id, String questionId, String knowledgePointId, boolean correct, int maxScore) {
+        SubmissionAnswer answer = new SubmissionAnswer();
+        answer.setId(id);
+        answer.setSubmissionId("sub-boss");
+        answer.setTaskNo("boss-task");
+        answer.setStudentNo("2024001");
+        answer.setQuestionId(questionId);
+        answer.setKnowledgePointId(knowledgePointId);
+        answer.setAutoGradable(true);
+        answer.setCorrect(correct);
+        answer.setMaxScore(maxScore);
+        answer.setScore(correct ? maxScore : 0);
+        return answer;
     }
 
     // Helper: get baseMapper via reflection

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
 import com.neu.CoursePlatform.entity.CourseResource;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
@@ -19,6 +20,8 @@ import com.neu.CoursePlatform.mapper.KnowledgeRelationMapper;
 import com.neu.CoursePlatform.service.KnowledgeMasteryService;
 import com.neu.CoursePlatform.service.QuestionService;
 
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +54,10 @@ class KnowledgePointServiceImplTest {
         abilityKpStore = new LinkedHashMap<>();
         pointsWithQuestions = new HashSet<>();
         removeByKpCalled = false;
+        initTableInfo(KnowledgePoint.class);
+        initTableInfo(KnowledgeRelation.class);
+        initTableInfo(CourseResource.class);
+        initTableInfo(AbilityKnowledgePoint.class);
 
         // ========== 1) KnowledgePointMapper proxy ==========
         KnowledgePointMapper kpMapper = (KnowledgePointMapper) Proxy.newProxyInstance(
@@ -196,6 +203,7 @@ class KnowledgePointServiceImplTest {
         doAnswer(inv -> {
             Wrapper<?> wrapper = inv.getArgument(0);
             if (wrapper != null) {
+                wrapper.getSqlSegment();
                 Map<String, Object> params = getParams(wrapper);
                 for (Object val : params.values()) {
                     if (val != null && pointsWithQuestions.contains(val.toString())) {
@@ -439,8 +447,9 @@ class KnowledgePointServiceImplTest {
 
     private boolean evaluateExpression(Object entity, String sql, Map<String, Object> params) {
         if (sql == null || sql.isBlank()) return true;
+        sql = stripWrappingParentheses(stripTrailingClauses(sql.trim()));
 
-        List<String> andParts = splitTopLevel(sql.trim(), "AND");
+        List<String> andParts = splitTopLevel(sql, "AND");
         if (andParts.isEmpty()) return true;
 
         for (String andPart : andParts) {
@@ -477,7 +486,7 @@ class KnowledgePointServiceImplTest {
 
     private boolean matchesSimpleCondition(Object entity, String condition,
                                            Map<String, Object> params) {
-        condition = stripTrailingClauses(condition.trim());
+        condition = stripWrappingParentheses(stripTrailingClauses(condition.trim()));
 
         Matcher likeMatcher = LIKE_PATTERN.matcher(condition);
         if (likeMatcher.matches()) {
@@ -537,6 +546,39 @@ class KnowledgePointServiceImplTest {
             return null;
         }
         return null;
+    }
+
+    private static void initTableInfo(Class<?> entityClass) {
+        try {
+            TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), entityClass);
+        } catch (Exception ignored) {
+            // MyBatis-Plus keeps this metadata in a static cache; repeated initialization is harmless here.
+        }
+    }
+
+    private String stripWrappingParentheses(String condition) {
+        condition = condition.trim();
+        while (condition.startsWith("(") && condition.endsWith(")")
+                && wrapsWholeExpression(condition)) {
+            condition = condition.substring(1, condition.length() - 1).trim();
+        }
+        return condition;
+    }
+
+    private boolean wrapsWholeExpression(String condition) {
+        int depth = 0;
+        for (int i = 0; i < condition.length(); i++) {
+            char ch = condition.charAt(i);
+            if (ch == '(') {
+                depth++;
+            } else if (ch == ')') {
+                depth--;
+                if (depth == 0 && i < condition.length() - 1) {
+                    return false;
+                }
+            }
+        }
+        return depth == 0;
     }
 
     static List<String> splitTopLevel(String sql, String keyword) {

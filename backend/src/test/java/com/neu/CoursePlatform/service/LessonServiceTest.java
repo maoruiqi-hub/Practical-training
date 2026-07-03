@@ -1,7 +1,9 @@
 package com.neu.CoursePlatform.service;
 
 import com.neu.CoursePlatform.entity.Lesson;
+import com.neu.CoursePlatform.entity.Course;
 import com.neu.CoursePlatform.mapper.LessonMapper;
+import com.neu.CoursePlatform.mapper.CourseMapper;
 import com.neu.CoursePlatform.service.impl.LessonServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,13 +11,13 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.util.*;
 
-import static com.neu.CoursePlatform.service.TeacherServiceTest.setBaseMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
 class LessonServiceTest {
 
     private LessonServiceImpl service;
     private Map<String, Lesson> store;
+    private Map<String, Course> courses;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -23,6 +25,12 @@ class LessonServiceTest {
         store.put("1", lesson("1", "1", "Python简介", "video", "/v/py.mp4", "入门"));
         store.put("2", lesson("2", "1", "变量与类型", "doc", "/d/var.md", "基础"));
         store.put("3", lesson("3", "2", "链表", "video", "/v/ll.mp4", "DS"));
+        courses = new LinkedHashMap<>();
+        Course course = new Course();
+        course.setCourseCode("1");
+        course.setCourseName("Python程序设计");
+        course.setTeacher("王老师");
+        courses.put("1", course);
 
         LessonMapper proxy = (LessonMapper) Proxy.newProxyInstance(
                 LessonMapper.class.getClassLoader(),
@@ -30,7 +38,19 @@ class LessonServiceTest {
                 (p, method, args) -> invoke(store, method.getName(), args)
         );
 
-        service = new LessonServiceImpl(null);
+        CourseMapper courseMapper = (CourseMapper) Proxy.newProxyInstance(
+                CourseMapper.class.getClassLoader(),
+                new Class<?>[]{CourseMapper.class},
+                (p, method, args) -> {
+                    if ("selectById".equals(method.getName())) return courses.get(String.valueOf(args[0]));
+                    if ("toString".equals(method.getName())) return "CourseMapperProxy";
+                    if ("hashCode".equals(method.getName())) return System.identityHashCode(p);
+                    if ("equals".equals(method.getName())) return p == args[0];
+                    return null;
+                }
+        );
+
+        service = new LessonServiceImpl(courseMapper);
         setBaseMapper(service, proxy);
     }
 
@@ -61,6 +81,37 @@ class LessonServiceTest {
     @Test
     void searchEmpty() {
         assertEquals(3, service.searchByKeyword("").size());
+    }
+
+    // ============ 详情 DTO ============
+
+    @Test
+    void getDetailDtoIncludesCourseInfo() {
+        var detail = service.getDetailDto("1");
+
+        assertNotNull(detail);
+        assertEquals("1", detail.getLessonNo());
+        assertEquals("Python简介", detail.getLessonTitle());
+        assertEquals("Python程序设计", detail.getCourseName());
+        assertEquals("王老师", detail.getTeacherName());
+    }
+
+    @Test
+    void getDetailDtoReturnsLessonInfoWhenCourseMissing() {
+        Lesson lesson = lesson("4", "404", "孤立课时", "doc", "/x.md", "无课程");
+        store.put("4", lesson);
+
+        var detail = service.getDetailDto("4");
+
+        assertNotNull(detail);
+        assertEquals("孤立课时", detail.getLessonTitle());
+        assertNull(detail.getCourseName());
+        assertNull(detail.getTeacherName());
+    }
+
+    @Test
+    void getDetailDtoReturnsNullWhenLessonMissing() {
+        assertNull(service.getDetailDto("missing"));
     }
 
     // ============ CRUD ============
@@ -132,5 +183,18 @@ class LessonServiceTest {
             case "selectCount": return (long) store.size();
             default: return null;
         }
+    }
+
+    private static void setBaseMapper(Object service, Object mapper) throws Exception {
+        for (Class<?> clazz = service.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
+            try {
+                java.lang.reflect.Field field = clazz.getDeclaredField("baseMapper");
+                field.setAccessible(true);
+                field.set(service, mapper);
+                return;
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        throw new NoSuchFieldException("baseMapper");
     }
 }
