@@ -90,6 +90,7 @@
       v-else-if="activeRoomType === 'shop'"
       v-model="roomVisible"
       :student-id="studentId"
+      :course-id="courseId"
       :profile="profile"
       @room-complete="completeRoom"
     />

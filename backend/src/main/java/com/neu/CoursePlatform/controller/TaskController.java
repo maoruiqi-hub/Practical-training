@@ -241,22 +241,16 @@ public class TaskController {
     public Result<Map<String, Object>> taskStats(@PathVariable String courseCode, @PathVariable String taskNo,
                                                   HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
-        List<TaskSubmission> subs = submissionService.listByTaskNo(taskNo);
-        List<TaskSubmission> activeSubs = subs.stream()
-                .filter(s -> !"superseded".equals(s.getStatus()))
-                .toList();
-        int totalSubmissions = activeSubs.size();
-        long totalStudents = assignmentService.countActiveByTaskNo(taskNo);
-        long submittedStudents = activeSubs.stream()
-                .map(TaskSubmission::getStudentNo)
-                .filter(studentNo -> studentNo != null && !studentNo.isBlank())
-                .distinct()
-                .count();
-        int graded = (int) activeSubs.stream().filter(s -> "graded".equals(s.getStatus())).count();
-        int overdue = (int) activeSubs.stream().filter(s -> s.getIsOverdue() != null && s.getIsOverdue() == 1).count();
-        double avgScore = activeSubs.stream()
-                .filter(s -> "graded".equals(s.getStatus()) && s.getScore() != null)
-                .mapToInt(TaskSubmission::getScore).average().orElse(0);
+        Map<String, Object> aggregated = submissionService.aggregateTaskStats(taskNo);
+        if (aggregated == null || aggregated.isEmpty()) {
+            aggregated = aggregateTaskStatsFallback(taskNo);
+        }
+        int totalSubmissions = (int) statLong(aggregated, "total_submissions");
+        long totalStudents = assignmentService != null ? assignmentService.countActiveByTaskNo(taskNo) : studentService.count();
+        long submittedStudents = statLong(aggregated, "submitted_students");
+        int graded = (int) statLong(aggregated, "graded_count");
+        int overdue = (int) statLong(aggregated, "overdue_count");
+        double avgScore = statDouble(aggregated, "average_score");
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("taskNo", taskNo);
         stats.put("totalStudents", totalStudents);
@@ -334,6 +328,67 @@ public class TaskController {
             if (value != null && !value.isBlank()) return value;
         }
         return null;
+    }
+
+    private Map<String, Object> aggregateTaskStatsFallback(String taskNo) {
+        List<TaskSubmission> subs = submissionService.listByTaskNo(taskNo);
+        if (subs == null) subs = List.of();
+        List<TaskSubmission> activeSubs = subs.stream()
+                .filter(s -> !"superseded".equals(s.getStatus()))
+                .toList();
+        long submittedStudents = activeSubs.stream()
+                .map(TaskSubmission::getStudentNo)
+                .filter(studentNo -> studentNo != null && !studentNo.isBlank())
+                .distinct()
+                .count();
+        int graded = (int) activeSubs.stream().filter(s -> "graded".equals(s.getStatus())).count();
+        int overdue = (int) activeSubs.stream().filter(s -> s.getIsOverdue() != null && s.getIsOverdue() == 1).count();
+        double avgScore = activeSubs.stream()
+                .filter(s -> "graded".equals(s.getStatus()) && s.getScore() != null)
+                .mapToInt(TaskSubmission::getScore)
+                .average()
+                .orElse(0);
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total_submissions", activeSubs.size());
+        stats.put("submitted_students", submittedStudents);
+        stats.put("graded_count", graded);
+        stats.put("overdue_count", overdue);
+        stats.put("average_score", avgScore);
+        return stats;
+    }
+
+    private long statLong(Map<String, Object> stats, String key) {
+        return Math.round(statDouble(stats, key));
+    }
+
+    private double statDouble(Map<String, Object> stats, String key) {
+        Object value = statValue(stats, key);
+        if (value instanceof Number number) return number.doubleValue();
+        if (value == null) return 0;
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    private Object statValue(Map<String, Object> stats, String key) {
+        if (stats == null || stats.isEmpty()) return null;
+        Object value = stats.get(key);
+        if (value != null) return value;
+        String normalizedKey = normalizeStatKey(key);
+        for (Map.Entry<String, Object> entry : stats.entrySet()) {
+            if (entry.getKey() != null
+                    && (entry.getKey().equalsIgnoreCase(key)
+                    || normalizeStatKey(entry.getKey()).equals(normalizedKey))) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private String normalizeStatKey(String key) {
+        return key == null ? "" : key.replace("_", "").toLowerCase();
     }
 
     @SuppressWarnings("unchecked")

@@ -28,12 +28,14 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
 
     @Override
     public List<CourseDTO> searchDtoByKeyword(String keyword) {
-        return toDtos(searchByKeyword(keyword));
+        List<CourseDTO> dtos = baseMapper.selectDtoByKeyword(keyword);
+        return dtos != null ? dtos : toDtos(searchByKeyword(keyword));
     }
 
     @Override
     public List<CourseDTO> listDto() {
-        return toDtos(list());
+        List<CourseDTO> dtos = baseMapper.selectDtoList();
+        return dtos != null ? dtos : toDtos(list());
     }
 
     @Override

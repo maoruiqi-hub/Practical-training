@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.mapper.StudentMapper;
 import com.neu.CoursePlatform.service.StudentService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
@@ -15,6 +17,9 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
 
     @Override
     public Student login(String username, String password) {
+        if (username == null || username.isBlank() || password == null) {
+            return null;
+        }
         Student student = baseMapper.selectByUsername(username);
         if (student != null && student.getPassword().equals(password)) {
             return student;
@@ -23,11 +28,19 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
     }
 
     @Override
+    @Transactional
     public boolean register(Student student) {
+        if (student == null || isBlank(student.getUsername()) || isBlank(student.getPassword()) || isBlank(student.getName())) {
+            return false;
+        }
         if (baseMapper.selectByUsername(student.getUsername()) != null) {
             return false;
         }
-        return save(student);
+        try {
+            return save(student);
+        } catch (DuplicateKeyException e) {
+            return false;
+        }
     }
 
     @Override
@@ -96,5 +109,9 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
         }
         out.write(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         out.flush();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

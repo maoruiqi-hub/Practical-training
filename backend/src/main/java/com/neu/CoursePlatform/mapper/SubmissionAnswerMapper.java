@@ -18,6 +18,12 @@ public interface SubmissionAnswerMapper extends BaseMapper<SubmissionAnswer> {
                                              @Param("knowledgePointId") String knowledgePointId,
                                              @Param("type") String type);
 
+    List<SubmissionAnswer> selectByStudentNoAndCourse(@Param("studentNo") String studentNo,
+                                                      @Param("courseCode") String courseCode,
+                                                      @Param("taskNo") String taskNo,
+                                                      @Param("knowledgePointId") String knowledgePointId,
+                                                      @Param("type") String type);
+
     List<SubmissionAnswer> selectWrongByStudentNo(@Param("studentNo") String studentNo);
 
     List<SubmissionAnswer> selectByTaskNo(@Param("taskNo") String taskNo);

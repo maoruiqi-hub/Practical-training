@@ -3,7 +3,18 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.neu.CoursePlatform.mapper.SubmissionAnswerMapper">
     <select id="selectBySubmissionId" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer WHERE submission_id = #{submissionId}</select>
-    <select id="selectByStudentNo" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer <where> student_no = #{studentNo}<if test="taskNo != null and taskNo != ''"> AND task_no = #{taskNo}</if><if test="knowledgePointId != null and knowledgePointId != ''"> AND knowledge_point_id = #{knowledgePointId}</if><if test="type != null and type != ''"> AND question_type = #{type}</if></where></select>
-    <select id="selectWrongByStudentNo" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer WHERE student_no = #{studentNo} AND correct = 0</select>
+    <select id="selectByStudentNo" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer <where> student_no = #{studentNo}<if test="taskNo != null and taskNo != ''"> AND task_no = #{taskNo}</if><if test="knowledgePointId != null and knowledgePointId != ''"> AND knowledge_point_id = #{knowledgePointId}</if><if test="type != null and type != ''"> AND question_type = #{type}</if></where> ORDER BY create_time DESC, id DESC</select>
+    <select id="selectByStudentNoAndCourse" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">
+        SELECT a.*
+        FROM submission_answer a
+        INNER JOIN learning_task t ON t.task_no = a.task_no
+        WHERE a.student_no = #{studentNo}
+          AND t.course_code = #{courseCode}
+        <if test="taskNo != null and taskNo != ''"> AND a.task_no = #{taskNo}</if>
+        <if test="knowledgePointId != null and knowledgePointId != ''"> AND a.knowledge_point_id = #{knowledgePointId}</if>
+        <if test="type != null and type != ''"> AND a.question_type = #{type}</if>
+        ORDER BY a.create_time DESC, a.id DESC
+    </select>
+    <select id="selectWrongByStudentNo" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer WHERE student_no = #{studentNo} AND correct = 0 ORDER BY create_time DESC, id DESC</select>
     <select id="selectByTaskNo" resultType="com.neu.CoursePlatform.entity.SubmissionAnswer">SELECT * FROM submission_answer WHERE task_no = #{taskNo}</select>
 </mapper>

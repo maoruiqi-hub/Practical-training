@@ -28,6 +28,8 @@ public class AnalysisController {
     /** 学生个人错题统计 */
     @GetMapping("/students/{studentNo}/mistakes")
     public Result<Map<String, Object>> studentWrongQuestions(@PathVariable String studentNo,
+                                                             @RequestParam(required = false) String courseCode,
+                                                             @RequestParam(value = "course_id", required = false) String courseId,
                                                              @RequestParam(required = false) String taskNo,
                                                              @RequestParam(required = false) String knowledgePointId,
                                                              @RequestParam(required = false) String type,
@@ -35,7 +37,8 @@ public class AnalysisController {
         Student student = (Student) session.getAttribute("student");
         if (student != null && !studentNo.equals(student.getStudentNo())) return Result.fail("无权限");
         if (student == null && !auth.isAdmin(session)) return Result.fail("无权限");
-        return Result.ok(analysisService.buildStudentWrongStats(studentNo, taskNo, knowledgePointId, type));
+        return Result.ok(analysisService.buildStudentWrongStats(studentNo,
+                firstNonBlank(courseCode, courseId), taskNo, knowledgePointId, type));
     }
 
     /** 单个测验错题统计 */
@@ -52,5 +55,12 @@ public class AnalysisController {
     public Result<Map<String, Object>> courseWrongQuestions(@PathVariable String courseCode, HttpSession session) {
         if (!auth.canModifyCourse(session, courseCode)) return Result.fail("无权限");
         return Result.ok(analysisService.buildCourseWrongStats(courseCode));
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 }

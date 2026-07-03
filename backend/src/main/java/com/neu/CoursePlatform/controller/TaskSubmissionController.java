@@ -137,13 +137,17 @@ public class TaskSubmissionController {
         if (!auth.isAdmin(session) && !auth.isTeacher(session)
                 && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo)))
             return Result.fail("无权限");
-        List<TaskSubmission> subs = submissionService.listByStudentNo(studentNo);
         String resolvedCourseCode = firstNonBlank(courseCode, courseId);
-        if (resolvedCourseCode != null) {
-            subs = subs.stream()
+        List<TaskSubmission> subs = resolvedCourseCode == null
+                ? submissionService.listByStudentNo(studentNo)
+                : submissionService.listByStudentNoAndCourse(studentNo, resolvedCourseCode);
+        if (subs == null && resolvedCourseCode != null) {
+            List<TaskSubmission> all = submissionService.listByStudentNo(studentNo);
+            subs = all == null ? List.of() : all.stream()
                     .filter(s -> resolvedCourseCode.equals(submissionService.getTaskCourseCode(s.getTaskNo())))
-                    .collect(java.util.stream.Collectors.toList());
+                    .toList();
         }
+        if (subs == null) subs = List.of();
         return Result.ok(subs);
     }
 

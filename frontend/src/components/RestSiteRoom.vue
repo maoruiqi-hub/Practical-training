@@ -182,6 +182,7 @@ const loadWeakCards = async () => {
   loading.value = true
   try {
     const res = await getStudentWrongQuestions(props.studentId, {
+      courseCode: props.courseId || undefined,
       knowledgePointId: props.selectedNode?.kpId || undefined
     })
     weakCards.value = res.data.code === 200 ? (res.data.data?.wrongList || []) : []
@@ -241,14 +242,16 @@ const reviewWeakPoint = async () => {
     complete('weak_point_review')
     return
   }
-  // 加载最近的错题，自动发送给 AI 导师
+  // 加载错题本第一道错题，自动发送给 AI 导师
   aiInitialQuestion.value = ''
   if (weakCards.value.length) {
-    const questions = weakCards.value.slice(0, 3).map((card, i) =>
-      `${i + 1}. ${card.questionStem || card.stem || card.title || ''}`
-    ).filter(Boolean).join('\n')
-    if (questions) {
-      aiInitialQuestion.value = `我最近做错了以下几道题，请帮我逐一分析错误原因并给出正确的解题思路：\n${questions}`
+    const firstWrong = weakCards.value[0]
+    const stem = firstWrong.questionStem || firstWrong.stem || firstWrong.title || ''
+    const studentAnswer = firstWrong.studentAnswer || firstWrong.student_answer || '未记录'
+    const correctAnswer = firstWrong.correctAnswer || firstWrong.correct_answer || '待老师确认'
+    const questionType = firstWrong.questionType || firstWrong.question_type || '题目'
+    if (stem) {
+      aiInitialQuestion.value = `请解析错题本里的第一道错题，并告诉我应该怎么重新掌握这个薄弱点。\n题型：${questionType}\n题目：${stem}\n我的答案：${studentAnswer}\n参考答案：${correctAnswer}\n请按“考点、错因、正确思路、再练一步”四部分回答。`
     }
   }
   if (!aiInitialQuestion.value) {

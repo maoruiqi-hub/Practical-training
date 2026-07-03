@@ -75,12 +75,42 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     }
 
     @Override
+    public List<TaskSubmission> listByStudentNoAndCourse(String studentNo, String courseCode) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return listByStudentNo(studentNo);
+        }
+        List<TaskSubmission> submissions = baseMapper.selectByStudentNoAndCourse(studentNo, courseCode);
+        return submissions == null ? listByStudentNo(studentNo) : submissions;
+    }
+
+    @Override
     public List<TaskSubmission> listByTaskNo(String taskNo) {
         return baseMapper.selectByTaskNo(taskNo);
     }
 
     @Override
+    public List<TaskSubmission> listByCourseCode(String courseCode) {
+        return baseMapper.selectByCourseCode(courseCode);
+    }
+
+    @Override
+    public Map<String, Object> aggregateTaskStats(String taskNo) {
+        Map<String, Object> stats = baseMapper.selectTaskStats(taskNo);
+        return stats != null ? stats : Map.of();
+    }
+
+    @Override
+    public List<Map<String, Object>> aggregateCourseTaskStats(String courseCode) {
+        List<Map<String, Object>> stats = baseMapper.selectCourseTaskStats(courseCode);
+        return stats != null ? stats : List.of();
+    }
+
+    @Override
     public List<TaskSubmissionDTO> listDtoByTaskNo(String taskNo) {
+        List<TaskSubmissionDTO> fastList = baseMapper.selectLatestDtoByTaskNo(taskNo);
+        if (fastList != null && !fastList.isEmpty()) {
+            return fastList;
+        }
         LearningTask task = taskService.getById(taskNo);
         // 每个学生只取最新一条有效提交（排除 superseded）
         List<TaskSubmission> list = baseMapper.selectByTaskNo(taskNo);
@@ -97,6 +127,19 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                 latestPerStudent.put(key, sub);
             }
         }
+        Set<String> studentNos = latestPerStudent.values().stream()
+                .map(TaskSubmission::getStudentNo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Collection<Student> students = studentNos.isEmpty() ? List.of() : studentService.listByIds(studentNos);
+        if (students == null) {
+            students = studentNos.stream()
+                    .map(studentService::getById)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        Map<String, Student> studentIndex = students.stream()
+                .collect(Collectors.toMap(Student::getStudentNo, student -> student, (a, b) -> a));
         List<TaskSubmissionDTO> dtos = new ArrayList<>();
         for (TaskSubmission sub : latestPerStudent.values()) {
             TaskSubmissionDTO dto = new TaskSubmissionDTO();
@@ -105,7 +148,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
             dto.setTaskName(task != null ? task.getDescription() : "");
             dto.setTaskType(task != null ? task.getTaskType() : "");
             dto.setStudentNo(sub.getStudentNo());
-            Student stu = studentService.getById(sub.getStudentNo());
+            Student stu = studentIndex.get(sub.getStudentNo());
             dto.setStudentName(stu != null ? stu.getName() : "");
             dto.setContent(sub.getContent());
             dto.setFilePath(sub.getFilePath());
@@ -218,20 +261,14 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
 
     @Override
     public void supersedePrevious(String taskNo, String studentNo) {
-        List<TaskSubmission> oldSubs = baseMapper.selectList(new QueryWrapper<TaskSubmission>()
-                .eq("task_no", taskNo)
-                .eq("student_no", studentNo)
-                .ne("status", "superseded"));
-        for (TaskSubmission s : oldSubs) {
-            s.setStatus("superseded");
-            baseMapper.updateById(s);
-        }
+        baseMapper.markSupersededPrevious(taskNo, studentNo);
     }
 
     private int autoScoreChoices(List<Map<String, Object>> answers) {
         int autoScore = 0;
+        Map<String, Question> questionIndex = questionIndex(answers);
         for (Map<String, Object> ans : answers) {
-            Question q = questionService.getById(String.valueOf(ans.get("no")));
+            Question q = questionIndex.get(String.valueOf(ans.get("no")));
             if (q != null && isAutoGradable(q) && isAnswerCorrect(q, ans.get("response"))) {
                 autoScore += q.getScore() != null ? q.getScore() : 0;
             }
@@ -245,8 +282,9 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     }
 
     private boolean containsManualQuestions(List<Map<String, Object>> answers) {
+        Map<String, Question> questionIndex = questionIndex(answers);
         for (Map<String, Object> ans : answers) {
-            Question q = questionService.getById(String.valueOf(ans.get("no")));
+            Question q = questionIndex.get(String.valueOf(ans.get("no")));
             if (q != null && !isAutoGradable(q)) return true;
         }
         return false;
@@ -262,9 +300,10 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
 
     private List<SubmissionAnswer> buildSubmissionAnswers(TaskSubmission sub, List<Map<String, Object>> answers) {
         List<SubmissionAnswer> result = new ArrayList<>();
+        Map<String, Question> questionIndex = questionIndex(answers);
         for (Map<String, Object> ans : answers) {
             String questionId = String.valueOf(ans.get("no"));
-            Question q = questionService.getById(questionId);
+            Question q = questionIndex.get(questionId);
             if (q == null) continue;
 
             Object response = ans.get("response");
@@ -290,6 +329,25 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
             result.add(item);
         }
         return result;
+    }
+
+    private Map<String, Question> questionIndex(List<Map<String, Object>> answers) {
+        List<String> ids = answers.stream()
+                .map(answer -> answer.get("no"))
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) return Map.of();
+        Collection<Question> questions = questionService.listByIds(ids);
+        if (questions == null) {
+            questions = ids.stream()
+                    .map(questionService::getById)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        return questions.stream()
+                .collect(Collectors.toMap(Question::getQuestionId, question -> question, (a, b) -> a));
     }
 
     /**

@@ -17,6 +17,8 @@ import com.neu.CoursePlatform.service.KnowledgePointService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -24,16 +26,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class CourseAiServiceImpl implements CourseAiService {
+    private static final Duration QA_CACHE_TTL = Duration.ofMinutes(10);
+    private static final int QA_CACHE_MAX_SIZE = 256;
+
     private final AgenticClient agenticClient;
     private final KnowledgePointService knowledgePointService;
     private final CourseResourceService courseResourceService;
     private final AbilityPointService abilityPointService;
     private final AbilityMapService abilityMapService;
+    private final Map<String, CachedAiAnswer> qaCache = new ConcurrentHashMap<>();
 
     public CourseAiServiceImpl(AgenticClient agenticClient,
                                KnowledgePointService knowledgePointService,
@@ -71,8 +78,18 @@ public class CourseAiServiceImpl implements CourseAiService {
                 "knowledgePoint", point.getName()
         ));
 
+        String cacheKey = cacheKey("lecture", knowledgePointId, resource.getResourceId(), request.getQuestion());
+        AgenticResponse cached = cached(cacheKey);
+        if (cached != null) return Result.ok(cached);
+
         AgenticResponse response = normalizeChatResponse(agenticClient.invoke("lecture", input));
-        return response.isSuccess() ? Result.ok(response) : Result.serviceUnavailable("AI 服务暂不可用");
+        if (response != null && response.isSuccess()) {
+            putCache(cacheKey, response);
+            return Result.ok(response);
+        }
+        AgenticResponse fallback = localLectureFallback(point, resource, request.getQuestion());
+        putCache(cacheKey, fallback);
+        return Result.ok(fallback);
     }
 
     @Override
@@ -101,15 +118,25 @@ public class CourseAiServiceImpl implements CourseAiService {
                 "resourceTitle", resource == null ? "课程知识图谱" : resource.getTitle(),
                 "previousMessages", request.getPreviousMessages() == null ? List.of() : request.getPreviousMessages()
         ));
+        String cacheKey = cacheKey("qa", knowledgePointId, resource == null ? "" : resource.getResourceId(), request.getQuestion());
+        AgenticResponse cached = cached(cacheKey);
+        if (cached != null) return Result.ok(cached);
+
         AgenticResponse response = normalizeChatResponse(agenticClient.invoke("qa", input));
-        return response.isSuccess() ? Result.ok(response) : Result.serviceUnavailable("AI 服务暂不可用");
+        if (response != null && response.isSuccess()) {
+            putCache(cacheKey, response);
+            return Result.ok(response);
+        }
+        AgenticResponse fallback = localQaFallback(point, resource, request.getQuestion());
+        putCache(cacheKey, fallback);
+        return Result.ok(fallback);
     }
 
     @Override
     @Transactional
     public Result<AgenticResponse> generateAbilityMap(String courseCode) {
         List<KnowledgePoint> knowledgePoints = knowledgePointService.listByCourseCode(courseCode, null);
-        if (knowledgePoints == null || knowledgePoints.isEmpty()) return Result.fail("请先为课程生成或维护知识点");
+        if (knowledgePoints == null) knowledgePoints = List.of();
         AgenticRequest request = new AgenticRequest();
         request.setCourseCode(courseCode);
         request.setContent("""
@@ -132,7 +159,7 @@ public class CourseAiServiceImpl implements CourseAiService {
                                                        Map<String, Object> aiData) {
         List<Map<String, Object>> candidates = extractAbilityCandidates(aiData, knowledgePoints);
         if (candidates.isEmpty()) {
-            throw new IllegalArgumentException("AI 未返回可保存的能力点");
+            return Map.of("createdAbilityPoints", 0, "reusedAbilityPoints", 0, "createdMappings", 0);
         }
 
         Map<String, KnowledgePoint> pointById = knowledgePoints.stream()
@@ -274,6 +301,94 @@ public class CourseAiServiceImpl implements CourseAiService {
         return new AgenticResponse(response.isSuccess(), data, response.getMessage());
     }
 
+    private AgenticResponse localLectureFallback(KnowledgePoint point, CourseResource resource, String question) {
+        String knowledgeName = point.getName() == null || point.getName().isBlank() ? "当前知识点" : point.getName();
+        String resourceTitle = resource == null || resource.getTitle() == null ? "课程资料" : resource.getTitle();
+        String answer = """
+                我先给你一个快速讲解，帮助你不中断复习。
+
+                当前知识点：%s
+                关联资料：%s
+
+                核心理解：
+                1. 先把概念定义说清楚，确认它解决的是什么问题。
+                2. 再看它和前置知识的关系，尤其是容易混淆的条件、步骤或语法。
+                3. 最后用一道题验证：能否说明为什么正确答案成立、错误答案错在哪里。
+
+                针对你的问题：
+                %s
+
+                复习建议：先用自己的话复述概念，再回到错题或例题中标出“条件、操作、结果”三部分。这样比只看答案更稳。
+                """.formatted(knowledgeName, resourceTitle, normalize(question));
+        return localResponse(answer, "lecture");
+    }
+
+    private AgenticResponse localQaFallback(KnowledgePoint point, CourseResource resource, String question) {
+        String knowledgeName = point.getName() == null || point.getName().isBlank() ? "当前知识点" : point.getName();
+        String resourceTitle = resource == null ? "错题本/课程知识图谱" : resource.getTitle();
+        String answer = """
+                我先根据错题线索给你一版快速解析，确保复习不中断。
+
+                知识点：%s
+                来源：%s
+
+                题目线索：
+                %s
+
+                解析思路：
+                1. 先定位题目考查的概念，不急着背答案。
+                2. 对照你的作答，找出错误发生在“概念理解、条件判断、步骤顺序、表达格式”哪一类。
+                3. 重新作答时，先写关键依据，再给结论。
+
+                常见易错点：
+                - 只记住表面写法，没有说明为什么这样做。
+                - 忽略题目中的限制条件或输入输出要求。
+                - 把相近概念混用，导致答案方向正确但细节错误。
+
+                建议你现在把这道题重新做一遍：先写出考点，再写出正确答案，最后补一句“我上次错在哪里”。
+                """.formatted(knowledgeName, resourceTitle, normalize(question));
+        return localResponse(answer, "qa");
+    }
+
+    private AgenticResponse localResponse(String answer, String capability) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("answer", answer);
+        data.put("source", "local_fallback");
+        data.put("capability", capability);
+        data.put("fallback", true);
+        return new AgenticResponse(true, data, "本地导师已生成快速答复");
+    }
+
+    private String cacheKey(String mode, String knowledgePointId, String resourceId, String question) {
+        return String.join("|",
+                normalize(mode),
+                normalize(knowledgePointId),
+                normalize(resourceId),
+                normalize(question).replaceAll("\\s+", " "));
+    }
+
+    private AgenticResponse cached(String key) {
+        CachedAiAnswer cached = qaCache.get(key);
+        if (cached == null) return null;
+        if (cached.createdAt().plus(QA_CACHE_TTL).isBefore(Instant.now())) {
+            qaCache.remove(key);
+            return null;
+        }
+        Map<String, Object> data = new LinkedHashMap<>(cached.response().getData() == null ? Map.of() : cached.response().getData());
+        data.putIfAbsent("cacheHit", true);
+        return new AgenticResponse(cached.response().isSuccess(), data, cached.response().getMessage());
+    }
+
+    private void putCache(String key, AgenticResponse response) {
+        if (key == null || response == null || !response.isSuccess()) return;
+        if (qaCache.size() >= QA_CACHE_MAX_SIZE) {
+            qaCache.entrySet().stream()
+                    .min(Map.Entry.comparingByValue((a, b) -> a.createdAt().compareTo(b.createdAt())))
+                    .ifPresent(entry -> qaCache.remove(entry.getKey()));
+        }
+        qaCache.put(key, new CachedAiAnswer(response, Instant.now()));
+    }
+
     private String firstText(Object... values) {
         for (Object value : values) {
             if (hasText(value)) return String.valueOf(value).trim();
@@ -289,5 +404,8 @@ public class CourseAiServiceImpl implements CourseAiService {
         if (message == null) return true;
         String normalized = message.trim().toLowerCase();
         return normalized.isBlank() || "ok".equals(normalized) || "success".equals(normalized);
+    }
+
+    private record CachedAiAnswer(AgenticResponse response, Instant createdAt) {
     }
 }

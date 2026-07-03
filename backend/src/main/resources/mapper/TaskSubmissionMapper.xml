@@ -4,11 +4,104 @@
 <mapper namespace="com.neu.CoursePlatform.mapper.TaskSubmissionMapper">
 
     <select id="selectByStudentNo" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
-        SELECT * FROM task_submission WHERE student_no = #{studentNo}
+        SELECT * FROM task_submission WHERE student_no = #{studentNo} ORDER BY submit_time DESC, submission_id DESC
+    </select>
+
+    <select id="selectByStudentNoAndCourse" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
+        SELECT s.*
+        FROM task_submission s
+        INNER JOIN learning_task t ON t.task_no = s.task_no
+        WHERE s.student_no = #{studentNo}
+          AND t.course_code = #{courseCode}
+        ORDER BY s.submit_time DESC, s.submission_id DESC
     </select>
 
     <select id="selectByTaskNo" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
-        SELECT * FROM task_submission WHERE task_no = #{taskNo}
+        SELECT * FROM task_submission WHERE task_no = #{taskNo} ORDER BY submit_time DESC, submission_id DESC
     </select>
+
+    <select id="selectByCourseCode" resultType="com.neu.CoursePlatform.entity.TaskSubmission">
+        SELECT s.*
+        FROM task_submission s
+        INNER JOIN learning_task t ON t.task_no = s.task_no
+        WHERE t.course_code = #{courseCode}
+        ORDER BY s.submit_time DESC, s.submission_id DESC
+    </select>
+
+    <select id="selectTaskStats" resultType="map">
+        SELECT
+            COUNT(*) AS total_submissions,
+            COUNT(DISTINCT student_no) AS submitted_students,
+            COALESCE(SUM(CASE WHEN status = 'graded' THEN 1 ELSE 0 END), 0) AS graded_count,
+            COALESCE(SUM(CASE WHEN is_overdue = 1 THEN 1 ELSE 0 END), 0) AS overdue_count,
+            COALESCE(AVG(CASE WHEN status = 'graded' AND score IS NOT NULL THEN score END), 0) AS average_score
+        FROM task_submission
+        WHERE task_no = #{taskNo}
+          AND (status IS NULL OR status != 'superseded')
+    </select>
+
+    <select id="selectCourseTaskStats" resultType="map">
+        SELECT
+            t.task_no,
+            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), CONCAT('任务#', t.task_no)) AS task_name,
+            t.task_type,
+            COALESCE(a.assigned_count, 0) AS assigned_count,
+            COUNT(s.submission_id) AS submitted_count,
+            COALESCE(SUM(CASE WHEN s.status = 'graded' THEN 1 ELSE 0 END), 0) AS graded_count,
+            COALESCE(SUM(CASE WHEN s.is_overdue = 1 THEN 1 ELSE 0 END), 0) AS overdue_count,
+            COALESCE(AVG(CASE WHEN s.status = 'graded' AND s.score IS NOT NULL THEN s.score END), 0) AS average_score
+        FROM learning_task t
+        LEFT JOIN task_submission s
+          ON s.task_no = t.task_no
+         AND (s.status IS NULL OR s.status != 'superseded')
+        LEFT JOIN (
+            SELECT task_no, COUNT(*) AS assigned_count
+            FROM task_assignment
+            WHERE status != 'cancelled'
+            GROUP BY task_no
+        ) a ON a.task_no = t.task_no
+        WHERE t.course_code = #{courseCode}
+        GROUP BY t.task_no, t.task_name, t.description, t.task_type, a.assigned_count
+        ORDER BY t.task_no DESC
+    </select>
+
+    <select id="selectLatestDtoByTaskNo" resultType="com.neu.CoursePlatform.dto.TaskSubmissionDTO">
+        SELECT
+            ranked.submission_id,
+            ranked.task_no,
+            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), CONCAT('任务#', t.task_no)) AS task_name,
+            t.task_type,
+            ranked.student_no,
+            COALESCE(st.name, '') AS student_name,
+            ranked.content,
+            ranked.file_path,
+            ranked.submit_time,
+            ranked.score,
+            ranked.status,
+            ranked.feedback,
+            ranked.attempt_number
+        FROM (
+            SELECT s.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY s.student_no
+                       ORDER BY COALESCE(s.attempt_number, 0) DESC, s.submit_time DESC, s.submission_id DESC
+                   ) AS rn
+            FROM task_submission s
+            WHERE s.task_no = #{taskNo}
+              AND (s.status IS NULL OR s.status != 'superseded')
+        ) ranked
+        LEFT JOIN learning_task t ON t.task_no = ranked.task_no
+        LEFT JOIN student st ON st.student_no = ranked.student_no
+        WHERE ranked.rn = 1
+        ORDER BY ranked.submit_time DESC, ranked.submission_id DESC
+    </select>
+
+    <update id="markSupersededPrevious">
+        UPDATE task_submission
+        SET status = 'superseded'
+        WHERE task_no = #{taskNo}
+          AND student_no = #{studentNo}
+          AND (status IS NULL OR status != 'superseded')
+    </update>
 
 </mapper>

@@ -33,6 +33,12 @@ course-resource:
     soffice-path: ${COURSE_RESOURCE_SOFFICE_PATH:C:/Program Files/LibreOffice/program/soffice.exe}
     timeout-seconds: 60
 
+app:
+  performance-indexes:
+    enabled: ${PERFORMANCE_INDEXES_ENABLED:true}
+    fail-fast: ${PERFORMANCE_INDEXES_FAIL_FAST:false}
+    script: ${PERFORMANCE_INDEXES_SCRIPT:classpath:performance-indexes.sql}
+
 # Agentic AI 服务配置
 # mode: mock(本地模拟) / deepseek(DeepSeek API) / dify(Dify平台) / http(外部agentic微服务)
 agentic:

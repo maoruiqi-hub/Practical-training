@@ -87,20 +87,33 @@ public class IncentiveServiceImpl implements IncentiveService {
             q.orderByDesc(StudentProfile::getExp);
         }
         List<StudentProfile> profiles = profileMapper.selectList(q);
+        List<Integer> studentNos = profiles.stream()
+                .limit(20)
+                .map(StudentProfile::getStudentNo)
+                .filter(Objects::nonNull)
+                .toList();
+        Map<Integer, Long> badgeCounts = studentNos.isEmpty()
+                ? Map.of()
+                : achievementMapper.selectList(new LambdaQueryWrapper<Achievement>()
+                        .eq(Achievement::getCourseCode, courseCode)
+                        .eq(Achievement::getAchievementType, "badge")
+                        .in(Achievement::getStudentNo, studentNos))
+                        .stream()
+                        .collect(Collectors.groupingBy(Achievement::getStudentNo, Collectors.counting()));
 
         List<Map<String, Object>> board = new ArrayList<>();
         int rank = 1;
-        for (StudentProfile p : profiles) {
+        for (StudentProfile p : profiles.stream().limit(20).toList()) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("rank", rank++);
             entry.put("studentNo", p.getStudentNo());
             entry.put("level", p.getLevel());
             entry.put("exp", p.getExp());
             entry.put("coins", p.getCoins());
-            entry.put("badgeCount", getAchievements(p.getStudentNo(), courseCode).size());
+            entry.put("badgeCount", badgeCounts.getOrDefault(p.getStudentNo(), 0L));
             board.add(entry);
         }
-        return board.stream().limit(20).collect(Collectors.toList());
+        return board;
     }
 
     @Override

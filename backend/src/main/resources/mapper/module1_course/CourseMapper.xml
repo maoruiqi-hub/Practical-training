@@ -5,4 +5,46 @@
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Course">
         SELECT * FROM course WHERE course_name LIKE CONCAT('%', #{keyword}, '%') OR CAST(course_code AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
     </select>
+
+    <select id="selectDtoList" resultType="com.neu.CoursePlatform.dto.CourseDTO">
+        SELECT c.course_code,
+               c.course_name,
+               c.teacher,
+               c.credits,
+               c.hours,
+               c.cover_url,
+               c.description,
+               c.applicable_major,
+               c.course_objectives,
+               COALESCE(l.lesson_count, 0) AS lesson_count
+        FROM course c
+        LEFT JOIN (
+            SELECT course_code, COUNT(*) AS lesson_count
+            FROM lesson
+            GROUP BY course_code
+        ) l ON l.course_code = c.course_code
+        ORDER BY c.course_code
+    </select>
+
+    <select id="selectDtoByKeyword" resultType="com.neu.CoursePlatform.dto.CourseDTO">
+        SELECT c.course_code,
+               c.course_name,
+               c.teacher,
+               c.credits,
+               c.hours,
+               c.cover_url,
+               c.description,
+               c.applicable_major,
+               c.course_objectives,
+               COALESCE(l.lesson_count, 0) AS lesson_count
+        FROM course c
+        LEFT JOIN (
+            SELECT course_code, COUNT(*) AS lesson_count
+            FROM lesson
+            GROUP BY course_code
+        ) l ON l.course_code = c.course_code
+        WHERE c.course_name LIKE CONCAT('%', #{keyword}, '%')
+           OR CAST(c.course_code AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY c.course_code
+    </select>
 </mapper>
