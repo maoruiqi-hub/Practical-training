@@ -11,7 +11,15 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     List<TaskSubmission> listByStudentNo(String studentNo);
 
+    List<TaskSubmission> listByStudentNoAndCourse(String studentNo, String courseCode);
+
     List<TaskSubmission> listByTaskNo(String taskNo);
+
+    List<TaskSubmission> listByCourseCode(String courseCode);
+
+    Map<String, Object> aggregateTaskStats(String taskNo);
+
+    List<Map<String, Object>> aggregateCourseTaskStats(String courseCode);
 
     List<TaskSubmissionDTO> listDtoByTaskNo(String taskNo);
 

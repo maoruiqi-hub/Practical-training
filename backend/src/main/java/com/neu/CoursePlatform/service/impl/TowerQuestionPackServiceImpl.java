@@ -17,6 +17,7 @@ import com.neu.CoursePlatform.mapper.StudentTowerQuestionPackMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerRunMapper;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.TowerQuestionPackService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,7 +122,17 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         pack.setAiReason("根据当前节点知识点、节点难度、近期做题记录和题型多样性从数据库题库中推荐。");
         pack.setCreatedAt(LocalDateTime.now());
         pack.setUpdatedAt(LocalDateTime.now());
-        packMapper.insert(pack);
+        try {
+            packMapper.insert(pack);
+        } catch (DuplicateKeyException e) {
+            StudentTowerQuestionPack existing = packMapper.selectOne(new LambdaQueryWrapper<StudentTowerQuestionPack>()
+                    .eq(StudentTowerQuestionPack::getRunId, runId)
+                    .eq(StudentTowerQuestionPack::getNodeId, nodeId)
+                    .eq(StudentTowerQuestionPack::getMode, normalizedMode)
+                    .last("limit 1"));
+            if (existing != null) return toDto(existing);
+            throw e;
+        }
         return toDto(pack, selected);
     }
 
@@ -270,8 +281,17 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
 
     private Map<String, Object> toDto(StudentTowerQuestionPack pack) {
         List<String> ids = readIds(pack.getQuestionIdsJson());
+        List<Question> loadedQuestions = ids.isEmpty() ? List.of() : questionService.listByIds(ids);
+        if (loadedQuestions == null) {
+            loadedQuestions = ids.stream()
+                    .map(questionService::getById)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        Map<String, Question> questionIndex = loadedQuestions.stream()
+                .collect(java.util.stream.Collectors.toMap(Question::getQuestionId, question -> question, (a, b) -> a));
         List<Question> questions = ids.stream()
-                .map(questionService::getById)
+                .map(questionIndex::get)
                 .filter(Objects::nonNull)
                 .toList();
         return toDto(pack, questions);

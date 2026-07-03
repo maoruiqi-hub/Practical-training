@@ -14,9 +14,13 @@ public interface BehaviorLogService extends IService<LearningBehaviorLog> {
     /** 按用户查询 */
     List<LearningBehaviorLog> listByUserId(String userId);
 
+    List<LearningBehaviorLog> listRecentByUserId(String userId, int limit);
+
     /** 按任务查询 */
     List<LearningBehaviorLog> listByTaskNo(String taskNo);
 
     /** 多条件筛选查询 */
     List<LearningBehaviorLog> query(Map<String, String> filters);
+
+    long sumDurationByUserId(String userId);
 }

@@ -13,6 +13,8 @@ public interface BehaviorLogMapper extends BaseMapper<LearningBehaviorLog> {
 
     List<LearningBehaviorLog> selectByUserId(@Param("userId") String userId);
 
+    List<LearningBehaviorLog> selectRecentByUserId(@Param("userId") String userId, @Param("limit") int limit);
+
     List<LearningBehaviorLog> selectByTaskNo(@Param("taskNo") String taskNo);
 
     List<LearningBehaviorLog> selectByFilters(@Param("userId") String userId,
@@ -22,4 +24,6 @@ public interface BehaviorLogMapper extends BaseMapper<LearningBehaviorLog> {
                                                @Param("courseId") String courseId,
                                                @Param("startTime") String startTime,
                                                @Param("endTime") String endTime);
+
+    Long sumDurationByUserId(@Param("userId") String userId);
 }

@@ -22,6 +22,15 @@ public class SubmissionAnswerServiceImpl extends ServiceImpl<SubmissionAnswerMap
     }
 
     @Override
+    public List<SubmissionAnswer> listByStudentNoAndCourse(String studentNo, String courseCode, String taskNo, String knowledgePointId, String type) {
+        if (courseCode == null || courseCode.isBlank()) {
+            return listByStudentNo(studentNo, taskNo, knowledgePointId, type);
+        }
+        List<SubmissionAnswer> answers = baseMapper.selectByStudentNoAndCourse(studentNo, courseCode, taskNo, knowledgePointId, type);
+        return answers != null ? answers : listByStudentNo(studentNo, taskNo, knowledgePointId, type);
+    }
+
+    @Override
     public List<SubmissionAnswer> listWrongByStudentNo(String studentNo) {
         return baseMapper.selectWrongByStudentNo(studentNo);
     }

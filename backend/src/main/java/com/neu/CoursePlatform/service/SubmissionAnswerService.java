@@ -11,6 +11,8 @@ public interface SubmissionAnswerService extends IService<SubmissionAnswer> {
 
     List<SubmissionAnswer> listByStudentNo(String studentNo, String taskNo, String knowledgePointId, String type);
 
+    List<SubmissionAnswer> listByStudentNoAndCourse(String studentNo, String courseCode, String taskNo, String knowledgePointId, String type);
+
     List<SubmissionAnswer> listWrongByStudentNo(String studentNo);
 
     List<SubmissionAnswer> listByTaskNo(String taskNo);

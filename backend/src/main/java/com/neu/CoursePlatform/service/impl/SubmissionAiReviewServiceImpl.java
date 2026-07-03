@@ -53,6 +53,11 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
     public SubmissionAiReview generateReview(String submissionId) {
         TaskSubmission submission = submissionService.getById(submissionId);
         if (submission == null) throw new IllegalArgumentException("提交记录不存在");
+        SubmissionAiReview latest = getLatestBySubmissionId(submissionId);
+        if (latest != null && latest.getCreateTime() != null
+                && latest.getCreateTime().isAfter(LocalDateTime.now().minusMinutes(5))) {
+            return latest;
+        }
         LearningTask task = taskService.getById(submission.getTaskNo());
 
         String content = taskService.isQuizTask(task)

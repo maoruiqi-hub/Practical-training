@@ -1,0 +1,3 @@
+app:
+  performance-indexes:
+    enabled: false

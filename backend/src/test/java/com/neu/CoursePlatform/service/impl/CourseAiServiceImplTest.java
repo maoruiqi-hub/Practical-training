@@ -110,13 +110,16 @@ class CourseAiServiceImplTest {
     }
 
     @Test
-    void explainKnowledgePointReturns503WhenAiUnavailable() {
+    void explainKnowledgePointUsesLocalFallbackWhenAiUnavailable() {
         setupWithMockAi(false); // AI 返回失败
         LectureRequest req = lectureRequest("resource-1", 1, "请讲解");
 
         Result<AgenticResponse> result = service.explainKnowledgePoint("kp-1", req);
-        assertEquals(503, result.getCode());
-        assertEquals("AI 服务暂不可用", result.getMsg());
+        assertEquals(200, result.getCode());
+        assertNotNull(result.getData());
+        assertTrue(result.getData().isSuccess());
+        assertEquals("local_fallback", result.getData().getData().get("source"));
+        assertNotNull(result.getData().getData().get("answer"));
     }
 
     @Test
@@ -212,13 +215,16 @@ class CourseAiServiceImplTest {
     }
 
     @Test
-    void answerKnowledgePointQuestionReturns503WhenAiUnavailable() {
+    void answerKnowledgePointQuestionUsesLocalFallbackWhenAiUnavailable() {
         setupWithMockAi(false); // AI 返回失败
         CourseQaRequest req = qaRequest("什么是Java？", null);
 
         Result<AgenticResponse> result = service.answerKnowledgePointQuestion("kp-1", req);
-        assertEquals(503, result.getCode());
-        assertEquals("AI 服务暂不可用", result.getMsg());
+        assertEquals(200, result.getCode());
+        assertNotNull(result.getData());
+        assertTrue(result.getData().isSuccess());
+        assertEquals("local_fallback", result.getData().getData().get("source"));
+        assertNotNull(result.getData().getData().get("answer"));
     }
 
     // ============ generateAbilityMap() ============

@@ -68,6 +68,7 @@ import { getStudentWrongQuestions } from '../api'
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   studentId: { type: [String, Number], default: '' },
+  courseId: { type: [String, Number], default: '' },
   profile: { type: Object, default: () => ({}) }
 })
 
@@ -90,7 +91,9 @@ const loadMistakes = async () => {
   if (!visible.value || !props.studentId) return
   loading.value = true
   try {
-    const res = await getStudentWrongQuestions(props.studentId)
+    const res = await getStudentWrongQuestions(props.studentId, {
+      courseCode: props.courseId || undefined
+    })
     mistakes.value = res.data.code === 200 ? (res.data.data?.wrongList || []) : []
   } catch {
     mistakes.value = []
@@ -127,7 +130,7 @@ const cleanseWrongCard = () => {
   complete('clean_wrong_card')
 }
 
-watch(() => [props.modelValue, props.studentId], loadMistakes, { immediate: true })
+watch(() => [props.modelValue, props.studentId, props.courseId], loadMistakes, { immediate: true })
 </script>
 
 <style scoped>

@@ -23,7 +23,9 @@ import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -92,6 +94,7 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
+    @Transactional
     public StudentProfile getOrCreateProfile(Integer studentNo, Integer courseCode) {
         LambdaQueryWrapper<StudentProfile> q = new LambdaQueryWrapper<>();
         q.eq(StudentProfile::getStudentNo, studentNo)
@@ -112,7 +115,13 @@ public class ProfileServiceImpl implements ProfileService {
         profile.setStatus("正常学习");
         profile.setConsecutiveCorrect(0);
         profile.setRecentAnswers("");
-        profileMapper.insert(profile);
+        try {
+            profileMapper.insert(profile);
+        } catch (DuplicateKeyException e) {
+            StudentProfile existing = profileMapper.selectOne(q);
+            if (existing != null) return existing;
+            throw e;
+        }
 
         // 初始化能力评分
         List<AbilityPoint> abilityPoints = abilityPointService.listByCourseCode(String.valueOf(courseCode));
@@ -123,7 +132,10 @@ public class ProfileServiceImpl implements ProfileService {
             cs.setAbilityPointId(ap.getAbilityPointId());
             cs.setAbilityPointName(ap.getName());
             cs.setScore(50);
-            competencyMapper.insert(cs);
+            try {
+                competencyMapper.insert(cs);
+            } catch (DuplicateKeyException ignored) {
+            }
         }
 
         return profile;

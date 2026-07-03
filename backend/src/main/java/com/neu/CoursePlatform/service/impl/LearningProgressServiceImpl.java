@@ -35,7 +35,16 @@ public class LearningProgressServiceImpl implements LearningProgressService {
     @Override
     public Map<String, Object> buildStudentProgress(String studentNo, String courseCode) {
         List<LearningTask> tasks = assignmentService.listAssignedTasks(studentNo, courseCode, null, null, null);
-        List<TaskSubmission> submissions = submissionService.listByStudentNo(studentNo);
+        List<TaskSubmission> submissions = submissionService.listByStudentNoAndCourse(studentNo, courseCode);
+        if (tasks == null || tasks.isEmpty()) {
+            List<LearningTask> courseTasks = taskService.listByCourseCode(courseCode);
+            if (courseTasks != null) tasks = courseTasks;
+        }
+        if (tasks == null) tasks = List.of();
+        if (submissions == null) {
+            submissions = submissionService.listByStudentNo(studentNo);
+            if (submissions == null) submissions = List.of();
+        }
 
         // 建立 taskNo → submission 映射（取最新一次提交）
         Map<String, TaskSubmission> subMap = new HashMap<>();
@@ -93,10 +102,16 @@ public class LearningProgressServiceImpl implements LearningProgressService {
         }
 
         // 获取最近行为日志（最近10条，作为学习时间线）
-        List<LearningBehaviorLog> logs = behaviorLogService.listByUserId(studentNo);
+        List<LearningBehaviorLog> logs = behaviorLogService.listRecentByUserId(studentNo, 10);
+        if (logs == null) {
+            logs = behaviorLogService.listByUserId(studentNo);
+            if (logs == null) logs = List.of();
+            logs = logs.stream()
+                    .sorted(Comparator.comparing(LearningBehaviorLog::getCreatedAt).reversed())
+                    .limit(10)
+                    .toList();
+        }
         List<Map<String, Object>> timeline = logs.stream()
-                .sorted(Comparator.comparing(LearningBehaviorLog::getCreatedAt).reversed())
-                .limit(10)
                 .map(log -> {
                     Map<String, Object> entry = new LinkedHashMap<>();
                     entry.put("actionType", log.getActionType());
@@ -121,12 +136,21 @@ public class LearningProgressServiceImpl implements LearningProgressService {
     @Override
     public Map<String, Object> buildCourseProgress(String courseCode) {
         List<LearningTask> tasks = taskService.listByCourseCode(courseCode);
+        if (tasks == null) tasks = List.of();
         List<TaskAssignment> assignments = assignmentService.list(new LambdaQueryWrapper<TaskAssignment>()
                 .eq(TaskAssignment::getCourseCode, courseCode)
                 .ne(TaskAssignment::getStatus, "cancelled"));
+        if (assignments == null) assignments = List.of();
+        boolean hasExplicitAssignments = !assignments.isEmpty();
+        Set<String> allTaskNos = tasks.stream()
+                .map(LearningTask::getTaskNo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
         // 课程进度矩阵以学生花名册为行来源，再叠加任务分配和提交状态。
-        Set<String> studentNoSet = studentService.list().stream()
+        List<Student> roster = studentService.list();
+        if (roster == null) roster = List.of();
+        Set<String> studentNoSet = roster.stream()
                 .map(Student::getStudentNo)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -139,26 +163,43 @@ public class LearningProgressServiceImpl implements LearningProgressService {
                     .add(assignment.getTaskNo());
         }
 
-        for (LearningTask task : tasks) {
-            List<TaskSubmission> submissions = submissionService.listByTaskNo(task.getTaskNo());
-            for (TaskSubmission sub : submissions) {
-                studentNoSet.add(sub.getStudentNo());
-                studentSubMap.computeIfAbsent(sub.getStudentNo(), k -> new HashMap<>())
-                        .put(sub.getTaskNo(), sub);
+        List<TaskSubmission> courseSubmissions = submissionService.listByCourseCode(courseCode);
+        if (courseSubmissions == null) {
+            courseSubmissions = new ArrayList<>();
+            for (LearningTask task : tasks) {
+                List<TaskSubmission> submissions = submissionService.listByTaskNo(task.getTaskNo());
+                if (submissions != null) courseSubmissions.addAll(submissions);
             }
         }
+        for (TaskSubmission sub : courseSubmissions) {
+            if (sub.getStudentNo() == null || sub.getTaskNo() == null) continue;
+            studentNoSet.add(sub.getStudentNo());
+            Map<String, TaskSubmission> subMap = studentSubMap.computeIfAbsent(sub.getStudentNo(), k -> new HashMap<>());
+            TaskSubmission existing = subMap.get(sub.getTaskNo());
+            if (existing == null || isAfter(sub.getSubmitTime(), existing.getSubmitTime())) {
+                subMap.put(sub.getTaskNo(), sub);
+            }
+        }
+
+        Collection<Student> studentRecords = studentNoSet.isEmpty() ? List.of() : studentService.listByIds(studentNoSet);
+        if (studentRecords == null) studentRecords = List.of();
+        Map<String, Student> studentIndex = studentRecords.stream()
+                .filter(student -> student.getStudentNo() != null)
+                .collect(Collectors.toMap(Student::getStudentNo, student -> student, (a, b) -> a));
 
         // 构建每个学生的进度行
         List<Map<String, Object>> studentRows = new ArrayList<>();
         for (String studentNo : studentNoSet) {
-            Student s = studentService.getById(studentNo);
+            Student s = studentIndex.get(studentNo);
             Map<String, TaskSubmission> subMap = studentSubMap.getOrDefault(studentNo, Collections.emptyMap());
 
             int completedCount = 0;
             int overdueCount = 0;
             LocalDateTime lastActive = null;
             List<Map<String, Object>> taskCells = new ArrayList<>();
-            Set<String> assignedTaskNos = assignedTaskNosByStudent.getOrDefault(studentNo, Collections.emptySet());
+            Set<String> assignedTaskNos = hasExplicitAssignments
+                    ? assignedTaskNosByStudent.getOrDefault(studentNo, Collections.emptySet())
+                    : allTaskNos;
 
             for (LearningTask task : tasks) {
                 TaskSubmission sub = subMap.get(task.getTaskNo());
@@ -245,5 +286,10 @@ public class LearningProgressServiceImpl implements LearningProgressService {
         result.put("riskCount", riskCount);
 
         return result;
+    }
+
+    private boolean isAfter(LocalDateTime current, LocalDateTime previous) {
+        if (current == null) return false;
+        return previous == null || current.isAfter(previous);
     }
 }

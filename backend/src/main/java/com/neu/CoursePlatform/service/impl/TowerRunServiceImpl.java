@@ -31,6 +31,7 @@ import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.FloorProgressService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.TowerRunService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -129,7 +130,15 @@ public class TowerRunServiceImpl implements TowerRunService {
                 .findFirst()
                 .orElse(planned.get(0).getNodeId());
         run.setCurrentNodeId(firstAvailable);
-        runMapper.insert(run);
+        try {
+            runMapper.insert(run);
+        } catch (DuplicateKeyException e) {
+            if (!force) {
+                StudentTowerRun existing = activeRun(studentNo, courseCode);
+                if (existing != null) return toRunDto(existing, nodes(existing.getRunId()));
+            }
+            throw e;
+        }
         planned.forEach(nodeMapper::insert);
         return toRunDto(run, planned);
     }

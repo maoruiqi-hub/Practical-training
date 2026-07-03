@@ -1,6 +1,7 @@
 package com.neu.CoursePlatform.service.impl;
 
 import com.neu.CoursePlatform.entity.LearningTask;
+import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.SubmissionAnswer;
 import com.neu.CoursePlatform.service.AnalysisService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
@@ -12,6 +13,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class AnalysisServiceImpl implements AnalysisService {
@@ -33,6 +36,11 @@ public class AnalysisServiceImpl implements AnalysisService {
     }
 
     @Override
+    public Map<String, Object> buildStudentWrongStats(String studentNo, String courseCode, String taskNo, String knowledgePointId, String type) {
+        return buildWrongStats(answerService.listByStudentNoAndCourse(studentNo, courseCode, taskNo, knowledgePointId, type));
+    }
+
+    @Override
     public Map<String, Object> buildTaskWrongStats(String taskNo) {
         return buildWrongStats(answerService.listByTaskNo(taskNo));
     }
@@ -49,19 +57,21 @@ public class AnalysisServiceImpl implements AnalysisService {
     }
 
     private Map<String, Object> buildWrongStats(List<SubmissionAnswer> answers) {
+        if (answers == null) answers = List.of();
+        Map<String, String> knowledgeNameIndex = knowledgeNameIndex(answers);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalAnswers", answers.size());
         result.put("wrongAnswers", answers.stream().filter(this::isWrong).count());
         result.put("byQuestion", aggregate(answers, SubmissionAnswer::getQuestionId));
-        result.put("byKnowledgePoint", aggregateKnowledgePoint(answers));
+        result.put("byKnowledgePoint", aggregateKnowledgePoint(answers, knowledgeNameIndex));
         result.put("byType", aggregate(answers, a -> emptyAsUnknown(a.getQuestionType())));
-        result.put("wrongList", buildWrongList(answers));
-        result.put("mastery", buildMastery(answers));
-        result.put("recommendations", buildRecommendations(answers));
+        result.put("wrongList", buildWrongList(answers, knowledgeNameIndex));
+        result.put("mastery", buildMastery(answers, knowledgeNameIndex));
+        result.put("recommendations", buildRecommendations(answers, knowledgeNameIndex));
         return result;
     }
 
-    private List<Map<String, Object>> buildWrongList(List<SubmissionAnswer> answers) {
+    private List<Map<String, Object>> buildWrongList(List<SubmissionAnswer> answers, Map<String, String> knowledgeNameIndex) {
         List<Map<String, Object>> list = new ArrayList<>();
         for (SubmissionAnswer answer : answers) {
             if (!isWrong(answer)) continue;
@@ -72,7 +82,7 @@ public class AnalysisServiceImpl implements AnalysisService {
             item.put("stem", answer.getQuestionStem());
             item.put("questionType", answer.getQuestionType());
             item.put("knowledgePointId", answer.getKnowledgePointId());
-            item.put("knowledgePointName", knowledgeName(answer.getKnowledgePointId()));
+            item.put("knowledgePointName", knowledgeName(answer.getKnowledgePointId(), knowledgeNameIndex));
             item.put("studentAnswer", answer.getStudentAnswer());
             item.put("correctAnswer", answer.getCorrectAnswer());
             item.put("score", answer.getScore());
@@ -83,7 +93,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         return list;
     }
 
-    private List<Map<String, Object>> aggregateKnowledgePoint(List<SubmissionAnswer> answers) {
+    private List<Map<String, Object>> aggregateKnowledgePoint(List<SubmissionAnswer> answers, Map<String, String> knowledgeNameIndex) {
         Map<String, List<SubmissionAnswer>> groups = new LinkedHashMap<>();
         for (SubmissionAnswer answer : answers) {
             groups.computeIfAbsent(emptyAsUnknown(answer.getKnowledgePointId()), k -> new ArrayList<>()).add(answer);
@@ -92,7 +102,7 @@ public class AnalysisServiceImpl implements AnalysisService {
         groups.forEach((key, list) -> {
             long wrong = list.stream().filter(this::isWrong).count();
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("key", knowledgeName(key));
+            item.put("key", knowledgeName(key, knowledgeNameIndex));
             item.put("knowledgePointId", key);
             item.put("total", list.size());
             item.put("wrong", wrong);
@@ -103,9 +113,9 @@ public class AnalysisServiceImpl implements AnalysisService {
         return stats;
     }
 
-    private List<Map<String, Object>> buildMastery(List<SubmissionAnswer> answers) {
+    private List<Map<String, Object>> buildMastery(List<SubmissionAnswer> answers, Map<String, String> knowledgeNameIndex) {
         List<Map<String, Object>> mastery = new ArrayList<>();
-        for (Map<String, Object> stat : aggregateKnowledgePoint(answers)) {
+        for (Map<String, Object> stat : aggregateKnowledgePoint(answers, knowledgeNameIndex)) {
             long total = ((Number) stat.get("total")).longValue();
             long wrong = ((Number) stat.get("wrong")).longValue();
             double masteryRate = total == 0 ? 0 : Math.round((total - wrong) * 1000.0 / total) / 10.0;
@@ -122,9 +132,9 @@ public class AnalysisServiceImpl implements AnalysisService {
         return mastery;
     }
 
-    private List<Map<String, Object>> buildRecommendations(List<SubmissionAnswer> answers) {
+    private List<Map<String, Object>> buildRecommendations(List<SubmissionAnswer> answers, Map<String, String> knowledgeNameIndex) {
         List<Map<String, Object>> recommendations = new ArrayList<>();
-        for (Map<String, Object> item : buildMastery(answers)) {
+        for (Map<String, Object> item : buildMastery(answers, knowledgeNameIndex)) {
             long total = ((Number) item.get("total")).longValue();
             long wrong = ((Number) item.get("wrong")).longValue();
             double masteryRate = ((Number) item.get("masteryRate")).doubleValue();
@@ -175,9 +185,28 @@ public class AnalysisServiceImpl implements AnalysisService {
         return value == null || value.isBlank() ? "未分类" : value;
     }
 
-    private String knowledgeName(String knowledgePointId) {
+    private Map<String, String> knowledgeNameIndex(List<SubmissionAnswer> answers) {
+        List<String> ids = answers.stream()
+                .map(SubmissionAnswer::getKnowledgePointId)
+                .filter(Objects::nonNull)
+                .filter(id -> !id.isBlank())
+                .filter(id -> !"未分类".equals(id))
+                .distinct()
+                .toList();
+        if (ids.isEmpty()) return Map.of();
+        List<KnowledgePoint> points = knowledgePointService.listByIds(ids);
+        if (points == null) {
+            points = ids.stream()
+                    .map(knowledgePointService::getById)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        return points.stream()
+                .collect(Collectors.toMap(KnowledgePoint::getKnowledgePointId, KnowledgePoint::getName, (a, b) -> a));
+    }
+
+    private String knowledgeName(String knowledgePointId, Map<String, String> knowledgeNameIndex) {
         if (knowledgePointId == null || knowledgePointId.isBlank() || "未分类".equals(knowledgePointId)) return "未分类";
-        var point = knowledgePointService.getById(knowledgePointId);
-        return point != null ? point.getName() : "未分类";
+        return knowledgeNameIndex.getOrDefault(knowledgePointId, "未分类");
     }
 }

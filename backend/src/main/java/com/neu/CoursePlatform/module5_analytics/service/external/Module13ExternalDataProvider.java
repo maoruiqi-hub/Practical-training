@@ -83,9 +83,8 @@ public class Module13ExternalDataProvider implements ExternalDataProvider {
         Student student = studentService.getById(studentId);
         result.setStudentName(student == null ? "" : student.getName());
         int total = taskService.listByCourseCode(courseId).size();
-        int submitted = (int) submissionService.listByStudentNo(studentId).stream()
+        int submitted = (int) submissionService.listByStudentNoAndCourse(studentId, courseId).stream()
                 .filter(item -> !"superseded".equals(item.getStatus()))
-                .filter(item -> courseId.equals(submissionService.getTaskCourseCode(item.getTaskNo())))
                 .map(TaskSubmission::getTaskNo)
                 .filter(Objects::nonNull)
                 .distinct()

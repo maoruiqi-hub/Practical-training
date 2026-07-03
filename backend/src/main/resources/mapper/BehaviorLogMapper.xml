@@ -7,8 +7,21 @@
         SELECT * FROM learning_behavior_log WHERE user_id = #{userId} ORDER BY created_at DESC
     </select>
 
+    <select id="selectRecentByUserId" resultType="com.neu.CoursePlatform.entity.LearningBehaviorLog">
+        SELECT * FROM learning_behavior_log
+        WHERE user_id = #{userId}
+        ORDER BY created_at DESC
+        LIMIT #{limit}
+    </select>
+
     <select id="selectByTaskNo" resultType="com.neu.CoursePlatform.entity.LearningBehaviorLog">
         SELECT * FROM learning_behavior_log WHERE task_no = #{taskNo} ORDER BY created_at DESC
+    </select>
+
+    <select id="sumDurationByUserId" resultType="java.lang.Long">
+        SELECT COALESCE(SUM(duration), 0)
+        FROM learning_behavior_log
+        WHERE user_id = #{userId}
     </select>
 
     <select id="selectByFilters" resultType="com.neu.CoursePlatform.entity.LearningBehaviorLog">

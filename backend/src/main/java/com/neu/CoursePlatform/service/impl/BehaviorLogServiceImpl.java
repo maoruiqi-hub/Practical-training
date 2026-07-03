@@ -30,6 +30,12 @@ public class BehaviorLogServiceImpl extends ServiceImpl<BehaviorLogMapper, Learn
     }
 
     @Override
+    public List<LearningBehaviorLog> listRecentByUserId(String userId, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return baseMapper.selectRecentByUserId(userId, safeLimit);
+    }
+
+    @Override
     public List<LearningBehaviorLog> listByTaskNo(String taskNo) {
         return baseMapper.selectByTaskNo(taskNo);
     }
@@ -45,5 +51,11 @@ public class BehaviorLogServiceImpl extends ServiceImpl<BehaviorLogMapper, Learn
                 filters.get("startTime"),
                 filters.get("endTime")
         );
+    }
+
+    @Override
+    public long sumDurationByUserId(String userId) {
+        Long total = baseMapper.sumDurationByUserId(userId);
+        return total == null ? 0 : total;
     }
 }

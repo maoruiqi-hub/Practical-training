@@ -105,6 +105,7 @@ public class CourseResourceController {
                                           @RequestParam(defaultValue = "false") boolean download,
                                           @RequestParam(defaultValue = "false") boolean preview,
                                           HttpSession session) {
+        if (!auth.isLoggedIn(session)) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         CourseResource resource = courseResourceService.getById(resourceId);
         if (resource == null) return ResponseEntity.notFound().build();
         if (preview && (resource.getPreviewFileUrl() == null || !"ready".equals(resource.getPreviewStatus()))) {
