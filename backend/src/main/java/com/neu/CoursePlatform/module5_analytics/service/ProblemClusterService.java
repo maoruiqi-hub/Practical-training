@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.agentic.AgenticClient;
-import com.neu.CoursePlatform.module5_analytics.dto.WeakPointDTO;
+import com.neu.CoursePlatform.module5_analytics.dto.external.MistakeStatsDTO;
 import com.neu.CoursePlatform.module5_analytics.service.external.ExternalDataProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,8 +68,8 @@ public class ProblemClusterService {
             // 解析响应（简化：假设返回 JSON 数组）
             return parseClusterResponse(rawResponse);
         } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 聚类服务不可用: {}", e.getMessage());
-            return null; // R5.5: 返回 null 表示不可用，Controller 返回 503
+            log.warn("Agentic 聚类服务不可用，使用学情数据兜底生成聚类结果: {}", e.getMessage());
+            return buildFallbackClusters(mistakeStats, studentIds.size());
         }
     }
 
@@ -80,6 +80,43 @@ public class ProblemClusterService {
     public List<Map<String, Object>> getLatestCluster(String classId) {
         // Phase 4: 从 AnalyticsReport 表读取历史聚类结果
         return List.of();
+    }
+
+    private List<Map<String, Object>> buildFallbackClusters(List<MistakeStatsDTO> mistakeStats, int studentCount) {
+        String generatedAt = LocalDateTime.now().toString();
+        if (mistakeStats == null || mistakeStats.isEmpty()) {
+            return List.of(new LinkedHashMap<>(Map.of(
+                    "topic", "暂无明显共性问题",
+                    "student_count", 0,
+                    "description", "当前课程暂无足够错题数据，建议先积累测验作答后再分析。",
+                    "suggested_action", "补充一次随堂测验或章节练习，获取更稳定的班级薄弱点。",
+                    "generated_at", generatedAt,
+                    "source", "fallback"
+            )));
+        }
+
+        return mistakeStats.stream()
+                .sorted(Comparator.comparingDouble(MistakeStatsDTO::getMistakeRate).reversed())
+                .limit(5)
+                .map(stat -> {
+                    String kpName = Optional.ofNullable(stat.getKnowledgePointName())
+                            .filter(name -> !name.isBlank())
+                            .orElse("未命名知识点");
+                    int affected = Math.max(stat.getMistakeCount(),
+                            (int) Math.ceil(Math.max(studentCount, 1) * stat.getMistakeRate()));
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("topic", kpName + "共性错误");
+                    item.put("student_count", affected);
+                    item.put("knowledge_points", List.of(kpName));
+                    item.put("description", String.format(Locale.ROOT,
+                            "%s 错误率约 %.1f%%，共 %d 次作答中出现 %d 次错误。",
+                            kpName, stat.getMistakeRate() * 100, stat.getTotalAttempts(), stat.getMistakeCount()));
+                    item.put("suggested_action", "安排针对该知识点的例题讲解和短练习，课后跟踪订正情况。");
+                    item.put("generated_at", generatedAt);
+                    item.put("source", "fallback");
+                    return item;
+                })
+                .toList();
     }
 
     @SuppressWarnings("unchecked")
