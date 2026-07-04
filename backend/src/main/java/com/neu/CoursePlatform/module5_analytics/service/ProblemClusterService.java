@@ -12,6 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 共性问题聚类服务（T8, R5.1-R5.6）
@@ -20,6 +24,7 @@ import java.util.*;
 public class ProblemClusterService {
 
     private static final Logger log = LoggerFactory.getLogger(ProblemClusterService.class);
+    private static final long AI_TIMEOUT_SECONDS = 15;
 
     private final AgenticClient agenticClient;
     private final ExternalDataProvider dataProvider;
@@ -64,11 +69,23 @@ public class ProblemClusterService {
 
         // 3. 调用 agentic
         try {
-            String rawResponse = agenticClient.clusterProblems(request);
-            // 解析响应（简化：假设返回 JSON 数组）
-            return parseClusterResponse(rawResponse);
-        } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 聚类服务不可用，使用学情数据兜底生成聚类结果: {}", e.getMessage());
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    String rawResponse = agenticClient.clusterProblems(request);
+                    return parseClusterResponse(rawResponse);
+                } catch (AgenticClient.AgenticException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Agentic cluster timed out after {} seconds, using fallback result", AI_TIMEOUT_SECONDS);
+            return buildFallbackClusters(mistakeStats, studentIds.size());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Agentic cluster interrupted, using fallback result");
+            return buildFallbackClusters(mistakeStats, studentIds.size());
+        } catch (ExecutionException e) {
+            log.warn("Agentic cluster failed, using fallback result: {}", e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
             return buildFallbackClusters(mistakeStats, studentIds.size());
         }
     }

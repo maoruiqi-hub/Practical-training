@@ -15,6 +15,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 教学建议服务（T9, R6.1-R6.6）
@@ -23,6 +27,7 @@ import java.util.*;
 public class TeachingSuggestionService {
 
     private static final Logger log = LoggerFactory.getLogger(TeachingSuggestionService.class);
+    private static final long AI_TIMEOUT_SECONDS = 15;
 
     private final AgenticClient agenticClient;
     private final ExternalDataProvider dataProvider;
@@ -67,10 +72,23 @@ public class TeachingSuggestionService {
         );
 
         try {
-            String rawResponse = agenticClient.teachingSuggestions(request);
-            return parseSuggestionResponse(rawResponse);
-        } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 教学建议服务不可用，使用学情数据兜底生成建议: {}", e.getMessage());
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    String rawResponse = agenticClient.teachingSuggestions(request);
+                    return parseSuggestionResponse(rawResponse);
+                } catch (AgenticClient.AgenticException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Agentic class suggestions timed out after {} seconds, using fallback result", AI_TIMEOUT_SECONDS);
+            return buildFallbackClassSuggestions(weakPoints, avgRate, riskCount);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Agentic class suggestions interrupted, using fallback result");
+            return buildFallbackClassSuggestions(weakPoints, avgRate, riskCount);
+        } catch (ExecutionException e) {
+            log.warn("Agentic class suggestions failed, using fallback result: {}", e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
             return buildFallbackClassSuggestions(weakPoints, avgRate, riskCount);
         }
     }
@@ -98,10 +116,23 @@ public class TeachingSuggestionService {
         );
 
         try {
-            String rawResponse = agenticClient.teachingSuggestions(request);
-            return parseSuggestionResponse(rawResponse);
-        } catch (AgenticClient.AgenticException e) {
-            log.warn("Agentic 干预建议不可用，使用学生数据兜底生成建议: {}", e.getMessage());
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    String rawResponse = agenticClient.teachingSuggestions(request);
+                    return parseSuggestionResponse(rawResponse);
+                } catch (AgenticClient.AgenticException e) {
+                    throw new RuntimeException(e);
+                }
+            }).get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Agentic student suggestions timed out after {} seconds, using fallback result", AI_TIMEOUT_SECONDS);
+            return buildFallbackStudentSuggestions(studentId, progress, riskStatus.highestLevel());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Agentic student suggestions interrupted, using fallback result");
+            return buildFallbackStudentSuggestions(studentId, progress, riskStatus.highestLevel());
+        } catch (ExecutionException e) {
+            log.warn("Agentic student suggestions failed, using fallback result: {}", e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
             return buildFallbackStudentSuggestions(studentId, progress, riskStatus.highestLevel());
         }
     }
