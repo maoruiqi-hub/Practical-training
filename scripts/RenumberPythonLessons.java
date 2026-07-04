@@ -9,8 +9,8 @@ public class RenumberPythonLessons {
     private static final String COURSE_CODE = "1";
 
     public static void main(String[] args) throws Exception {
-        String url = getenv("DB_URL", "jdbc:postgresql://219.216.65.31:54321/course_platform");
-        String username = getenv("DB_USERNAME", "system");
+        String url = getenv("DB_URL", "jdbc:postgresql://localhost:5432/course_platform");
+        String username = getenv("DB_USERNAME", "postgres");
         String password = getenv("DB_PASSWORD", "");
 
         Map<String, String> mapping = new LinkedHashMap<>();
