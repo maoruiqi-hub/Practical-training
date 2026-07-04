@@ -174,6 +174,28 @@ const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
 const displayOptions = computed(() => parseQuestionOptions(activeQuestion.value.options))
 const enemyName = computed(() => props.bossMode ? '章节首领' : props.roomType === 'elite' ? '精英知识敌人' : '知识敌人')
 const answerSource = computed(() => props.bossMode ? 'boss_room' : props.roomType === 'elite' ? 'elite_room' : 'battle_room')
+const currentUser = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}')
+  } catch {
+    return {}
+  }
+})
+const matchesDangshenghang = value => String(value || '').trim().toLowerCase() === 'dangshenghang'
+const isUnlimitedAttemptStudent = computed(() =>
+  [
+    props.studentId,
+    currentUser.value.username,
+    currentUser.value.name,
+    currentUser.value.studentNo,
+    currentUser.value.student_no,
+    currentUser.value.no,
+    currentUser.value.id
+  ].some(matchesDangshenghang)
+)
+const shouldSubmitLearningTask = computed(() =>
+  Boolean(props.taskNo) && !usingFallbackQuestions.value && !(props.roomType === 'elite' && isUnlimitedAttemptStudent.value)
+)
 const enemyToken = computed(() => {
   if (props.bossMode) return enemySprites.bossEnemy
   if (props.roomType === 'elite') return enemySprites.eliteEnemy
@@ -479,10 +501,24 @@ const finishBattle = async forcedCleared => {
 
 const submitBattle = async forcedCleared => {
   submitting.value = true
+  if (props.roomType === 'elite' && isUnlimitedAttemptStudent.value) {
+    const correctRate = currentCorrectRate()
+    emit('profile-refresh')
+    emit('battle-end', {
+      cleared: Boolean(forcedCleared) && playerHp.value > 0,
+      correctRate,
+      battleCorrectRate: correctRate,
+      hpLeft: playerHp.value,
+      packId: packId.value,
+      answerSummary: answerRecords.value
+    })
+    submitting.value = false
+    return
+  }
   try {
     const correctRate = currentCorrectRate()
 
-    if (props.taskNo && !usingFallbackQuestions.value) {
+    if (shouldSubmitLearningTask.value) {
       const content = questions.value.map(question => ({
         no: question.questionId,
         response: Array.isArray(answers[question.questionId])

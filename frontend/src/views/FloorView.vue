@@ -630,6 +630,21 @@ const syncDiagnosisResult = async result => {
   }
 }
 
+const localEliteReport = result => ({
+  status: result.cleared ? 'cleared' : 'failed',
+  correctRate: result.battleCorrectRate ?? result.correctRate ?? 0,
+  aiReportStatus: 'local_fallback',
+  reportSource: 'local_elite_result',
+  report: {
+    summary: result.cleared
+      ? '精英关卡挑战完成，已根据本次答题结果生成本地诊断。'
+      : '精英关卡未通过，建议复盘本次错题后重试。',
+    weaknesses: result.cleared ? [] : ['本次精英关卡存在未掌握题目'],
+    recommendedAction: result.cleared ? '返回地图继续推进' : '查看错题并重新挑战',
+    reviewFocus: []
+  }
+})
+
 const handleBattleEnd = async result => {
   battleResult.value = {
     ...result,
@@ -645,7 +660,9 @@ const handleBattleEnd = async result => {
   }
   diagnosisSyncError.value = ''
   diagnosisSyncing.value = true
-  diagnosisResult.value = null
+  diagnosisResult.value = isDangshenghang.value && activeRoomType.value === 'elite'
+    ? localEliteReport(result)
+    : null
   phase.value = 'settlement'
 
   const syncBattle = async () => {
@@ -671,11 +688,15 @@ const handleBattleEnd = async result => {
         pendingReport: payload.aiReportStatus === 'pending'
       }
       if (payload.aiReportStatus === 'pending') {
-        diagnosisResult.value = null
+        diagnosisResult.value = isDangshenghang.value && activeRoomType.value === 'elite'
+          ? localEliteReport(result)
+          : null
         return
       }
       if (payload.aiReportStatus === 'failed') {
-        diagnosisResult.value = null
+        diagnosisResult.value = isDangshenghang.value && activeRoomType.value === 'elite'
+          ? localEliteReport(result)
+          : null
         diagnosisSyncError.value = payload.errorMessage || 'AI 诊断生成失败，请稍后重试。'
         battleResult.value = { ...battleResult.value, pendingReport: false }
         return
@@ -709,6 +730,11 @@ const handleBattleEnd = async result => {
       ElMessage.warning(diagnosisSyncError.value)
     })
     .finally(() => {
+      if (isDangshenghang.value && activeRoomType.value === 'elite' && battleResult.value.pendingReport) {
+        diagnosisResult.value = localEliteReport(result)
+        battleResult.value = { ...battleResult.value, pendingReport: false }
+        radarRefreshKey.value += 1
+      }
       diagnosisSyncing.value = false
     })
 }
