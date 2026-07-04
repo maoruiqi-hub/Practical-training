@@ -65,7 +65,7 @@ const props = defineProps({
   initialQuestion: { type: String, default: '' }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'question-sent'])
 
 const visible = computed({
   get: () => props.modelValue,
@@ -196,6 +196,7 @@ const sendQuestion = async () => {
 
     messages.value.push({ role: 'assistant', content: extractAnswer(response) })
     reportAiEvent()
+    emit('question-sent', { mode: props.mode, knowledgePointId: props.knowledgePointId })
   } catch {
     errorMessage.value = 'AI 服务暂不可用，请稍后重试'
     messages.value.push({ role: 'assistant', content: errorMessage.value })

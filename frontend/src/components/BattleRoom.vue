@@ -270,7 +270,9 @@ const isCorrect = question => {
 
 const setupBattleState = () => {
   const baseHp = props.bossMode ? 120 : props.roomType === 'elite' ? 92 : 74
-  enemyMaxHp.value = Math.max(baseHp, questions.value.length * (props.bossMode ? 18 : 14))
+  enemyMaxHp.value = props.roomType === 'elite'
+    ? 100
+    : Math.max(baseHp, questions.value.length * (props.bossMode ? 18 : 14))
   enemyHp.value = enemyMaxHp.value
   playerHp.value = Math.min(playerMaxHp.value, Math.max(1, props.initialHp || playerMaxHp.value))
   playerBlock.value = 0
@@ -428,6 +430,20 @@ const applyDamage = () => {
   return damage
 }
 
+const applyEnemyDamage = (amount = 10) => {
+  if (finished.value || loading.value) return false
+  const damage = Math.max(0, Number(amount || 0))
+  if (!damage) return false
+  enemyHp.value = Math.max(0, enemyHp.value - damage)
+  hitFlash.value = true
+  feedback.value = { type: 'correct', text: `AI Tutor helped: enemy HP -${damage}` }
+  setTimeout(() => { hitFlash.value = false }, 420)
+  setTimeout(() => {
+    if (!finished.value && enemyHp.value <= 0) finishBattle(true)
+  }, 760)
+  return true
+}
+
 const currentCorrectRate = () => {
   const gradableRecords = answerRecords.value.filter(record => record.source === answerSource.value && record.autoGradable)
   if (!gradableRecords.length) return 0
@@ -523,6 +539,10 @@ const recordAnswerEvent = async (correct, skipped) => {
 }
 
 onMounted(loadQuestions)
+
+defineExpose({
+  applyEnemyDamage
+})
 </script>
 
 <style scoped>

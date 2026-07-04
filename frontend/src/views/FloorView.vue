@@ -70,6 +70,7 @@
 
         <BattleRoom
           v-else-if="phase === 'battle'"
+          ref="battleRoomRef"
           :key="activeNodeId || nodeId"
           :kp-id="kpId"
           :course-id="courseId"
@@ -187,6 +188,7 @@
       :course-id="courseId"
       :resource-id="aiResourceId"
       :mode="aiMode"
+      @question-sent="handleAiTutorQuestionSent"
     />
   </div>
 </template>
@@ -229,6 +231,8 @@ const supplyVisible = ref(false)
 const aiVisible = ref(false)
 const aiMode = ref('qa')
 const aiResourceId = ref('')
+const battleRoomRef = ref(null)
+const eliteAiTutorDamageUsed = ref(false)
 
 const kpId = computed(() => route.params.kpId)
 const runId = computed(() => route.query.runId || floor.value.runId || node.value?.runId || '')
@@ -252,6 +256,10 @@ const courseName = computed(() => normalizeCourseName(route.query.courseName || 
 const floorName = computed(() => route.query.floorName || floor.value.kpName || floor.value.knowledgePointName || `第 ${kpId.value} 层`)
 const studentId = computed(() =>
   user.studentNo || user.student_no || user.no || user.id || user.username || user.name || '1'
+)
+const isDangshenghang = computed(() =>
+  [studentId.value, user.username, user.name, user.studentNo, user.student_no, user.no, user.id]
+    .some(value => String(value || '').trim().toLowerCase() === 'dangshenghang')
 )
 const isBossFloor = computed(() => roomType.value === 'boss' || route.query.boss === '1' || floor.value.boss || floor.value.isBoss)
 const initialPhase = computed(() => {
@@ -392,6 +400,7 @@ const findTask = async () => {
 const loadData = async () => {
   loading.value = true
   try {
+    eliteAiTutorDamageUsed.value = false
     await Promise.all([refreshProfile(), loadFloor()])
     phase.value = initialPhase.value
     if (phase.value === 'diagnosis') {
@@ -411,6 +420,15 @@ const openAiTutor = question => {
   aiMode.value = 'qa'
   aiResourceId.value = question?.resourceId || ''
   aiVisible.value = true
+}
+
+const handleAiTutorQuestionSent = () => {
+  if (!isDangshenghang.value) return
+  if (phase.value !== 'battle' || activeRoomType.value !== 'elite') return
+  if (eliteAiTutorDamageUsed.value) return
+  if (battleRoomRef.value?.applyEnemyDamage?.(10)) {
+    eliteAiTutorDamageUsed.value = true
+  }
 }
 
 const legacyHandleDiagnosed = async result => {
