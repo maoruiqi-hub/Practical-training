@@ -6,6 +6,7 @@ import com.neu.CoursePlatform.agentic.AgenticResponse;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.dify.DifyClient;
 import com.neu.CoursePlatform.dify.DifyKnowledgeService;
+import com.neu.CoursePlatform.dto.AbilityMapDTO;
 import com.neu.CoursePlatform.dto.CourseQaRequest;
 import com.neu.CoursePlatform.dto.LectureRequest;
 import com.neu.CoursePlatform.entity.CourseResource;
@@ -239,11 +240,15 @@ class CourseAiServiceImplTest {
     }
 
     @Test
-    void generateAbilityMapReturns503WhenAiUnavailable() {
+    void generateAbilityMapReturnsFallbackWhenAiUnavailable() {
         setupWithMockAi(false);
         Result<AgenticResponse> result = service.generateAbilityMap("CS101");
-        assertEquals(503, result.getCode());
-        assertEquals("AI 服务暂不可用", result.getMsg());
+        assertEquals(200, result.getCode());
+        assertNotNull(result.getData());
+        assertTrue(result.getData().isSuccess());
+        assertEquals("local_fallback", result.getData().getData().get("source"));
+        assertEquals(true, result.getData().getData().get("fallback"));
+        assertNotNull(result.getData().getData().get("abilityPoints"));
     }
 
     @Test
@@ -361,7 +366,12 @@ class CourseAiServiceImplTest {
         return (AbilityMapService) Proxy.newProxyInstance(
                 AbilityMapService.class.getClassLoader(),
                 new Class<?>[]{AbilityMapService.class},
-                (proxy, method, args) -> List.of());
+                (proxy, method, args) -> {
+                    if ("getByCourseCode".equals(method.getName())) {
+                        return new AbilityMapDTO(List.of(), List.of()); // 空数据 — 触发 Level 2 兜底
+                    }
+                    return List.of();
+                });
     }
 
     /** 使用匿名子类模拟 AgenticClient（具体类，不是接口） */

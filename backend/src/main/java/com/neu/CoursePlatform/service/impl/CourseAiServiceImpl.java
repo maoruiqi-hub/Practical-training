@@ -4,8 +4,10 @@ import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.agentic.AgenticRequest;
 import com.neu.CoursePlatform.agentic.AgenticResponse;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.dto.AbilityMapDTO;
 import com.neu.CoursePlatform.dto.CourseQaRequest;
 import com.neu.CoursePlatform.dto.LectureRequest;
+import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
 import com.neu.CoursePlatform.entity.AbilityPoint;
 import com.neu.CoursePlatform.entity.CourseResource;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
@@ -146,12 +148,72 @@ public class CourseAiServiceImpl implements CourseAiService {
                 """);
         request.setContext(Map.of("knowledgePoints", knowledgePoints));
         AgenticResponse response = agenticClient.invoke("ability-map", request);
-        if (!response.isSuccess()) return Result.serviceUnavailable("AI 服务暂不可用");
+        if (!response.isSuccess()) {
+            return buildAbilityMapFallback(courseCode, knowledgePoints);
+        }
 
         Map<String, Object> saveResult = saveGeneratedAbilityMap(courseCode, knowledgePoints, response.getData());
         Map<String, Object> data = new LinkedHashMap<>(response.getData());
         data.put("saved", saveResult);
         return Result.ok(new AgenticResponse(true, data, "能力图谱已生成"));
+    }
+
+    /**
+     * 能力图谱生成失败时的两级兜底：
+     * Level 1 — 从数据库加载之前 AI 成功生成过的能力图谱
+     * Level 2 — 按知识点 chapter 字段分组生成规则兜底
+     */
+    private Result<AgenticResponse> buildAbilityMapFallback(String courseCode, List<KnowledgePoint> knowledgePoints) {
+        // Level 1: 尝试从数据库读取已保存的能力图谱
+        var existing = abilityMapService.getByCourseCode(courseCode);
+        if (existing != null && existing.getAbilityPoints() != null && !existing.getAbilityPoints().isEmpty()) {
+            List<Map<String, Object>> abilityPoints = existing.getAbilityPoints().stream().map(ap -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("name", ap.getName());
+                item.put("description", ap.getDescription() != null ? ap.getDescription() : "");
+                List<String> kpIds = existing.getMappings() != null
+                        ? existing.getMappings().stream()
+                        .filter(m -> m.getAbilityPointId().equals(ap.getAbilityPointId()))
+                        .map(m -> m.getKnowledgePointId())
+                        .collect(Collectors.toList())
+                        : List.of();
+                item.put("knowledgePointIds", kpIds);
+                return item;
+            }).collect(Collectors.toList());
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("abilityPoints", abilityPoints);
+            data.put("source", "db_fallback");
+            data.put("fallback", true);
+            return Result.ok(new AgenticResponse(true, data, "AI 服务暂不可用，已加载历史生成的能力图谱"));
+        }
+
+        // Level 2: 基于章节的规则兜底
+        Map<String, List<KnowledgePoint>> chapterGroups = new LinkedHashMap<>();
+        for (KnowledgePoint kp : knowledgePoints) {
+            String chapter = (kp.getChapter() != null && !kp.getChapter().isBlank())
+                    ? kp.getChapter().trim()
+                    : "课程核心能力";
+            chapterGroups.computeIfAbsent(chapter, k -> new ArrayList<>()).add(kp);
+        }
+
+        List<Map<String, Object>> abilityPoints = new ArrayList<>();
+        for (var entry : chapterGroups.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", entry.getKey() + " 综合能力");
+            item.put("description", "掌握 " + entry.getKey() + " 相关知识点");
+            item.put("knowledgePointIds", entry.getValue().stream()
+                    .map(KnowledgePoint::getKnowledgePointId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList()));
+            abilityPoints.add(item);
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("abilityPoints", abilityPoints);
+        data.put("source", "local_fallback");
+        data.put("fallback", true);
+        return Result.ok(new AgenticResponse(true, data, "AI 服务暂不可用，已展示本地兜底数据"));
     }
 
     private Map<String, Object> saveGeneratedAbilityMap(String courseCode,
