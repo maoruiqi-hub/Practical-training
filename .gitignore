@@ -57,3 +57,16 @@ screenshots/
 # Legacy / backup
 Practical-training-master/
 MyApplication1/
+
+# Demo content (large files, not source code)
+resource/LessonResource/
+
+# Third-party reference assets
+**/slay-spire-reference/
+
+# JAR / build artifacts
+*.jar
+*.war
+
+# Personal directories (keep out of public repo)
+specs/毛瑞琪/
