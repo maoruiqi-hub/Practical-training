@@ -52,8 +52,9 @@ public class AgenticClient {
 
     public AgenticClient(DifyClient difyClient, DifyKnowledgeService difyKnowledgeService) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(3000);
-        requestFactory.setReadTimeout(10000);
+        requestFactory.setConnectTimeout(5000);
+        // AI responses, especially class-wide analyses, can exceed a short HTTP timeout.
+        requestFactory.setReadTimeout(60000);
         this.restTemplate = new RestTemplate(requestFactory);
         this.objectMapper = new ObjectMapper();
         this.difyClient = difyClient;

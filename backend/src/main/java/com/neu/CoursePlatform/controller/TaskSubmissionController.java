@@ -11,6 +11,7 @@ import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.TaskAssignmentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -173,6 +174,7 @@ public class TaskSubmissionController {
 
     /** 批改打分 | admin/授课教师
      *  PUT /api/submissions/{submissionId} */
+    @Transactional
     @PutMapping({"/api/submissions/{submissionId}", "/submission/{submissionId}"})
     public Result<Void> grade(@PathVariable String submissionId,
                               @RequestBody TaskSubmission body, HttpSession session) {
@@ -190,6 +192,7 @@ public class TaskSubmissionController {
         sub.setFeedback(body.getFeedback());
         sub.setStatus("graded");
         submissionService.updateById(sub);
+        submissionService.recordReviewedSubjectiveEvidence(sub, body.getManualAnswers());
         assignmentService.markCompleted(sub.getTaskNo(), sub.getStudentNo());
         return Result.ok();
     }

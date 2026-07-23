@@ -11,7 +11,7 @@
         </el-select>
         <el-button :loading="loading" @click="loadAll">刷新</el-button>
         <el-button type="primary" :loading="generating" @click="generateMap">AI生成</el-button>
-        <el-button type="success" @click="openAbility()">新增能力点</el-button>
+        <el-button type="success" :disabled="abilityLimitReached" @click="openAbility()">新增能力点</el-button>
       </div>
     </div>
 
@@ -21,7 +21,7 @@
           <span class="course-code">{{ selectedCourse || '-' }}</span>
           <div>
             <h2>{{ currentCourse?.courseName || '课程能力图谱' }}</h2>
-            <p>{{ abilityPoints.length }} 个能力点 / {{ mappings.length }} 个知识点映射</p>
+            <p>{{ abilityPoints.length }}/{{ MAX_ABILITY_POINTS }} 个能力点 / {{ mappings.length }} 个知识点映射</p>
           </div>
         </div>
         <div class="summary-metrics">
@@ -210,8 +210,10 @@ const aiDraft = ref([])
 const adoptingDraft = ref(false)
 const abilityForm = reactive({ abilityPointId: '', name: '', description: '' })
 const bindForm = reactive({ abilityPointId: '', knowledgePointId: '' })
+const MAX_ABILITY_POINTS = 20
 
 const currentCourse = computed(() => courses.value.find(course => String(course.courseCode) === String(selectedCourse.value)))
+const abilityLimitReached = computed(() => abilityPoints.value.length >= MAX_ABILITY_POINTS)
 
 const linkedKnowledgeCount = computed(() => new Set(mappings.value.map(item => item.knowledgePointId)).size)
 const coverageRate = computed(() => {
@@ -271,13 +273,25 @@ async function loadAll() {
 }
 
 function openAbility(row) {
+  if (!row && abilityLimitReached.value) {
+    ElMessage.warning('每门课程最多只能创建20个能力点')
+    return
+  }
   Object.assign(abilityForm, row || { abilityPointId: '', name: '', description: '' })
   abilityDialog.value = true
 }
 
 async function saveAbility() {
-  if (!selectedCourse.value || !abilityForm.name) return ElMessage.warning('请填写能力点名称')
-  const payload = { courseCode: selectedCourse.value, name: abilityForm.name, description: abilityForm.description }
+  const name = String(abilityForm.name || '').trim()
+  if (!selectedCourse.value || !name) return ElMessage.warning('请填写能力点名称')
+  const duplicate = abilityPoints.value.some(item =>
+    item.abilityPointId !== abilityForm.abilityPointId && normalizeName(item.name) === normalizeName(name)
+  )
+  if (duplicate) return ElMessage.warning('该课程已存在同名能力点')
+  if (!abilityForm.abilityPointId && abilityLimitReached.value) {
+    return ElMessage.warning('每门课程最多只能创建20个能力点')
+  }
+  const payload = { courseCode: selectedCourse.value, name, description: abilityForm.description }
   const res = abilityForm.abilityPointId
     ? await updateAbilityPoint(abilityForm.abilityPointId, payload)
     : await addAbilityPoint(payload)
@@ -379,9 +393,22 @@ async function adoptDraft() {
   if (!selectedCourse.value || !aiDraft.value.length) return
   adoptingDraft.value = true
   try {
+    const existingNames = new Set(abilityPoints.value.map(item => normalizeName(item.name)))
+    let remainingSlots = Math.max(0, MAX_ABILITY_POINTS - abilityPoints.value.length)
     for (const item of aiDraft.value) {
       item.status = 'saving'
       item.error = ''
+      const normalizedDraftName = normalizeName(item.name)
+      if (!normalizedDraftName || existingNames.has(normalizedDraftName)) {
+        item.status = 'failed'
+        item.error = '该课程已存在同名能力点'
+        continue
+      }
+      if (remainingSlots <= 0) {
+        item.status = 'failed'
+        item.error = '每门课程最多只能创建20个能力点'
+        continue
+      }
       try {
         const addRes = await addAbilityPoint({
           courseCode: selectedCourse.value,
@@ -390,6 +417,8 @@ async function adoptDraft() {
         })
         if (addRes.data.code !== 200) throw new Error(addRes.data.msg || '能力点保存失败')
         const abilityPointId = addRes.data.data
+        existingNames.add(normalizedDraftName)
+        remainingSlots -= 1
         const failures = []
         for (const pointName of item.knowledgePointNames) {
           const point = matchKnowledgePoint(pointName)

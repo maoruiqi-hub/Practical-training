@@ -30,6 +30,8 @@ export const completeTowerNode = (studentId, runId, nodeId, data) =>
   api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/complete`, data)
 export const diagnoseTowerNode = (studentId, runId, nodeId, data) =>
   api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/diagnose`, data)
+export const getTowerAttemptReport = (studentId, evaluationId) =>
+  api.get(`/api/students/${studentId}/tower-run/attempts/${evaluationId}/report`)
 export const getTowerQuestionPack = (studentId, runId, nodeId, mode = 'battle') =>
   api.get(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/question-pack`, { params: { mode } })
 export const getAbilityDeltas = (studentId, courseId, runId = '') =>

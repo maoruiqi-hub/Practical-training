@@ -19,6 +19,7 @@ import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.FloorProgressService;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.LearningEvidenceService;
 import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.StudentService;
 import com.neu.CoursePlatform.service.SubmissionAnswerService;
@@ -52,13 +53,15 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     private final CourseGameConfigService gameConfigService;
     private final FloorProgressService floorProgressService;
     private final GameEventPublisher gameEventPublisher;
+    private final LearningEvidenceService learningEvidenceService;
 
     public TaskSubmissionServiceImpl(LearningTaskService taskService, StudentService studentService,
                                      QuestionService questionService, SubmissionAnswerService answerService,
                                      KnowledgePointService knowledgePointService,
                                      CourseGameConfigService gameConfigService,
                                      FloorProgressService floorProgressService,
-                                     GameEventPublisher gameEventPublisher) {
+                                     GameEventPublisher gameEventPublisher,
+                                     LearningEvidenceService learningEvidenceService) {
         this.taskService = taskService;
         this.studentService = studentService;
         this.questionService = questionService;
@@ -67,6 +70,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         this.gameConfigService = gameConfigService;
         this.floorProgressService = floorProgressService;
         this.gameEventPublisher = gameEventPublisher;
+        this.learningEvidenceService = learningEvidenceService;
     }
 
     @Override
@@ -359,6 +363,21 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         LearningTask task = taskService.getById(sub.getTaskNo());
         if (task == null || !taskService.isQuizTask(task)) return;
         List<SubmissionAnswer> answers = answerService.listBySubmissionId(sub.getSubmissionId());
+        if (learningEvidenceService != null) {
+            List<Map<String, Object>> evidenceAnswers = answers.stream()
+                    .filter(answer -> Boolean.TRUE.equals(answer.getAutoGradable()))
+                    .map(answer -> {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("questionId", answer.getQuestionId());
+                        item.put("studentAnswer", answer.getStudentAnswer());
+                        item.put("answered", answer.getStudentAnswer() != null && !answer.getStudentAnswer().isBlank());
+                        return item;
+                    }).toList();
+            Set<String> allowedQuestionIds = answers.stream().map(SubmissionAnswer::getQuestionId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            learningEvidenceService.recordVerifiedAnswers(sub.getStudentNo(), task.getCourseCode(),
+                    sub.getSubmissionId(), "quiz", evidenceAnswers, allowedQuestionIds);
+        }
         for (SubmissionAnswer answer : answers) {
             if (!Boolean.TRUE.equals(answer.getAutoGradable()) || answer.getCorrect() == null) continue;
             GameEvent answerEvent = GameEvent.builder().eventId(SharedIds.newId())
@@ -388,6 +407,49 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                     .eventType(GameEventTypes.BOSS_DEFEATED).studentId(sub.getStudentNo())
                     .courseId(task.getCourseCode()).sourceId(sub.getSubmissionId()).occurredAt(LocalDateTime.now())
                     .payload(Map.of("taskId", task.getTaskNo())).build());
+        }
+    }
+
+    @Override
+    @Transactional
+    public void recordReviewedSubjectiveEvidence(TaskSubmission sub, List<Map<String, Object>> manualAnswers) {
+        if (manualAnswers == null || manualAnswers.isEmpty()) return;
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        if (task == null || !taskService.isQuizTask(task)) return;
+        Map<String, SubmissionAnswer> answerIndex = answerService.listBySubmissionId(sub.getSubmissionId()).stream()
+                .collect(Collectors.toMap(SubmissionAnswer::getQuestionId, answer -> answer, (a, b) -> a));
+        List<Map<String, Object>> reviewed = new ArrayList<>();
+        Set<String> allowed = new LinkedHashSet<>();
+        for (Map<String, Object> grade : manualAnswers) {
+            String questionId = String.valueOf(grade.getOrDefault("questionId", ""));
+            SubmissionAnswer answer = answerIndex.get(questionId);
+            if (answer == null || Boolean.TRUE.equals(answer.getAutoGradable())) {
+                throw new IllegalArgumentException("主观题复核结果与当前提交不匹配");
+            }
+            int maxScore = answer.getMaxScore() == null ? 0 : answer.getMaxScore();
+            int reviewedScore = Math.max(0, Math.min(maxScore, intValue(grade.get("score"), 0)));
+            boolean correct = Boolean.TRUE.equals(grade.get("correct"));
+            answer.setScore(reviewedScore);
+            answer.setCorrect(correct);
+            answerService.updateById(answer);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("questionId", questionId);
+            item.put("studentAnswer", answer.getStudentAnswer());
+            item.put("answered", answer.getStudentAnswer() != null && !answer.getStudentAnswer().isBlank());
+            item.put("correct", correct);
+            reviewed.add(item);
+            allowed.add(questionId);
+        }
+        learningEvidenceService.recordReviewedAnswers(sub.getStudentNo(), task.getCourseCode(),
+                sub.getSubmissionId(), reviewed, allowed);
+    }
+
+    private int intValue(Object value, int fallback) {
+        if (value instanceof Number number) return number.intValue();
+        try {
+            return value == null ? fallback : Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 

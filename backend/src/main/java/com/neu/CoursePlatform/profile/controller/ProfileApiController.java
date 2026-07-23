@@ -250,6 +250,20 @@ public class ProfileApiController {
         }
     }
 
+    @GetMapping("/students/{studentId}/tower-run/attempts/{evaluationId}/report")
+    public Result<Map<String, Object>> towerAttemptReport(@PathVariable String studentId,
+                                                          @PathVariable String evaluationId,
+                                                          HttpSession session) {
+        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerRunService.getAttemptReport(String.valueOf(studentNo), evaluationId));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
     @GetMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/question-pack")
     public Result<Map<String, Object>> towerQuestionPack(@PathVariable String studentId,
                                                          @PathVariable String runId,

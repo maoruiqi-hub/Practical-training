@@ -138,6 +138,12 @@
           <div style="margin-top:4px">📝 学生答案：<span :style="{ color: answerColor(d) }">{{ d.studentAnswer || '(空)' }}</span></div>
           <div v-if="d.type==='single'||d.type==='multi'" style="color:#67c23a">✅ 正确答案：{{ d.correctAnswer }}</div>
           <div v-else style="color:#909399">✅ 参考答案：{{ d.correctAnswer }}</div>
+          <div v-if="!d.autoGradable" class="manual-grade-row">
+            <span>本题得分</span>
+            <el-input-number v-model="d.earnedScore" :min="0" :max="d.score || 0" size="small" />
+            <span>是否达标</span>
+            <el-switch v-model="d.correct" inline-prompt active-text="是" inactive-text="否" />
+          </div>
         </div>
       </div>
       <div v-if="!gradeDetails.length && !gradeLoading" style="text-align:center;color:#999;padding:20px">非测验提交</div>
@@ -502,7 +508,11 @@ const openGrade = async (row) => {
   try {
     const res = await getGradeDetail(row.submissionId)
     if (res.data.code === 200) {
-      gradeDetails.value = res.data.data.details || []
+      gradeDetails.value = (res.data.data.details || []).map(item => ({
+        ...item,
+        earnedScore: item.earnedScore ?? 0,
+        correct: item.correct === true
+      }))
       gradeForm.score = res.data.data.score ?? row.score ?? null
       gradeForm.feedback = res.data.data.feedback || row.feedback || ''
       if (!gradeDetails.value.length || hasAiReviewableQuestions.value) loadAiReview(row.submissionId, false)
@@ -580,7 +590,16 @@ const useAiSuggestions = () => {
 }
 const doGrade = async () => {
   try {
-    const res = await gradeSubmission(gradeForm.submissionId, { score: gradeForm.score, feedback: gradeForm.feedback, status: 'graded' })
+    const res = await gradeSubmission(gradeForm.submissionId, {
+      score: gradeForm.score,
+      feedback: gradeForm.feedback,
+      status: 'graded',
+      manualAnswers: gradeDetails.value.filter(item => !item.autoGradable).map(item => ({
+        questionId: item.questionId,
+        score: item.earnedScore,
+        correct: item.correct === true
+      }))
+    })
     if (res.data.code === 200) {
       ElMessage.success('已完成复核')
       gradeDialog.value = false
@@ -1235,6 +1254,16 @@ onMounted(async () => {
   border-radius: 6px;
   color: #606266;
   line-height: 1.7;
+}
+.manual-grade-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  color: #475569;
 }
 @media (max-width: 960px) {
   .welcome-banner {

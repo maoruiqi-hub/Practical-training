@@ -9,8 +9,8 @@
 
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.LearningTask">
         SELECT * FROM learning_task
-        WHERE task_type LIKE CONCAT('%', #{keyword}, '%')
-           OR description LIKE CONCAT('%', #{keyword}, '%')
+        WHERE task_type LIKE '%' || #{keyword} || '%'
+           OR description LIKE '%' || #{keyword} || '%'
     </select>
 
     <select id="selectFiltered" resultType="com.neu.CoursePlatform.entity.LearningTask">

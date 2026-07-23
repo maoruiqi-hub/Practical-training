@@ -11,6 +11,7 @@ import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.common.event.GameEventPublisher;
+import com.neu.CoursePlatform.common.event.TowerDiagnosisRequestedEvent;
 import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
 import com.neu.CoursePlatform.entity.AbilityPoint;
 import com.neu.CoursePlatform.entity.KnowledgeMastery;
@@ -18,20 +19,24 @@ import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.StudentAbilityDeltaLog;
 import com.neu.CoursePlatform.entity.StudentTowerAttempt;
 import com.neu.CoursePlatform.entity.StudentTowerNode;
+import com.neu.CoursePlatform.entity.StudentTowerQuestionPack;
 import com.neu.CoursePlatform.entity.StudentTowerRun;
 import com.neu.CoursePlatform.mapper.AbilityKnowledgePointMapper;
 import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.mapper.StudentAbilityDeltaLogMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerAttemptMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerNodeMapper;
+import com.neu.CoursePlatform.mapper.StudentTowerQuestionPackMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerRunMapper;
-import com.neu.CoursePlatform.profile.entity.CompetencyScore;
-import com.neu.CoursePlatform.profile.service.ProfileService;
+import com.neu.CoursePlatform.service.AbilityRadarService;
+import com.neu.CoursePlatform.service.AbilitySnapshotService;
 import com.neu.CoursePlatform.service.AbilityPointService;
 import com.neu.CoursePlatform.service.FloorProgressService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
+import com.neu.CoursePlatform.service.LearningEvidenceService;
 import com.neu.CoursePlatform.service.TowerRunService;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,9 +64,13 @@ public class TowerRunServiceImpl implements TowerRunService {
     private final AbilityPointService abilityPointService;
     private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
     private final KnowledgeMasteryMapper knowledgeMasteryMapper;
-    private final ProfileService profileService;
+    private final StudentTowerQuestionPackMapper questionPackMapper;
+    private final LearningEvidenceService learningEvidenceService;
+    private final AbilitySnapshotService abilitySnapshotService;
+    private final AbilityRadarService abilityRadarService;
     private final FloorProgressService floorProgressService;
     private final GameEventPublisher eventPublisher;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final AgenticClient agenticClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -73,9 +82,13 @@ public class TowerRunServiceImpl implements TowerRunService {
                                AbilityPointService abilityPointService,
                                AbilityKnowledgePointMapper abilityKnowledgePointMapper,
                                KnowledgeMasteryMapper knowledgeMasteryMapper,
-                               ProfileService profileService,
+                               StudentTowerQuestionPackMapper questionPackMapper,
+                               LearningEvidenceService learningEvidenceService,
+                               AbilitySnapshotService abilitySnapshotService,
+                               AbilityRadarService abilityRadarService,
                                FloorProgressService floorProgressService,
                                GameEventPublisher eventPublisher,
+                               ApplicationEventPublisher applicationEventPublisher,
                                AgenticClient agenticClient) {
         this.runMapper = runMapper;
         this.nodeMapper = nodeMapper;
@@ -85,9 +98,13 @@ public class TowerRunServiceImpl implements TowerRunService {
         this.abilityPointService = abilityPointService;
         this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
         this.knowledgeMasteryMapper = knowledgeMasteryMapper;
-        this.profileService = profileService;
+        this.questionPackMapper = questionPackMapper;
+        this.learningEvidenceService = learningEvidenceService;
+        this.abilitySnapshotService = abilitySnapshotService;
+        this.abilityRadarService = abilityRadarService;
         this.floorProgressService = floorProgressService;
         this.eventPublisher = eventPublisher;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.agenticClient = agenticClient;
     }
 
@@ -154,6 +171,7 @@ public class TowerRunServiceImpl implements TowerRunService {
     }
 
     @Override
+    @Transactional
     public Map<String, Object> enterNode(String studentNo, String runId, String nodeId) {
         StudentTowerRun run = requireRun(studentNo, runId);
         StudentTowerNode node = requireNode(runId, nodeId);
@@ -163,7 +181,11 @@ public class TowerRunServiceImpl implements TowerRunService {
         run.setCurrentNodeId(nodeId);
         run.setUpdatedAt(LocalDateTime.now());
         runMapper.updateById(run);
-        return getNode(studentNo, runId, nodeId);
+        String evaluationId = SharedIds.newId();
+        abilitySnapshotService.createBeforeSnapshots(evaluationId, studentNo, run.getCourseCode(), runId, nodeId);
+        Map<String, Object> result = new LinkedHashMap<>(getNode(studentNo, runId, nodeId));
+        result.put("evaluationId", evaluationId);
+        return result;
     }
 
     @Override
@@ -173,23 +195,38 @@ public class TowerRunServiceImpl implements TowerRunService {
         StudentTowerNode node = requireNode(runId, nodeId);
         if ("locked".equals(node.getStatus())) throw new IllegalStateException("节点尚未解锁");
 
+        String evaluationId = evaluationId(request, studentNo, run, node);
+        StudentTowerAttempt previousAttempt = attemptMapper.selectById(evaluationId);
+        if (previousAttempt != null) return completedResponse(run, node, previousAttempt);
+
+        LearningEvidenceService.BatchResult evidence = learningEvidenceService.recordVerifiedAnswers(
+                studentNo, run.getCourseCode(), evaluationId, reportStageFor(node), answerList(request),
+                allowedQuestionIds(request, studentNo, run, node));
+
         String result = stringValue(request, "result");
         if (result == null || result.isBlank()) result = Boolean.TRUE.equals(request.get("cleared")) ? "cleared" : "failed";
         String reportStage = reportStageFor(node);
-        RateStats rateStats = calculateBattleCorrectRate(request,
-                doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D)),
-                expectedAnswerSources(reportStage));
+        RateStats rateStats = new RateStats(evidence.correctRate(), evidence.correctCount(), evidence.gradedCount(), "server_evidence");
         double correctRate = rateStats.correctRate;
-        boolean cleared = isClearedResult(result);
-        Map<String, Object> reportEnvelope = buildTowerDiagnosisReport(run, node, request, correctRate, cleared, reportStage);
-        recordAttempt(run, node, studentNo, result, correctRate, request, reportEnvelope);
+        boolean cleared = isClearedResult(result) && correctRate >= ("boss".equals(node.getRoomType()) ? 0.75D : 0.70D);
+        result = cleared ? "cleared" : "failed";
+        Map<String, Object> reportEnvelope = reportEnvelope("pending", null, "async", null, true, false);
+        Map<String, Object> verifiedRequest = new LinkedHashMap<>(request);
+        verifiedRequest.put("answerSummary", verifiedAnswerSummary(answerList(request), evidence.answers()));
+        recordAttempt(evaluationId, run, node, studentNo, result, correctRate, verifiedRequest, reportEnvelope);
         applyCompletion(run, node, result, cleared, correctRate, intValue(request.get("hpLeft"), intValue(request.get("hp_left"), 0)));
+        abilitySnapshotService.createAfterSnapshots(evaluationId);
+        applicationEventPublisher.publishEvent(new TowerDiagnosisRequestedEvent(evaluationId));
         Map<String, Object> response = new LinkedHashMap<>(toRunDto(runMapper.selectById(runId), nodes(runId)));
+        response.put("evaluationId", evaluationId);
         response.put("correctRate", correctRate);
         response.put("battleCorrectRate", correctRate);
+        response.put("cleared", cleared);
         response.put("correctRateSource", rateStats.source);
         response.put("gradedCount", rateStats.gradedCount);
         response.put("correctCount", rateStats.correctCount);
+        response.put("answerResults", evidence.answers());
+        response.put("abilityRadar", abilityRadarService.getAbilityRadar(studentNo, run.getCourseCode(), runId, nodeId));
         response.putAll(reportEnvelope);
         return response;
     }
@@ -199,16 +236,21 @@ public class TowerRunServiceImpl implements TowerRunService {
     public Map<String, Object> diagnoseNode(String studentNo, String runId, String nodeId, Map<String, Object> request) {
         StudentTowerRun run = requireRun(studentNo, runId);
         StudentTowerNode node = requireNode(runId, nodeId);
-        RateStats rateStats = calculateBattleCorrectRate(request,
-                doubleValue(request.get("correctRate"), doubleValue(request.get("correct_rate"), 0D)),
-                Set.of("diagnosis_room"));
+        String evaluationId = evaluationId(request, studentNo, run, node);
+        StudentTowerAttempt previousAttempt = attemptMapper.selectById(evaluationId);
+        if (previousAttempt != null) return completedDiagnosisResponse(run, node, previousAttempt);
+        LearningEvidenceService.BatchResult evidence = learningEvidenceService.recordVerifiedAnswers(
+                studentNo, run.getCourseCode(), evaluationId, "diagnosis_room", answerList(request),
+                allowedQuestionIds(request, studentNo, run, node));
+        RateStats rateStats = new RateStats(evidence.correctRate(), evidence.correctCount(), evidence.gradedCount(), "server_evidence");
         double correctRate = rateStats.gradedCount > 0 ? rateStats.correctRate : 0D;
         boolean perfect = correctRate >= 0.999D;
         StudentTowerNode elite = boundEliteNode(runId, node);
-        recordAttempt(run, node, studentNo, perfect ? "diagnosis_perfect" : "diagnosis_partial", correctRate, request, null);
+        recordAttempt(evaluationId, run, node, studentNo, perfect ? "diagnosis_perfect" : "diagnosis_partial", correctRate, request, null);
         applyCompletion(run, node, perfect ? "diagnosis_perfect" : "diagnosis_partial", true, correctRate, 0);
+        abilitySnapshotService.createAfterSnapshots(evaluationId);
         if (perfect && elite != null && !"cleared".equals(elite.getStatus())) {
-            recordAttempt(run, elite, studentNo, "diagnosis_perfect", correctRate, request, null);
+            recordAttempt(SharedIds.newId(), run, elite, studentNo, "diagnosis_perfect", correctRate, request, null);
             applyCompletion(run, elite, "diagnosis_perfect", true, correctRate, 0);
         } else if (!perfect && elite != null && "locked".equals(elite.getStatus())) {
             elite.setStatus("available");
@@ -219,10 +261,12 @@ public class TowerRunServiceImpl implements TowerRunService {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", perfect ? "perfect" : correctRate >= 0.5D ? "partial" : "weak");
+        result.put("evaluationId", evaluationId);
         result.put("correctRate", correctRate);
         result.put("correctRateSource", rateStats.source);
         result.put("gradedCount", rateStats.gradedCount);
         result.put("correctCount", rateStats.correctCount);
+        result.put("answerResults", evidence.answers());
         result.put("diagnosisPassed", perfect);
         result.put("eliteBypassed", perfect && elite != null);
         result.put("battleBypassed", perfect && elite != null);
@@ -231,6 +275,7 @@ public class TowerRunServiceImpl implements TowerRunService {
         result.put("nextRoomType", !perfect && elite != null ? elite.getRoomType() : null);
         result.put("nextNode", !perfect && elite != null ? toNodeDto(elite, supportIndexes(run.getCourseCode())) : null);
         result.putAll(reportEnvelope("skipped", null, "diagnosis_gate", null, true, false));
+        result.put("abilityRadar", abilityRadarService.getAbilityRadar(studentNo, run.getCourseCode(), runId, nodeId));
         result.put("run", toRunDto(runMapper.selectById(runId), nodes(runId)));
         return result;
     }
@@ -257,6 +302,15 @@ public class TowerRunServiceImpl implements TowerRunService {
             item.put("createdAt", delta.getCreatedAt());
             return item;
         }).toList();
+    }
+
+    @Override
+    public Map<String, Object> getAttemptReport(String studentNo, String evaluationId) {
+        StudentTowerAttempt attempt = attemptMapper.selectById(evaluationId);
+        if (attempt == null || !studentNo.equals(attempt.getStudentNo())) {
+            throw new IllegalArgumentException("评价记录不存在");
+        }
+        return reportFromAttempt(attempt);
     }
 
     private List<StudentTowerNode> planNodes(StudentTowerRun run, String studentNo, String courseCode) {
@@ -447,7 +501,6 @@ public class TowerRunServiceImpl implements TowerRunService {
         }
 
         publishCompletionEvent(run, node, result, cleared, correctRate, hpLeft);
-        writeAbilityDelta(run, node, result, correctRate, cleared);
         updateCurrentNode(run);
     }
 
@@ -515,51 +568,6 @@ public class TowerRunServiceImpl implements TowerRunService {
                         "correct_rate", correctRate,
                         "hp_left", hpLeft))
                 .build());
-    }
-
-    private void writeAbilityDelta(StudentTowerRun run, StudentTowerNode node, String result, double correctRate, boolean cleared) {
-        if (node.getAbilityPointId() == null || node.getAbilityPointId().isBlank()) return;
-        List<CompetencyScore> scores = profileService.getCompetencyScores(Integer.parseInt(run.getStudentNo()), Integer.parseInt(run.getCourseCode()));
-        int before = scores.stream()
-                .filter(score -> node.getAbilityPointId().equals(score.getAbilityPointId()))
-                .map(CompetencyScore::getScore)
-                .filter(Objects::nonNull)
-                .findFirst()
-                .orElse(50);
-        int delta = cleared ? (result.startsWith("diagnosis") ? 3 : "boss".equals(node.getRoomType()) ? 8 : 5) : -2;
-        if (correctRate >= 0.9D && cleared) delta += 2;
-        int after = Math.max(0, Math.min(100, before + delta));
-        StudentAbilityDeltaLog log = new StudentAbilityDeltaLog();
-        log.setId(SharedIds.newId());
-        log.setStudentNo(run.getStudentNo());
-        log.setCourseCode(run.getCourseCode());
-        log.setRunId(run.getRunId());
-        log.setNodeId(node.getNodeId());
-        log.setKnowledgePointId(node.getKnowledgePointId());
-        log.setAbilityPointId(node.getAbilityPointId());
-        log.setDeltaScore(delta);
-        log.setBeforeScore(before);
-        log.setAfterScore(after);
-        log.setReason(cleared ? "通关节点带来的能力变化" : "挑战未通过，标记为待强化");
-        log.setAiSummary(abilitySummary(node, delta, correctRate, result));
-        log.setCreatedAt(LocalDateTime.now());
-        deltaMapper.insert(log);
-    }
-
-    private String abilitySummary(StudentTowerNode node, int delta, double correctRate, String result) {
-        try {
-            AgenticRequest request = new AgenticRequest();
-            request.setKnowledgePointId(node.getKnowledgePointId());
-            request.setContext(Map.of("roomType", node.getRoomType(), "delta", delta,
-                    "correctRate", correctRate, "result", result));
-            AgenticResponse response = agenticClient.invoke("ability-growth-explain", request);
-            if (response != null && response.isSuccess() && response.getData() != null) {
-                String text = firstText(response.getData().get("answer"), response.getData().get("result"), response.getData().get("summary"));
-                if (text != null) return text;
-            }
-        } catch (Exception ignored) {
-        }
-        return delta >= 0 ? "本次表现提升了相关能力掌握度。" : "本次挑战暴露出薄弱点，建议复习后重试。";
     }
 
     private Map<String, Object> buildTowerDiagnosisReport(StudentTowerRun run, StudentTowerNode node,
@@ -712,6 +720,85 @@ public class TowerRunServiceImpl implements TowerRunService {
         return answers;
     }
 
+    private String evaluationId(Map<String, Object> request, String studentNo,
+                                StudentTowerRun run, StudentTowerNode node) {
+        String evaluationId = stringValue(request, "evaluationId");
+        if (evaluationId == null || evaluationId.isBlank()) evaluationId = SharedIds.newId();
+        abilitySnapshotService.createBeforeSnapshots(evaluationId, studentNo, run.getCourseCode(),
+                run.getRunId(), node.getNodeId());
+        return evaluationId;
+    }
+
+    private Set<String> allowedQuestionIds(Map<String, Object> request, String studentNo,
+                                           StudentTowerRun run, StudentTowerNode node) {
+        String packId = stringValue(request, "packId");
+        if (packId == null || packId.isBlank()) return Set.of();
+        StudentTowerQuestionPack pack = questionPackMapper.selectById(packId);
+        if (pack == null || !studentNo.equals(pack.getStudentNo())
+                || !run.getRunId().equals(pack.getRunId()) || !node.getNodeId().equals(pack.getNodeId())
+                || !run.getCourseCode().equals(pack.getCourseCode())) {
+            throw new IllegalArgumentException("题包与当前评价不匹配");
+        }
+        try {
+            return new LinkedHashSet<>(objectMapper.readValue(pack.getQuestionIdsJson(), new TypeReference<List<String>>() {}));
+        } catch (Exception e) {
+            throw new IllegalStateException("题包数据损坏", e);
+        }
+    }
+
+    private Map<String, Object> completedResponse(StudentTowerRun run, StudentTowerNode node,
+                                                  StudentTowerAttempt attempt) {
+        Map<String, Object> response = new LinkedHashMap<>(toRunDto(runMapper.selectById(run.getRunId()), nodes(run.getRunId())));
+        double correctRate = attempt.getCorrectRate() == null ? 0D : attempt.getCorrectRate().doubleValue();
+        response.put("evaluationId", attempt.getAttemptId());
+        response.put("correctRate", correctRate);
+        response.put("battleCorrectRate", correctRate);
+        response.put("cleared", isClearedResult(attempt.getResult()));
+        response.put("correctRateSource", "server_evidence_replay");
+        response.put("abilityRadar", abilityRadarService.getAbilityRadar(run.getStudentNo(), run.getCourseCode(),
+                run.getRunId(), node.getNodeId()));
+        response.putAll(reportFromAttempt(attempt));
+        return response;
+    }
+
+    private Map<String, Object> reportFromAttempt(StudentTowerAttempt attempt) {
+        Map<String, Object> report = readJsonMap(attempt.getAiReportJson());
+        return report.isEmpty() ? reportEnvelope("pending", null, "async", null, true, false) : report;
+    }
+
+    private List<Map<String, Object>> verifiedAnswerSummary(
+            List<Map<String, Object>> submitted,
+            List<LearningEvidenceService.AnswerResult> verified) {
+        Map<String, LearningEvidenceService.AnswerResult> resultIndex = new HashMap<>();
+        verified.forEach(result -> resultIndex.put(result.questionId(), result));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, Object> item : submitted) {
+            String questionId = stringValue(item, "questionId");
+            LearningEvidenceService.AnswerResult serverResult = resultIndex.get(questionId);
+            if (serverResult == null) continue;
+            Map<String, Object> verifiedItem = new LinkedHashMap<>(item);
+            verifiedItem.put("correct", serverResult.correct());
+            verifiedItem.put("knowledgePointId", serverResult.knowledgePointId());
+            verifiedItem.put("attemptNo", serverResult.attemptNo());
+            verifiedItem.put("beforeMastery", serverResult.beforeMastery());
+            verifiedItem.put("afterMastery", serverResult.afterMastery());
+            verifiedItem.put("verifiedBy", "backend");
+            result.add(verifiedItem);
+        }
+        return result;
+    }
+
+    private Map<String, Object> completedDiagnosisResponse(StudentTowerRun run, StudentTowerNode node,
+                                                           StudentTowerAttempt attempt) {
+        Map<String, Object> response = completedResponse(run, node, attempt);
+        double correctRate = attempt.getCorrectRate() == null ? 0D : attempt.getCorrectRate().doubleValue();
+        boolean perfect = correctRate >= 0.999D;
+        response.put("status", perfect ? "perfect" : correctRate >= 0.5D ? "partial" : "weak");
+        response.put("diagnosisPassed", perfect);
+        response.put("run", toRunDto(runMapper.selectById(run.getRunId()), nodes(run.getRunId())));
+        return response;
+    }
+
     private List<Map<String, Object>> wrongAnswers(List<Map<String, Object>> answers) {
         return answers.stream()
                 .filter(answer -> Boolean.FALSE.equals(answer.get("correct")))
@@ -736,10 +823,10 @@ public class TowerRunServiceImpl implements TowerRunService {
         }
     }
 
-    private void recordAttempt(StudentTowerRun run, StudentTowerNode node, String studentNo, String result,
+    private void recordAttempt(String attemptId, StudentTowerRun run, StudentTowerNode node, String studentNo, String result,
                                double correctRate, Map<String, Object> request, Map<String, Object> report) {
         StudentTowerAttempt attempt = new StudentTowerAttempt();
-        attempt.setAttemptId(SharedIds.newId());
+        attempt.setAttemptId(attemptId);
         attempt.setRunId(run.getRunId());
         attempt.setNodeId(node.getNodeId());
         attempt.setStudentNo(studentNo);

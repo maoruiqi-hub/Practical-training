@@ -28,7 +28,10 @@
             </div>
 
             <div v-if="loading" class="loading-box">
-              <el-skeleton :rows="5" animated />
+              <div class="game-loading-indicator" role="status">
+                <span aria-hidden="true"></span>
+                <p>正在整理错题</p>
+              </div>
             </div>
 
             <ol v-else-if="mistakes.length" class="compact-list">

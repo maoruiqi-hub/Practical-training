@@ -1,7 +1,10 @@
 <template>
   <section class="diagnosis-dialogue" aria-label="开局侦察">
     <div v-if="loading" class="scene-loading">
-      <el-skeleton :rows="6" animated />
+      <div class="game-loading-indicator" role="status">
+        <span aria-hidden="true"></span>
+        <p>正在准备诊断</p>
+      </div>
     </div>
 
     <div v-else-if="packError" class="scene-loading">
@@ -135,34 +138,6 @@ const packError = ref('')
 const activeQuestion = computed(() => questions.value[activeIndex.value] || {})
 const displayOptions = computed(() => parseQuestionOptions(activeQuestion.value.options))
 const typeLabel = type => ({ single: '单选', multi: '多选', fill: '填空', essay: '简答', program: '编程' })[type] || type
-const fallbackQuestions = computed(() => [
-  {
-    questionId: `diagnosis-demo-${props.kpId}-1`,
-    knowledgePointId: props.kpId,
-    type: 'single',
-    stem: 'Python 程序从上到下一行一行执行，这种结构通常称为？',
-    options: ['A. 顺序结构', 'B. 分支结构', 'C. 循环结构', 'D. 异常结构'],
-    answer: 'A',
-    score: 10
-  },
-  {
-    questionId: `diagnosis-demo-${props.kpId}-2`,
-    knowledgePointId: props.kpId,
-    type: 'single',
-    stem: '下面哪个符号用于给变量赋值？',
-    options: ['A. ==', 'B. =', 'C. !=', 'D. >='],
-    answer: 'B',
-    score: 10
-  },
-  {
-    questionId: `diagnosis-demo-${props.kpId}-3`,
-    knowledgePointId: props.kpId,
-    type: 'fill',
-    stem: '把字符串转换为整数可以使用内置函数 ____。',
-    answer: 'int',
-    score: 10
-  }
-])
 
 watch(activeIndex, () => {
   const question = activeQuestion.value
@@ -212,12 +187,10 @@ const loadQuestions = async () => {
       if (res.data.code === 200) questions.value = (res.data.data || []).slice(0, 3)
     }
   } catch (error) {
-    if (props.runId && props.nodeId) {
-      packError.value = error?.message || '题包加载失败，请重试'
-    }
+    packError.value = error?.message || '题目加载失败，请重试'
     questions.value = []
   } finally {
-    if (!questions.value.length && !packError.value) questions.value = fallbackQuestions.value
+    if (!questions.value.length && !packError.value) packError.value = '当前节点暂无可用题目，请联系教师补充题库'
     questions.value.forEach(question => {
       answers[question.questionId] = question.type === 'multi' ? [] : ''
     })

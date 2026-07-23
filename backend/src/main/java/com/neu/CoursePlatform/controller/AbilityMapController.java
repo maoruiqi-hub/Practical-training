@@ -20,9 +20,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/api/ability-map")
 public class AbilityMapController {
+
+    private static final int MAX_ABILITY_POINTS_PER_COURSE = 20;
 
     private final AbilityPointService abilityPointService;
     private final AbilityMapService abilityMapService;
@@ -58,6 +63,13 @@ public class AbilityMapController {
         if (!auth.canModifyCourse(session, point.getCourseCode())) return Result.fail("无权维护该课程能力图谱");
         point.setAbilityPointId(null);
         point.setName(point.getName().trim());
+        List<AbilityPoint> existingPoints = abilityPointService.listByCourseCode(point.getCourseCode());
+        if (hasSameName(existingPoints, point.getName(), null)) {
+            return Result.fail("该课程已存在同名能力点");
+        }
+        if (existingPoints.size() >= MAX_ABILITY_POINTS_PER_COURSE) {
+            return Result.fail("每门课程最多只能创建20个能力点");
+        }
         abilityPointService.save(point);
         return Result.ok(point.getAbilityPointId());
     }
@@ -70,7 +82,11 @@ public class AbilityMapController {
         if (existing == null) return Result.fail("能力点不存在");
         if (!auth.canModifyCourse(session, existing.getCourseCode())) return Result.fail("无权维护该课程能力图谱");
         if (request == null || isBlank(request.getName())) return Result.fail("能力点名称不能为空");
-        existing.setName(request.getName().trim());
+        String nextName = request.getName().trim();
+        if (hasSameName(abilityPointService.listByCourseCode(existing.getCourseCode()), nextName, abilityPointId)) {
+            return Result.fail("该课程已存在同名能力点");
+        }
+        existing.setName(nextName);
         existing.setDescription(request.getDescription());
         abilityPointService.updateById(existing);
         return Result.ok();
@@ -111,5 +127,16 @@ public class AbilityMapController {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean hasSameName(List<AbilityPoint> points, String name, String excludedId) {
+        String normalizedName = normalizeName(name);
+        return points.stream().anyMatch(point ->
+                !String.valueOf(point.getAbilityPointId()).equals(String.valueOf(excludedId))
+                        && normalizeName(point.getName()).equals(normalizedName));
+    }
+
+    private String normalizeName(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 }

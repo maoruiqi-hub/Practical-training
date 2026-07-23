@@ -148,10 +148,9 @@ public class CourseAiServiceImpl implements CourseAiService {
         AgenticResponse response = agenticClient.invoke("ability-map", request);
         if (!response.isSuccess()) return Result.serviceUnavailable("AI 服务暂不可用");
 
-        Map<String, Object> saveResult = saveGeneratedAbilityMap(courseCode, knowledgePoints, response.getData());
         Map<String, Object> data = new LinkedHashMap<>(response.getData());
-        data.put("saved", saveResult);
-        return Result.ok(new AgenticResponse(true, data, "能力图谱已生成"));
+        data.put("draftOnly", true);
+        return Result.ok(new AgenticResponse(true, data, "能力图谱草稿已生成"));
     }
 
     private Map<String, Object> saveGeneratedAbilityMap(String courseCode,

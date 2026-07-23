@@ -3,7 +3,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.neu.CoursePlatform.mapper.CourseMapper">
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Course">
-        SELECT * FROM course WHERE course_name LIKE CONCAT('%', #{keyword}, '%') OR CAST(course_code AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
+        SELECT * FROM course WHERE course_name LIKE '%' || #{keyword} || '%' OR CAST(course_code AS VARCHAR) LIKE '%' || #{keyword} || '%'
     </select>
 
     <select id="selectDtoList" resultType="com.neu.CoursePlatform.dto.CourseDTO">
@@ -43,8 +43,8 @@
             FROM lesson
             GROUP BY course_code
         ) l ON l.course_code = c.course_code
-        WHERE c.course_name LIKE CONCAT('%', #{keyword}, '%')
-           OR CAST(c.course_code AS VARCHAR) LIKE CONCAT('%', #{keyword}, '%')
+        WHERE c.course_name LIKE '%' || #{keyword} || '%'
+           OR CAST(c.course_code AS VARCHAR) LIKE '%' || #{keyword} || '%'
         ORDER BY c.course_code
     </select>
 </mapper>

@@ -208,6 +208,26 @@ async function ensureTask(plan, selectedQuestions, existingTasks) {
   return taskNo
 }
 
+async function ensureAssignments(preparedTasks) {
+  const students = await listStudents()
+  const studentNos = studentPlans.map(plan => {
+    const student = students.find(item => item.username === plan.username)
+    if (!student) throw new Error(`未找到种子学生：${plan.username}`)
+    return String(student.studentNo)
+  })
+
+  for (const task of preparedTasks) {
+    await request('/api/tasks/assignments', {
+      method: 'POST',
+      body: JSON.stringify({
+        taskNo: task.taskNo,
+        studentNos,
+        note: '学情分析演示数据'
+      })
+    })
+  }
+}
+
 function selectQuestions(plan, allQuestions) {
   const allowedTypes = new Set(['single', 'multi', 'fill'])
   const candidates = allQuestions
@@ -268,6 +288,8 @@ async function main() {
     const taskNo = await ensureTask(plan, selectedQuestions, existingTasks)
     preparedTasks.push({ ...plan, taskNo, questions: selectedQuestions })
   }
+
+  await ensureAssignments(preparedTasks)
 
   const summary = {
     courseCode: COURSE_CODE,

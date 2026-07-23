@@ -4,7 +4,10 @@
     <h2>图谱上下文</h2>
 
     <div v-if="loading" class="context-loading">
-      <el-skeleton :rows="3" animated />
+      <div class="game-loading-indicator compact" role="status">
+        <span aria-hidden="true"></span>
+        <p>正在加载知识图谱</p>
+      </div>
     </div>
 
     <template v-else>

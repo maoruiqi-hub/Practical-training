@@ -9,8 +9,8 @@
 
     <select id="selectByKeyword" resultType="com.neu.CoursePlatform.entity.Lesson">
         SELECT * FROM lesson
-        WHERE lesson_title LIKE CONCAT('%', #{keyword}, '%')
-           OR description LIKE CONCAT('%', #{keyword}, '%')
+        WHERE lesson_title LIKE '%' || #{keyword} || '%'
+           OR description LIKE '%' || #{keyword} || '%'
     </select>
 
 </mapper>

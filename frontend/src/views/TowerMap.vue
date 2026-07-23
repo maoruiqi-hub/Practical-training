@@ -443,12 +443,20 @@ const enterNode = node => {
   enterSelected()
 }
 
-const enterSelected = () => {
+const enterSelected = async () => {
   const node = selectedNode.value
   if (!node || node.status === 'locked') return
   if (['diagnosis', 'battle', 'elite', 'boss'].includes(node.roomType)) {
+    let evaluationId = ''
     if (node.runId && node.nodeId) {
-      enterTowerNode(studentId.value, node.runId, node.nodeId).catch(() => {})
+      try {
+        const enterRes = await enterTowerNode(studentId.value, node.runId, node.nodeId)
+        if (enterRes.data.code !== 200) throw new Error(enterRes.data.msg || '进入节点失败')
+        evaluationId = enterRes.data.data?.evaluationId || ''
+      } catch (error) {
+        ElMessage.error(error?.message || '进入节点失败')
+        return
+      }
     }
     router.push({
       path: `/floor/${node.kpId}`,
@@ -458,6 +466,7 @@ const enterSelected = () => {
         floorName: node.kpName,
         runId: node.runId,
         nodeId: node.nodeId,
+        evaluationId,
         boss: node.roomType === 'boss' ? '1' : '0',
         roomType: node.roomType
       }

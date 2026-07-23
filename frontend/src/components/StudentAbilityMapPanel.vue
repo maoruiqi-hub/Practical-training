@@ -60,7 +60,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { getAbilityDeltas, getAbilityMap, getAbilityRadar, getKnowledgeGraph, getKnowledgeMastery } from '../api'
+import { getAbilityMap, getAbilityRadar, getKnowledgeGraph, getKnowledgeMastery } from '../api'
 
 const props = defineProps({
   studentNo: { type: [String, Number], required: true },
@@ -75,7 +75,6 @@ const abilityPoints = ref([])
 const mappings = ref([])
 const knowledgePoints = ref([])
 const masteryRows = ref([])
-const abilityDeltas = ref([])
 const abilityRadar = ref(null)
 const radarRef = ref(null)
 let radarChart = null
@@ -93,32 +92,41 @@ const masteryIndex = computed(() => {
   const map = new Map()
   masteryRows.value.forEach(item => {
     const id = String(item.knowledgePointId || item.knowledge_point_id || '')
-    if (id) map.set(id, Number(item.masteryScore ?? item.mastery_score ?? item.score ?? 0))
+    if (id) map.set(id, Number(item.masteryScore ?? item.mastery_score ?? item.score ?? 50))
   })
   return map
 })
 
 const abilityCards = computed(() => abilityPoints.value.map(ability => {
   const abilityId = ability.abilityPointId || ability.ability_point_id || ability.id
-  const latestDelta = abilityDeltas.value.find(delta =>
-    String(delta.abilityPointId || delta.ability_point_id) === String(abilityId)
-  )
+  const radarDimension = radarDimensions.value.find(item => String(item.abilityPointId) === String(abilityId))
+  const latestDelta = radarDimension && abilityRadar.value?.mode === 'node'
+    ? {
+        deltaScore: Number(radarDimension.delta || 0),
+        reason: radarDimension.reason || '由本次答题证据聚合得出'
+      }
+    : null
   const linkedIds = mappings.value
     .filter(item => String(item.abilityPointId || item.ability_point_id) === String(abilityId))
     .map(item => String(item.knowledgePointId || item.knowledge_point_id))
     .filter(Boolean)
   const linkedKnowledgePoints = linkedIds.map(id => {
     const point = knowledgeIndex.value.get(id)
-    const masteryRate = clamp(masteryIndex.value.get(id) ?? 0)
+    const masteryRate = clamp(masteryIndex.value.get(id) ?? 50)
+    const importance = Math.max(1, Number(point?.importance ?? 1))
     return {
       id,
       name: point?.name || point?.knowledgePointName || id,
-      masteryRate
+      masteryRate,
+      importance
     }
   })
   const masteryRate = linkedKnowledgePoints.length
-    ? Math.round(linkedKnowledgePoints.reduce((sum, point) => sum + point.masteryRate, 0) / linkedKnowledgePoints.length)
-    : 0
+    ? Math.round(
+        linkedKnowledgePoints.reduce((sum, point) => sum + point.masteryRate * point.importance, 0) /
+        linkedKnowledgePoints.reduce((sum, point) => sum + point.importance, 0)
+      )
+    : 50
   const status = masteryRate >= 85 ? '掌握' : masteryRate >= 60 ? '推进中' : '薄弱'
   return {
     ...ability,
@@ -148,11 +156,10 @@ const loadData = async () => {
   if (!props.studentNo || !props.courseCode) return
   loading.value = true
   try {
-    const [abilityRes, graphRes, masteryRes, deltaRes, radarRes] = await Promise.allSettled([
+    const [abilityRes, graphRes, masteryRes, radarRes] = await Promise.allSettled([
       getAbilityMap(props.courseCode),
       getKnowledgeGraph(props.courseCode),
       getKnowledgeMastery(props.studentNo, props.courseCode),
-      getAbilityDeltas(props.studentNo, props.courseCode),
       getAbilityRadar(props.studentNo, props.courseCode, props.runId, props.nodeId)
     ])
     if (abilityRes.status === 'fulfilled' && abilityRes.value.data.code === 200) {
@@ -171,11 +178,6 @@ const loadData = async () => {
       masteryRows.value = masteryRes.value.data.data || []
     } else {
       masteryRows.value = []
-    }
-    if (deltaRes.status === 'fulfilled' && deltaRes.value.data.code === 200) {
-      abilityDeltas.value = deltaRes.value.data.data || []
-    } else {
-      abilityDeltas.value = []
     }
     if (radarRes.status === 'fulfilled' && radarRes.value.data.code === 200) {
       abilityRadar.value = radarRes.value.data.data || null

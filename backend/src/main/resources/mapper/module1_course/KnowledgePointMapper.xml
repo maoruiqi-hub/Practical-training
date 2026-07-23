@@ -5,7 +5,7 @@
     <select id="selectByCourse" resultType="com.neu.CoursePlatform.entity.KnowledgePoint">
         SELECT * FROM knowledge_point <where> course_code = #{courseCode}
         <if test="lessonNo != null and lessonNo != ''"> AND lesson_no = #{lessonNo}</if>
-        <if test="keyword != null and keyword != ''"> AND (name LIKE CONCAT('%', #{keyword}, '%') OR description LIKE CONCAT('%', #{keyword}, '%'))</if>
+        <if test="keyword != null and keyword != ''"> AND (name LIKE '%' || #{keyword} || '%' OR description LIKE '%' || #{keyword} || '%')</if>
         </where> ORDER BY lesson_no IS NULL, lesson_no, knowledge_point_id
     </select>
 </mapper>

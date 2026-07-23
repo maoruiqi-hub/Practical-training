@@ -22,6 +22,7 @@ CLAUDE.md
 .env
 .env.local
 .env.*.local
+backend/lib/
 
 # Build
 dist/
@@ -65,8 +66,10 @@ resource/LessonResource/
 **/slay-spire-reference/
 
 # JAR / build artifacts
+*.class
 *.jar
 *.war
+pkcs11.txt
 
 # Personal directories (keep out of public repo)
 specs/毛瑞琪/

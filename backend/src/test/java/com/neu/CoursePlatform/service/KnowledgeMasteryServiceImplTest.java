@@ -1,7 +1,5 @@
 package com.neu.CoursePlatform.service;
 
-import com.neu.CoursePlatform.common.GameEventTypes;
-import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.dto.KnowledgeMasteryUpdateRequest;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.KnowledgeMastery;
@@ -190,90 +188,6 @@ class KnowledgeMasteryServiceImplTest {
 
         int removed = service.removeByKnowledgePoint("kp-x");
         assertEquals(0, removed);
-    }
-
-    // ======================== handleAssessmentResult ========================
-
-    @Test
-    void handleCorrectAnswer_CreatesMastery100() {
-        kpStore.put("kp-1", kp("kp-1", "C001"));
-        studentStore.put("S1", student("S1"));
-
-        service.handleAssessmentResult(GameEvent.builder()
-                .eventType(GameEventTypes.ANSWER_CORRECT)
-                .studentId("S1")
-                .courseId("C001")
-                .sourceId("quiz-1")
-                .payload(Map.of("knowledge_point_id", "kp-1"))
-                .build());
-
-        assertEquals(1, store.size());
-        KnowledgeMastery saved = store.values().iterator().next();
-        assertEquals(100, saved.getMasteryScore());
-        assertEquals("assessment", saved.getSourceType());
-    }
-
-    @Test
-    void handleWrongAnswer_CreatesMasteryZero() {
-        kpStore.put("kp-1", kp("kp-1", "C001"));
-        studentStore.put("S1", student("S1"));
-
-        service.handleAssessmentResult(GameEvent.builder()
-                .eventType(GameEventTypes.ANSWER_WRONG)
-                .studentId("S1")
-                .courseId("C001")
-                .payload(Map.of("knowledge_point_id", "kp-1"))
-                .build());
-
-        KnowledgeMastery saved = store.values().iterator().next();
-        assertEquals(0, saved.getMasteryScore());
-    }
-
-    @Test
-    void handleNullEvent_NoException() {
-        assertDoesNotThrow(() -> service.handleAssessmentResult(null));
-    }
-
-    @Test
-    void handleEventWithNullPayload_NoException() {
-        assertDoesNotThrow(() -> service.handleAssessmentResult(
-                GameEvent.builder().eventType(GameEventTypes.ANSWER_CORRECT).build()));
-    }
-
-    @Test
-    void handleIrrelevantEventType_Ignored() {
-        service.handleAssessmentResult(GameEvent.builder()
-                .eventType(GameEventTypes.HP_CRITICAL)
-                .studentId("S1")
-                .courseId("C001")
-                .payload(Map.of("knowledge_point_id", "kp-1"))
-                .build());
-
-        assertTrue(store.isEmpty());
-    }
-
-    @Test
-    void handleEventWithBlankKpId_Ignored() {
-        service.handleAssessmentResult(GameEvent.builder()
-                .eventType(GameEventTypes.ANSWER_CORRECT)
-                .studentId("S1")
-                .courseId("C001")
-                .payload(Map.of("knowledge_point_id", ""))
-                .build());
-
-        assertTrue(store.isEmpty());
-    }
-
-    @Test
-    void handleEventWithNullKpId_Ignored() {
-        service.handleAssessmentResult(GameEvent.builder()
-                .eventType(GameEventTypes.ANSWER_CORRECT)
-                .studentId("S1")
-                .courseId("C001")
-                .payload(Map.of())
-                .build());
-
-        assertTrue(store.isEmpty());
     }
 
     // ======================== helpers ========================

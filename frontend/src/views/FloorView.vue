@@ -107,7 +107,7 @@
             </div>
 
             <div class="settlement-actions">
-              <el-button class="ghost-button" @click="phase = 'diagnosis'">重试诊断</el-button>
+              <el-button class="ghost-button" :loading="loading" @click="restartEvaluation">重新挑战</el-button>
               <el-button class="spire-button" @click="backToMap">返回地图</el-button>
             </div>
           </div>
@@ -132,7 +132,10 @@
             <strong>AI 诊断生成中</strong>
             <span>{{ Math.round((diagnosisResult?.correctRate || battleResult.correctRate || 0) * 100) }}%</span>
             <p>AI 正在分析本次答题记录，生成完成后会自动显示诊断方案。</p>
-            <el-skeleton :rows="2" animated />
+            <div class="game-loading-indicator compact" role="status">
+              <span aria-hidden="true"></span>
+              <p>正在生成诊断方案</p>
+            </div>
           </div>
           <div v-else-if="diagnosisSyncError" class="diagnosis-card weak">
             <strong>AI 诊断生成失败</strong>
@@ -206,7 +209,7 @@ import RewardDraft from '../components/RewardDraft.vue'
 import StudentAbilityMapPanel from '../components/StudentAbilityMapPanel.vue'
 import SupplyModal from '../components/SupplyModal.vue'
 import { gameBackgrounds } from '../data/gameAssetManifest'
-import { completeTowerNode, diagnoseTowerNode, getStudentProfile, getTaskList, getTowerMap, getTowerNode, sendGameEvent } from '../api'
+import { completeTowerNode, diagnoseTowerNode, enterTowerNode, getStudentProfile, getTaskList, getTowerAttemptReport, getTowerMap, getTowerNode, sendGameEvent } from '../api'
 
 const route = useRoute()
 const router = useRouter()
@@ -236,6 +239,7 @@ const nodeId = computed(() => route.query.nodeId || floor.value.nodeId || node.v
 const roomType = computed(() => String(route.query.roomType || node.value?.roomType || (route.query.boss === '1' ? 'boss' : 'battle')))
 const activeRunId = computed(() => activeCombatNode.value?.runId || runId.value)
 const activeNodeId = computed(() => activeCombatNode.value?.nodeId || nodeId.value)
+const evaluationId = ref(String(route.query.evaluationId || ''))
 const activeRoomType = computed(() => String(activeCombatNode.value?.roomType || roomType.value))
 const activeFloorName = computed(() =>
   activeCombatNode.value?.kpName ||
@@ -322,6 +326,56 @@ const settlementCopy = computed(() => {
   if (battleResult.value.cleared) return '本节点挑战已完成，查看诊断结果后可返回地图继续推进。'
   return '本次挑战暴露出薄弱点，建议查看诊断结果后重试。'
 })
+
+const sleep = ms => new Promise(resolve => window.setTimeout(resolve, ms))
+
+const pollDiagnosisReport = async attemptId => {
+  for (let count = 0; count < 20; count += 1) {
+    const response = await getTowerAttemptReport(studentId.value, attemptId)
+    if (response.data.code !== 200) throw new Error(response.data.msg || '诊断报告查询失败')
+    const payload = response.data.data || {}
+    if (payload.aiReportStatus !== 'pending') return payload
+    await sleep(1000)
+  }
+  throw new Error('AI 诊断生成时间较长，请稍后重新进入本节点查看')
+}
+
+const applyDiagnosisReport = (payload, correctRate, status) => {
+  if (payload.aiReportStatus === 'failed') {
+    diagnosisResult.value = null
+    diagnosisSyncError.value = payload.errorMessage || 'AI 诊断生成失败，请稍后重试。'
+  } else {
+    diagnosisResult.value = {
+      status,
+      correctRate,
+      report: payload.diagnosis || payload.report || null,
+      aiReportStatus: payload.aiReportStatus || 'success',
+      reportSource: payload.reportSource || ''
+    }
+  }
+  battleResult.value = { ...battleResult.value, pendingReport: false }
+}
+
+const restartEvaluation = async () => {
+  if (!activeRunId.value || !activeNodeId.value) return
+  loading.value = true
+  try {
+    const response = await enterTowerNode(studentId.value, activeRunId.value, activeNodeId.value)
+    if (response.data.code !== 200) throw new Error(response.data.msg || '重新进入节点失败')
+    evaluationId.value = response.data.data?.evaluationId || ''
+    diagnosisResult.value = null
+    diagnosisSyncError.value = ''
+    battleResult.value = { cleared: false, correctRate: 0 }
+    pickedReward.value = null
+    phase.value = activeRoomType.value === 'diagnosis'
+      ? 'diagnosis'
+      : activeRoomType.value === 'boss' ? 'boss' : 'battle'
+  } catch (error) {
+    ElMessage.warning(error?.message || '重新进入节点失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 const pickProfile = payload => payload?.profile || payload || {}
 
@@ -465,6 +519,7 @@ const legacySyncDiagnosisResult = async (result, optimisticReward) => {
   diagnosisSyncError.value = ''
   try {
     const res = await diagnoseTowerNode(studentId.value, runId.value, nodeId.value, {
+      evaluationId: evaluationId.value,
       correctRate: result.correctRate,
       status: result.status,
       answers: result.answers || [],
@@ -552,6 +607,7 @@ const syncDiagnosisResult = async result => {
   diagnosisSyncError.value = ''
   try {
     const res = await diagnoseTowerNode(studentId.value, runId.value, nodeId.value, {
+      evaluationId: evaluationId.value,
       correctRate: result.correctRate,
       status: result.status,
       answers: result.answers || [],
@@ -572,7 +628,7 @@ const syncDiagnosisResult = async result => {
     }
 
     // 前端自己判断全对：全对 → 跳过精英关直接结算，非全对 → 进精英关
-    const perfect = result.status === 'mastered' || Number(result.correctRate || 0) >= 0.999
+    const perfect = payload.diagnosisPassed === true
     if (perfect) {
       activeCombatNode.value = null
       battleResult.value = {
@@ -601,6 +657,9 @@ const syncDiagnosisResult = async result => {
     const nextNode = payload.nextNode
     if (nextNode) {
       activeCombatNode.value = nextNode
+      const enterRes = await enterTowerNode(studentId.value, runId.value, nextNode.nodeId)
+      if (enterRes.data.code !== 200) throw new Error(enterRes.data.msg || '进入精英关失败')
+      evaluationId.value = enterRes.data.data?.evaluationId || ''
     }
     phase.value = payload.nextRoomType === 'boss' ? 'boss' : 'battle'
     ElMessage.success('诊断完成，进入对应精英关卡')
@@ -633,6 +692,7 @@ const handleBattleEnd = async result => {
   const syncBattle = async () => {
     if (activeRunId.value && activeNodeId.value) {
       const res = await completeTowerNode(studentId.value, activeRunId.value, activeNodeId.value, {
+        evaluationId: evaluationId.value,
         result: result.cleared ? 'cleared' : 'failed',
         correctRate: result.correctRate,
         cleared: result.cleared,
@@ -646,6 +706,7 @@ const handleBattleEnd = async result => {
       const serverCorrectRate = payload.battleCorrectRate ?? payload.correctRate ?? result.battleCorrectRate ?? result.correctRate ?? 0
       battleResult.value = {
         ...battleResult.value,
+        cleared: payload.cleared === true,
         correctRate: serverCorrectRate,
         correctRateSource: payload.correctRateSource || '',
         gradedCount: payload.gradedCount,
@@ -653,24 +714,11 @@ const handleBattleEnd = async result => {
         pendingReport: payload.aiReportStatus === 'pending'
       }
       if (payload.aiReportStatus === 'pending') {
-        diagnosisResult.value = null
-        return
+        const reportPayload = await pollDiagnosisReport(payload.evaluationId || evaluationId.value)
+        applyDiagnosisReport(reportPayload, serverCorrectRate, payload.cleared === true ? 'cleared' : 'failed')
+      } else {
+        applyDiagnosisReport(payload, serverCorrectRate, payload.cleared === true ? 'cleared' : 'failed')
       }
-      if (payload.aiReportStatus === 'failed') {
-        diagnosisResult.value = null
-        diagnosisSyncError.value = payload.errorMessage || 'AI 诊断生成失败，请稍后重试。'
-        battleResult.value = { ...battleResult.value, pendingReport: false }
-        return
-      }
-      const report = payload.diagnosis || payload.report || null
-      diagnosisResult.value = {
-        status: result.cleared ? 'cleared' : 'failed',
-        correctRate: serverCorrectRate,
-        report,
-        aiReportStatus: payload.aiReportStatus || 'success',
-        reportSource: payload.reportSource || ''
-      }
-      battleResult.value = { ...battleResult.value, pendingReport: false }
     } else {
       await sendEvent(battleResultEvent(result), {
         correct_rate: result.correctRate,

@@ -2,8 +2,6 @@ package com.neu.CoursePlatform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.neu.CoursePlatform.common.GameEventTypes;
-import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.dto.KnowledgeMasteryUpdateRequest;
 import com.neu.CoursePlatform.entity.KnowledgePoint;
 import com.neu.CoursePlatform.entity.KnowledgeMastery;
@@ -11,7 +9,6 @@ import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.KnowledgeMasteryService;
 import com.neu.CoursePlatform.service.StudentService;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,25 +67,6 @@ public class KnowledgeMasteryServiceImpl extends ServiceImpl<KnowledgeMasteryMap
         boolean removed = remove(new LambdaQueryWrapper<KnowledgeMastery>()
                 .eq(KnowledgeMastery::getKnowledgePointId, knowledgePointId));
         return removed ? 1 : 0;
-    }
-
-    @EventListener
-    public void handleAssessmentResult(GameEvent event) {
-        if (event == null || event.getPayload() == null) return;
-        if (!GameEventTypes.ANSWER_CORRECT.equals(event.getEventType())
-                && !GameEventTypes.ANSWER_WRONG.equals(event.getEventType())) {
-            return;
-        }
-        Object knowledgePointId = event.getPayload().get("knowledge_point_id");
-        if (knowledgePointId == null || knowledgePointId.toString().isBlank()) return;
-        KnowledgeMasteryUpdateRequest request = new KnowledgeMasteryUpdateRequest();
-        request.setStudentNo(event.getStudentId());
-        request.setCourseCode(event.getCourseId());
-        request.setKnowledgePointId(knowledgePointId.toString());
-        request.setMasteryScore(GameEventTypes.ANSWER_CORRECT.equals(event.getEventType()) ? 100 : 0);
-        request.setSourceType("assessment");
-        request.setSourceId(event.getSourceId());
-        upsert(request);
     }
 
     @Override

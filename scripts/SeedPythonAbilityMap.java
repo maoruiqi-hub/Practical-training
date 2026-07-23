@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
 
 public class SeedPythonAbilityMap {
@@ -41,14 +43,13 @@ public class SeedPythonAbilityMap {
     }
 
     private static final List<AbilitySeed> ABILITIES = List.of(
-            new AbilitySeed("9001", "Python环境与基础语法能力", "能完成Python环境配置，理解变量、缩进、基础数据类型和类型转换。", "1", "2"),
-            new AbilitySeed("9002", "表达式与流程控制能力", "能运用运算符、条件分支、循环结构完成基础程序逻辑。", "3", "4"),
-            new AbilitySeed("9003", "内置数据结构应用能力", "能合理使用列表、元组、字典、集合组织和处理数据。", "5", "6"),
-            new AbilitySeed("9004", "字符串与文本处理能力", "能使用切片、格式化、常用字符串方法和基础正则处理文本。", "7"),
-            new AbilitySeed("9005", "函数抽象与模块化能力", "能定义函数、设计参数和返回值，并使用模块与包组织代码。", "8", "9"),
-            new AbilitySeed("9006", "文件读写与异常处理能力", "能读写文本、CSV、JSON文件，并通过异常处理提升程序健壮性。", "10", "11"),
-            new AbilitySeed("9007", "面向对象建模能力", "能使用类、对象、继承、多态和高级特性完成领域建模。", "12", "13"),
-            new AbilitySeed("9008", "综合项目实践能力", "能综合数据分析、Web、爬虫和项目工程能力完成完整Python应用。", "14", "15", "16", "17")
+            new AbilitySeed("9001", "Python编程基础能力", "能运用Python基础语法、表达式和流程控制完成基础程序逻辑。", "1", "2", "3", "4"),
+            new AbilitySeed("9002", "数据结构与字符串处理能力", "能合理使用内置数据结构和字符串工具组织、处理数据。", "5", "6", "7"),
+            new AbilitySeed("9003", "函数、模块与异常处理能力", "能使用函数、模块和异常处理组织可靠的Python程序。", "8", "9", "11"),
+            new AbilitySeed("9004", "面向对象编程能力", "能使用类、对象、继承和多态完成领域建模。", "12", "13"),
+            new AbilitySeed("9005", "文件与数据处理能力", "能读写常用文件格式并完成基础数据分析。", "10", "14"),
+            new AbilitySeed("9006", "Web与爬虫开发能力", "能完成基础Web应用和网络数据采集任务。", "15", "16"),
+            new AbilitySeed("9007", "综合项目实战能力", "能综合数据分析、Web、爬虫和项目工程能力完成完整Python应用。", "14", "15", "16", "17")
     );
 
     public static void main(String[] args) throws Exception {
@@ -58,15 +59,13 @@ public class SeedPythonAbilityMap {
             conn.setAutoCommit(false);
             try {
                 List<Student> students = listStudents(conn);
-                upsertAbilities(conn);
-                bindKnowledgePoints(conn);
-                seedCompetencyScores(conn, students);
+                Map<String, String> abilityIds = upsertAbilities(conn);
+                bindKnowledgePoints(conn, abilityIds);
                 conn.commit();
                 System.out.println("Seeded Python ability map:");
                 System.out.println("  abilityPoints=" + ABILITIES.size());
                 System.out.println("  students=" + students.size());
-                System.out.println("  competencyScores=" + (students.size() * ABILITIES.size()));
-                System.out.println("  competencyHistory=" + (students.size() * ABILITIES.size()));
+                System.out.println("  competencyScores=not seeded (derived from knowledge mastery)");
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
@@ -105,26 +104,42 @@ public class SeedPythonAbilityMap {
         return students;
     }
 
-    private static void upsertAbilities(Connection conn) throws SQLException {
-        String sql = "INSERT INTO ability_point (ability_point_id, course_code, name, description) "
-                + "VALUES (?, ?, ?, ?) "
-                + "ON CONFLICT (ability_point_id) "
-                + "DO UPDATE SET course_code = EXCLUDED.course_code, "
-                + "name = EXCLUDED.name, "
-                + "description = EXCLUDED.description";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+    private static Map<String, String> upsertAbilities(Connection conn) throws SQLException {
+        Map<String, String> resolvedIds = new LinkedHashMap<>();
+        String findSql = "SELECT ability_point_id FROM ability_point "
+                + "WHERE course_code = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))";
+        String insertSql = "INSERT INTO ability_point (ability_point_id, course_code, name, description) VALUES (?, ?, ?, ?)";
+        String updateSql = "UPDATE ability_point SET name = ?, description = ? WHERE ability_point_id = ?";
+        try (PreparedStatement find = conn.prepareStatement(findSql);
+             PreparedStatement insert = conn.prepareStatement(insertSql);
+             PreparedStatement update = conn.prepareStatement(updateSql)) {
             for (AbilitySeed ability : ABILITIES) {
-                ps.setString(1, ability.id);
-                ps.setString(2, COURSE_CODE);
-                ps.setString(3, ability.name);
-                ps.setString(4, ability.description);
-                ps.addBatch();
+                find.setString(1, COURSE_CODE);
+                find.setString(2, ability.name);
+                String resolvedId = null;
+                try (ResultSet rs = find.executeQuery()) {
+                    if (rs.next()) resolvedId = rs.getString(1);
+                }
+                if (resolvedId == null) {
+                    resolvedId = ability.id;
+                    insert.setString(1, resolvedId);
+                    insert.setString(2, COURSE_CODE);
+                    insert.setString(3, ability.name);
+                    insert.setString(4, ability.description);
+                    insert.executeUpdate();
+                } else {
+                    update.setString(1, ability.name);
+                    update.setString(2, ability.description);
+                    update.setString(3, resolvedId);
+                    update.executeUpdate();
+                }
+                resolvedIds.put(ability.id, resolvedId);
             }
-            ps.executeBatch();
         }
+        return resolvedIds;
     }
 
-    private static void bindKnowledgePoints(Connection conn) throws SQLException {
+    private static void bindKnowledgePoints(Connection conn, Map<String, String> resolvedIds) throws SQLException {
         long nextMappingId = nextNumericId(conn, "ability_knowledge_point", "id");
         String sql = "INSERT INTO ability_knowledge_point (id, ability_point_id, knowledge_point_id) "
                 + "SELECT ?, ?, ? "
@@ -133,11 +148,12 @@ public class SeedPythonAbilityMap {
                 + ")";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (AbilitySeed ability : ABILITIES) {
+                String abilityPointId = resolvedIds.get(ability.id);
                 for (String knowledgePointId : knowledgePointIdsByLesson(conn, ability.lessonNos)) {
                     ps.setString(1, String.valueOf(nextMappingId++));
-                    ps.setString(2, ability.id);
+                    ps.setString(2, abilityPointId);
                     ps.setString(3, knowledgePointId);
-                    ps.setString(4, ability.id);
+                    ps.setString(4, abilityPointId);
                     ps.setString(5, knowledgePointId);
                     ps.addBatch();
                 }

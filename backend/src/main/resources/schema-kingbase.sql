@@ -130,6 +130,68 @@ CREATE TABLE IF NOT EXISTS knowledge_mastery (
 CREATE UNIQUE INDEX IF NOT EXISTS uk_knowledge_mastery
     ON knowledge_mastery(student_no, course_code, knowledge_point_id);
 
+CREATE TABLE IF NOT EXISTS learning_answer_evidence (
+    evidence_id VARCHAR(64) PRIMARY KEY,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    question_id VARCHAR(64) NOT NULL,
+    knowledge_point_id VARCHAR(64) NOT NULL,
+    difficulty INTEGER NOT NULL,
+    attempt_no INTEGER NOT NULL,
+    first_attempt BOOLEAN NOT NULL,
+    correct BOOLEAN NOT NULL,
+    answer_content TEXT,
+    source_type VARCHAR(32) NOT NULL,
+    source_id VARCHAR(64) NOT NULL,
+    idempotency_key VARCHAR(160) NOT NULL,
+    formula_version VARCHAR(32) NOT NULL,
+    answered_at TIMESTAMP NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_learning_evidence_student_key
+    ON learning_answer_evidence(student_no, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_learning_evidence_student_question
+    ON learning_answer_evidence(student_no, question_id, answered_at);
+
+CREATE TABLE IF NOT EXISTS knowledge_mastery_history (
+    history_id VARCHAR(64) PRIMARY KEY,
+    evidence_id VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    knowledge_point_id VARCHAR(64) NOT NULL,
+    before_score INTEGER NOT NULL,
+    after_score INTEGER NOT NULL,
+    target_score INTEGER NOT NULL,
+    alpha NUMERIC(6,5) NOT NULL,
+    formula_version VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_mastery_history_evidence
+    ON knowledge_mastery_history(evidence_id);
+CREATE INDEX IF NOT EXISTS idx_mastery_history_student_point
+    ON knowledge_mastery_history(student_no, course_code, knowledge_point_id, created_at);
+
+CREATE TABLE IF NOT EXISTS student_ability_snapshot (
+    snapshot_id VARCHAR(64) PRIMARY KEY,
+    evaluation_id VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    run_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(64) NOT NULL,
+    phase VARCHAR(16) NOT NULL,
+    ability_point_id VARCHAR(64) NOT NULL,
+    ability_point_name VARCHAR(128) NOT NULL,
+    score INTEGER NOT NULL,
+    evidence_knowledge_count INTEGER NOT NULL,
+    total_knowledge_count INTEGER NOT NULL,
+    knowledge_point_ids_json TEXT NOT NULL,
+    weights_json TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_snapshot_evaluation_phase_point
+    ON student_ability_snapshot(evaluation_id, phase, ability_point_id);
+CREATE INDEX IF NOT EXISTS idx_ability_snapshot_student_node
+    ON student_ability_snapshot(student_no, course_code, run_id, node_id, created_at);
+
 CREATE TABLE IF NOT EXISTS knowledge_extraction_candidate (
     candidate_id VARCHAR(64) PRIMARY KEY DEFAULT CAST(nextval('knowledge_extraction_candidate_id_seq') AS VARCHAR(64)),
     course_code VARCHAR(64) NOT NULL,

@@ -5,12 +5,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.entity.AbilityKnowledgePoint;
+import com.neu.CoursePlatform.entity.LearningAnswerEvidence;
 import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.StudentTowerAttempt;
 import com.neu.CoursePlatform.entity.StudentTowerNode;
 import com.neu.CoursePlatform.entity.StudentTowerQuestionPack;
 import com.neu.CoursePlatform.entity.StudentTowerRun;
 import com.neu.CoursePlatform.mapper.AbilityKnowledgePointMapper;
+import com.neu.CoursePlatform.mapper.LearningAnswerEvidenceMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerAttemptMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerNodeMapper;
 import com.neu.CoursePlatform.mapper.StudentTowerQuestionPackMapper;
@@ -34,13 +36,14 @@ import java.util.Set;
 
 @Service
 public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
-    private static final int STRATEGY_VERSION = 2;
+    private static final int STRATEGY_VERSION = 4;
 
     private final StudentTowerQuestionPackMapper packMapper;
     private final StudentTowerRunMapper runMapper;
     private final StudentTowerNodeMapper nodeMapper;
     private final StudentTowerAttemptMapper attemptMapper;
     private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
+    private final LearningAnswerEvidenceMapper learningAnswerEvidenceMapper;
     private final QuestionService questionService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -49,12 +52,14 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
                                         StudentTowerNodeMapper nodeMapper,
                                         StudentTowerAttemptMapper attemptMapper,
                                         AbilityKnowledgePointMapper abilityKnowledgePointMapper,
+                                        LearningAnswerEvidenceMapper learningAnswerEvidenceMapper,
                                         QuestionService questionService) {
         this.packMapper = packMapper;
         this.runMapper = runMapper;
         this.nodeMapper = nodeMapper;
         this.attemptMapper = attemptMapper;
         this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
+        this.learningAnswerEvidenceMapper = learningAnswerEvidenceMapper;
         this.questionService = questionService;
     }
 
@@ -82,15 +87,19 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         int targetCount = targetCount(normalizedMode, node.getRoomType());
         Set<String> recentUsed = recentUsedQuestionIds(studentNo, run.getCourseCode());
         Set<String> runUsed = runUsedQuestionIds(runId, nodeId);
+        List<String> sameAbilityKps = sameAbilityKnowledgePoints(node.getKnowledgePointId());
+        WeaknessEvidence weakness = recentWeaknessEvidence(studentNo, run.getCourseCode());
 
         Map<String, Question> candidateMap = layeredCandidates(run, node);
         boolean expanded = candidateMap.values().stream()
                 .anyMatch(question -> !Objects.equals(question.getKnowledgePointId(), node.getKnowledgePointId()));
         List<Question> candidates = new ArrayList<>(candidateMap.values());
 
-        List<Question> selected = selectQuestions(candidates, node, normalizedMode, recentUsed, runUsed, targetCount);
-        if (selected.isEmpty()) {
-            throw new IllegalStateException("当前课程题库中没有可用于该节点的题目");
+        SelectionResult selection = selectQuestions(candidates, node, normalizedMode, recentUsed, runUsed,
+                sameAbilityKps, weakness, targetCount);
+        List<Question> selected = selection.questions();
+        if (selected.size() < 3) {
+            throw new IllegalStateException("当前节点相关题库不足 3 道，请补充当前知识点或能力关联题目");
         }
 
         packMapper.delete(new LambdaQueryWrapper<StudentTowerQuestionPack>()
@@ -107,17 +116,23 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         pack.setMode(normalizedMode);
         pack.setQuestionIdsJson(writeJson(selected.stream().map(Question::getQuestionId).toList()));
         pack.setSource("rule");
-        pack.setStrategyJson(writeJson(Map.of(
-                "strategyVersion", STRATEGY_VERSION,
-                "poolPolicy", "kp-ability-course",
-                "excludeRunUsed", true,
-                "targetCount", targetCount,
-                "candidateCount", candidates.size(),
-                "expandedToCourse", expanded,
-                "knowledgePointId", safe(node.getKnowledgePointId()),
-                "difficulty", node.getDifficulty() == null ? 1 : node.getDifficulty(),
-                "recentUsedFiltered", recentUsed.size(),
-                "runUsedExcluded", runUsed.size()
+        pack.setStrategyJson(writeJson(Map.ofEntries(
+                Map.entry("strategyVersion", STRATEGY_VERSION),
+                Map.entry("poolPolicy", "kp-ability-course"),
+                Map.entry("selectionPolicy", selection.policy()),
+                Map.entry("excludeRunUsed", true),
+                Map.entry("preserveCurrentKnowledgePoint", true),
+                Map.entry("targetCount", targetCount),
+                Map.entry("candidateCount", candidates.size()),
+                Map.entry("expandedToCourse", expanded),
+                Map.entry("knowledgePointId", safe(node.getKnowledgePointId())),
+                Map.entry("difficulty", node.getDifficulty() == null ? 1 : node.getDifficulty()),
+                Map.entry("recentUsedFiltered", recentUsed.size()),
+                Map.entry("runUsedExcluded", runUsed.size()),
+                Map.entry("currentKnowledgeCount", selection.currentCount()),
+                Map.entry("sameAbilityCount", selection.sameAbilityCount()),
+                Map.entry("historicalWeaknessCount", selection.weaknessCount()),
+                Map.entry("quotaFallback", selection.quotaFallback())
         )));
         pack.setAiReason("根据当前节点知识点、节点难度、近期做题记录和题型多样性从数据库题库中推荐。");
         pack.setCreatedAt(LocalDateTime.now());
@@ -136,38 +151,91 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
         return toDto(pack, selected);
     }
 
-    private List<Question> selectQuestions(List<Question> candidates, StudentTowerNode node, String mode,
-                                           Set<String> recentUsed, Set<String> runUsed, int targetCount) {
-        if (candidates == null || candidates.isEmpty()) return List.of();
+    SelectionResult selectQuestions(List<Question> candidates, StudentTowerNode node, String mode,
+                                    Set<String> recentUsed, Set<String> runUsed,
+                                    List<String> sameAbilityKnowledgePointIds,
+                                    WeaknessEvidence weakness, int targetCount) {
+        if (candidates == null || candidates.isEmpty()) {
+            return new SelectionResult(List.of(), 0, 0, 0, "empty", true);
+        }
         int targetDifficulty = Math.max(1, Math.min(5, node.getDifficulty() == null ? 1 : node.getDifficulty()));
         String kpId = safe(node.getKnowledgePointId());
         int salt = Math.abs(Objects.hash(node.getNodeId(), mode));
-        List<Question> filtered = candidates.stream()
-                .filter(q -> q.getQuestionId() != null)
-                .filter(q -> !runUsed.contains(q.getQuestionId()))
-                .toList();
-        if (filtered.size() < targetCount) filtered = candidates;
+        Set<String> sameAbilityIds = new LinkedHashSet<>(sameAbilityKnowledgePointIds == null
+                ? List.of() : sameAbilityKnowledgePointIds);
+        sameAbilityIds.remove(kpId);
+        WeaknessEvidence safeWeakness = weakness == null ? WeaknessEvidence.empty() : weakness;
+        List<Question> currentPool = rankedQuestions(candidates.stream()
+                .filter(question -> kpId.equals(question.getKnowledgePointId())).toList(),
+                kpId, targetDifficulty, recentUsed, runUsed, salt, Set.of());
 
-        List<Question> sorted = filtered.stream()
+        if ("battle".equals(mode) || "diagnosis".equals(mode)) {
+            int limit = "diagnosis".equals(mode) ? 3 : targetCount;
+            LinkedHashSet<Question> selected = new LinkedHashSet<>();
+            addQuestions(selected, currentPool, limit);
+            String policy = "diagnosis".equals(mode) ? "diagnosis-current-kp-only" : "battle-current-kp-only";
+            return new SelectionResult(new ArrayList<>(selected), selected.size(), 0, 0, policy,
+                    selected.size() < limit);
+        }
+
+        if ("elite".equals(mode)) {
+            List<Question> sameAbilityPool = rankedQuestions(candidates.stream()
+                    .filter(question -> sameAbilityIds.contains(question.getKnowledgePointId())).toList(),
+                    kpId, targetDifficulty, recentUsed, runUsed, salt, Set.of());
+            List<Question> weaknessPool = rankedQuestions(candidates.stream()
+                    .filter(question -> safeWeakness.questionIds().contains(question.getQuestionId())
+                            || safeWeakness.knowledgePointIds().contains(question.getKnowledgePointId()))
+                    .toList(), kpId, targetDifficulty, recentUsed, runUsed, salt, safeWeakness.questionIds());
+
+            LinkedHashSet<Question> selected = new LinkedHashSet<>();
+            int currentCount = addQuestions(selected, currentPool, 3);
+            int sameAbilityCount = addQuestions(selected, sameAbilityPool, 2);
+            int weaknessCount = addQuestions(selected, weaknessPool, 1);
+            boolean fallback = currentCount < 3 || sameAbilityCount < 2 || weaknessCount < 1;
+
+            if (selected.size() < targetCount) {
+                List<Question> relatedFallback = new ArrayList<>();
+                relatedFallback.addAll(weaknessPool);
+                relatedFallback.addAll(sameAbilityPool);
+                relatedFallback.addAll(currentPool);
+                addQuestions(selected, relatedFallback, targetCount - selected.size());
+            }
+            return new SelectionResult(new ArrayList<>(selected), currentCount, sameAbilityCount, weaknessCount,
+                    "elite-3-current-2-same-ability-1-historical-weakness", fallback);
+        }
+
+        List<Question> comprehensivePool = rankedQuestions(candidates, kpId, targetDifficulty,
+                recentUsed, runUsed, salt, safeWeakness.questionIds());
+        LinkedHashSet<Question> selected = new LinkedHashSet<>();
+        addQuestions(selected, comprehensivePool, targetCount);
+        long currentCount = selected.stream().filter(question -> kpId.equals(question.getKnowledgePointId())).count();
+        return new SelectionResult(new ArrayList<>(selected), (int) currentCount, 0, 0,
+                "boss-comprehensive-course", selected.size() < targetCount);
+    }
+
+    private List<Question> rankedQuestions(List<Question> questions, String kpId, int targetDifficulty,
+                                           Set<String> recentUsed, Set<String> runUsed, int salt,
+                                           Set<String> preferredQuestionIds) {
+        return questions.stream()
+                .filter(question -> question.getQuestionId() != null)
+                .distinct()
                 .sorted(Comparator
-                        .comparingInt((Question q) -> -scoreQuestion(q, kpId, targetDifficulty, recentUsed, salt))
+                        .comparingInt((Question question) ->
+                                preferredQuestionIds.contains(question.getQuestionId()) ? 0 : 1)
+                        .thenComparingInt(question -> runUsed.contains(question.getQuestionId()) ? 1 : 0)
+                        .thenComparingInt(question ->
+                                -scoreQuestion(question, kpId, targetDifficulty, recentUsed, salt))
                         .thenComparing(Question::getQuestionId))
                 .toList();
+    }
 
-        LinkedHashSet<Question> selected = new LinkedHashSet<>();
-        Set<String> usedTypes = new HashSet<>();
-        for (Question question : sorted) {
-            if (selected.size() >= targetCount) break;
-            String type = safe(question.getType());
-            if (usedTypes.contains(type) && selected.size() < Math.min(3, targetCount)) continue;
-            selected.add(question);
-            usedTypes.add(type);
-        }
-        for (Question question : sorted) {
-            if (selected.size() >= targetCount) break;
+    private int addQuestions(LinkedHashSet<Question> selected, List<Question> candidates, int count) {
+        int before = selected.size();
+        for (Question question : candidates) {
+            if (selected.size() - before >= count) break;
             selected.add(question);
         }
-        return new ArrayList<>(selected);
+        return selected.size() - before;
     }
 
     private Map<String, Question> layeredCandidates(StudentTowerRun run, StudentTowerNode node) {
@@ -243,6 +311,33 @@ public class TowerQuestionPackServiceImpl implements TowerQuestionPackService {
             }
         }
         return result;
+    }
+
+    private WeaknessEvidence recentWeaknessEvidence(String studentNo, String courseCode) {
+        List<LearningAnswerEvidence> evidence = learningAnswerEvidenceMapper.selectList(
+                new LambdaQueryWrapper<LearningAnswerEvidence>()
+                        .eq(LearningAnswerEvidence::getStudentNo, studentNo)
+                        .eq(LearningAnswerEvidence::getCourseCode, courseCode)
+                        .eq(LearningAnswerEvidence::getCorrect, false)
+                        .orderByDesc(LearningAnswerEvidence::getAnsweredAt)
+                        .last("limit 50"));
+        LinkedHashSet<String> questionIds = new LinkedHashSet<>();
+        LinkedHashSet<String> knowledgePointIds = new LinkedHashSet<>();
+        for (LearningAnswerEvidence item : evidence) {
+            if (item.getQuestionId() != null) questionIds.add(item.getQuestionId());
+            if (item.getKnowledgePointId() != null) knowledgePointIds.add(item.getKnowledgePointId());
+        }
+        return new WeaknessEvidence(questionIds, knowledgePointIds);
+    }
+
+    record WeaknessEvidence(Set<String> questionIds, Set<String> knowledgePointIds) {
+        static WeaknessEvidence empty() {
+            return new WeaknessEvidence(Set.of(), Set.of());
+        }
+    }
+
+    record SelectionResult(List<Question> questions, int currentCount, int sameAbilityCount,
+                           int weaknessCount, String policy, boolean quotaFallback) {
     }
 
     private Set<String> runUsedQuestionIds(String runId, String exceptNodeId) {

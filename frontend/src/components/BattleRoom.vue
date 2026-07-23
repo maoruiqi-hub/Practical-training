@@ -5,7 +5,10 @@
     aria-label="知识对话战斗"
   >
     <div v-if="loading" class="scene-loading">
-      <el-skeleton :rows="7" animated />
+      <div class="game-loading-indicator" role="status">
+        <span aria-hidden="true"></span>
+        <p>正在加载题目</p>
+      </div>
     </div>
 
     <div v-else-if="packError" class="scene-loading">
@@ -163,7 +166,6 @@ const finished = ref(false)
 const feedback = ref(null)
 const hurtFlash = ref(false)
 const hitFlash = ref(false)
-const usingFallbackQuestions = ref(false)
 const selectedMulti = ref([])
 const freeAnswer = ref('')
 const packId = ref('')
@@ -194,70 +196,6 @@ const enemyIntent = computed(() => {
 })
 const incomingDamage = computed(() => Math.max(0, Number(enemyIntent.value.value || 0) - playerBlock.value))
 
-const fallbackQuestions = computed(() => {
-  const base = [
-    {
-      type: 'single',
-      stem: '在 Python 中，下面哪个名称最适合作为变量名？',
-      options: ['A. 2score', 'B. score_total', 'C. class', 'D. total-score'],
-      answer: 'B',
-      score: 10
-    },
-    {
-      type: 'single',
-      stem: '表达式 3 + 4 * 2 的计算结果是？',
-      options: ['A. 14', 'B. 11', 'C. 10', 'D. 16'],
-      answer: 'B',
-      score: 10
-    },
-    {
-      type: 'multi',
-      stem: '下面哪些属于 Python 的基础数据类型？',
-      options: ['A. int', 'B. list', 'C. heading', 'D. str'],
-      answer: 'A,B,D',
-      score: 15
-    },
-    {
-      type: 'fill',
-      stem: '用于向控制台输出内容的内置函数是 ____。',
-      answer: 'print',
-      score: 10
-    },
-    {
-      type: 'single',
-      stem: 'if 语句判断条件为 False 时，程序会优先执行哪个分支？',
-      options: ['A. if', 'B. elif 或 else', 'C. import', 'D. def'],
-      answer: 'B',
-      score: 10
-    },
-    {
-      type: 'single',
-      stem: 'for i in range(3) 会依次得到哪些值？',
-      options: ['A. 1,2,3', 'B. 0,1,2', 'C. 0,1,2,3', 'D. 3,2,1'],
-      answer: 'B',
-      score: 10
-    },
-    {
-      type: 'fill',
-      stem: '定义函数时使用的关键字是 ____。',
-      answer: 'def',
-      score: 10
-    },
-    {
-      type: 'program',
-      stem: '写一行代码：把变量 name 的值输出到控制台。',
-      answer: 'print(name)',
-      score: 20
-    }
-  ]
-
-  return base.slice(0, roomQuestionLimit.value).map((question, index) => ({
-    ...question,
-    questionId: `demo-${props.roomType}-${props.kpId}-${index + 1}`,
-    knowledgePointId: props.kpId
-  }))
-})
-
 watch(activeIndex, () => {
   const question = activeQuestion.value
   selectedMulti.value = Array.isArray(answers[question.questionId]) ? [...answers[question.questionId]] : []
@@ -285,10 +223,10 @@ const setupBattleState = () => {
 
 const loadQuestions = async () => {
   loading.value = true
-  usingFallbackQuestions.value = false
   questions.value = []
   packId.value = ''
   packError.value = ''
+  let loadedFromTowerPack = false
   try {
     if (props.runId && props.nodeId) {
       const mode = props.bossMode ? 'boss' : props.roomType === 'elite' ? 'elite' : 'battle'
@@ -296,6 +234,7 @@ const loadQuestions = async () => {
       if (packRes.data.code === 200) {
         packId.value = packRes.data.data?.packId || ''
         questions.value = packRes.data.data?.questions || []
+        loadedFromTowerPack = questions.value.length > 0
       }
       if (!questions.value.length) {
         throw new Error(packRes.data.msg || '当前节点题包为空')
@@ -317,7 +256,7 @@ const loadQuestions = async () => {
       if (res.data.code === 200) questions.value = res.data.data || []
     }
 
-    if (!props.bossMode) {
+    if (!props.bossMode && !loadedFromTowerPack) {
       questions.value = questions.value
         .filter(question => !question.knowledgePointId || String(question.knowledgePointId) === String(props.kpId))
         .slice(0, roomQuestionLimit.value)
@@ -325,15 +264,10 @@ const loadQuestions = async () => {
       questions.value = questions.value.slice(0, roomQuestionLimit.value)
     }
   } catch (error) {
-    if (props.runId && props.nodeId) {
-      packError.value = error?.message || '题包加载失败，请重试'
-    }
+    packError.value = error?.message || '题目加载失败，请重试'
     questions.value = []
   } finally {
-    if (!questions.value.length && !packError.value) {
-      questions.value = fallbackQuestions.value
-      usingFallbackQuestions.value = true
-    }
+    if (!questions.value.length && !packError.value) packError.value = '当前节点暂无可用题目，请联系教师补充题库'
     questions.value.forEach(question => {
       answers[question.questionId] = question.type === 'multi' ? [] : ''
     })
@@ -466,7 +400,7 @@ const submitBattle = async forcedCleared => {
   try {
     const correctRate = currentCorrectRate()
 
-    if (props.taskNo && !usingFallbackQuestions.value) {
+    if (props.taskNo) {
       const content = questions.value.map(question => ({
         no: question.questionId,
         response: Array.isArray(answers[question.questionId])
@@ -483,8 +417,8 @@ const submitBattle = async forcedCleared => {
         choiceLocked.value = false
         return
       }
-    } else {
-      ElMessage.warning(usingFallbackQuestions.value ? '演示题卡已本地结算' : '未找到可提交任务，本次使用本地结算')
+    } else if (!props.runId || !props.nodeId) {
+      ElMessage.warning('未找到可提交任务，本次使用本地结算')
     }
 
     emit('profile-refresh')

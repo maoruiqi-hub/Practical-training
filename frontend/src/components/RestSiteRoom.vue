@@ -42,7 +42,10 @@
           </div>
 
           <div v-else-if="resourceLoading" class="loading-panel">
-            <el-skeleton :rows="4" animated />
+            <div class="game-loading-indicator" role="status">
+              <span aria-hidden="true"></span>
+              <p>正在加载学习资源</p>
+            </div>
           </div>
           <div v-else class="resource-grid">
             <article

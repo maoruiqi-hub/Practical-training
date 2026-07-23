@@ -149,6 +149,12 @@
           <div><b>{{ i + 1 }}.</b> {{ d.stem }} <el-tag size="small" style="margin-left:6px">{{ typeLabel(d.type) }}</el-tag> <span style="color:#999;font-size:12px">{{ d.score }}分</span></div>
           <div style="margin-top:6px">学生答案：<span :style="{ color: d.autoGradable ? (d.correct ? '#67c23a' : '#f56c6c') : '#606266' }">{{ d.studentAnswer || '(空)' }}</span></div>
           <div style="margin-top:4px;color:#67c23a">{{ d.autoGradable ? '正确答案' : '参考答案' }}：{{ d.correctAnswer || '(无)' }}</div>
+          <div v-if="!d.autoGradable" class="manual-grade-row">
+            <span>本题得分</span>
+            <el-input-number v-model="d.earnedScore" :min="0" :max="d.score || 0" size="small" />
+            <span>是否达标</span>
+            <el-switch v-model="d.correct" inline-prompt active-text="是" inactive-text="否" />
+          </div>
         </div>
       </div>
       <div v-else-if="!gradeLoading" style="margin-top:16px;text-align:center;color:#999;padding:20px">非在线测验提交：{{ grading.content || '附件提交' }}</div>
@@ -303,7 +309,11 @@ const openGradeDialog = async (row) => {
   try {
     const res = await getGradeDetail(row.submissionId)
     if (res.data.code === 200) {
-      gradeDetails.value = res.data.data.details || []
+      gradeDetails.value = (res.data.data.details || []).map(item => ({
+        ...item,
+        earnedScore: item.earnedScore ?? 0,
+        correct: item.correct === true
+      }))
       grading.value.score = res.data.data.score ?? row.score ?? null
       grading.value.feedback = res.data.data.feedback || row.feedback || ''
       grading.value.status = res.data.data.status || row.status
@@ -317,7 +327,13 @@ const openGradeDialog = async (row) => {
 const doGrade = async () => {
   try {
     const res = await gradeSubmission(grading.value.submissionId, {
-      score: grading.value.score, feedback: grading.value.feedback
+      score: grading.value.score,
+      feedback: grading.value.feedback,
+      manualAnswers: gradeDetails.value.filter(item => !item.autoGradable).map(item => ({
+        questionId: item.questionId,
+        score: item.earnedScore,
+        correct: item.correct === true
+      }))
     })
     if (res.data.code === 200) { ElMessage.success('已完成复核'); dialogVisible.value = false; reloadSubmissions() }
     else ElMessage.error(res.data.msg)
@@ -423,5 +439,15 @@ onMounted(async () => {
   margin: 10px 0;
   line-height: 1.8;
   color: #606266;
+}
+.manual-grade-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  color: #475569;
 }
 </style>

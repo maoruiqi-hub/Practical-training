@@ -3,7 +3,9 @@ spring:
     name: practical-training-backend
   sql:
     init:
-      mode: never
+      mode: "${DB_INIT_MODE:never}"
+      schema-locations: "${DB_INIT_SCHEMA_LOCATIONS:optional:classpath:schema.sql}"
+      data-locations: "${DB_INIT_DATA_LOCATIONS:optional:classpath:data.sql}"
   datasource:
     driver-class-name: "${DB_DRIVER:org.postgresql.Driver}"
     url: "${DB_URL:jdbc:postgresql://localhost:5432/course_platform}"

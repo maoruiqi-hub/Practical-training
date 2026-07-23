@@ -1,11 +1,14 @@
 package com.neu.CoursePlatform.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 任务提交记录实体
@@ -36,4 +39,7 @@ public class TaskSubmission {
     private String status;
     /** 教师反馈 */
     private String feedback;
+    /** 教师逐题复核结果，不持久化到提交表。 */
+    @TableField(exist = false)
+    private List<Map<String, Object>> manualAnswers;
 }

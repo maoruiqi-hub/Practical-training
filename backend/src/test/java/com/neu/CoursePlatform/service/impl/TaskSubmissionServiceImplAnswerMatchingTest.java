@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TaskSubmissionServiceImplAnswerMatchingTest {
     private final TaskSubmissionServiceImpl service = new TaskSubmissionServiceImpl(
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
 
     @Test
     void singleChoiceTextOptionMatchesLetterAnswer() throws Exception {

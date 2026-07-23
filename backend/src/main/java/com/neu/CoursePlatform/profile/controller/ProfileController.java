@@ -251,19 +251,11 @@ public class ProfileController {
         switch (eventType) {
             case GameEventTypes.ANSWER_CORRECT -> {
                 String taskType = (String) body.getOrDefault("taskType", "quiz");
-                String abilityPointId = (String) body.get("abilityPointId");
                 profileService.updateProfileFromSubmission(sn, cc, true, taskType);
-                if (abilityPointId != null && !abilityPointId.isEmpty()) {
-                    profileService.updateCompetencyScores(sn, cc, abilityPointId, true);
-                }
             }
             case GameEventTypes.ANSWER_WRONG -> {
                 String taskType = (String) body.getOrDefault("taskType", "quiz");
-                String abilityPointId = (String) body.get("abilityPointId");
                 profileService.updateProfileFromSubmission(sn, cc, false, taskType);
-                if (abilityPointId != null && !abilityPointId.isEmpty()) {
-                    profileService.updateCompetencyScores(sn, cc, abilityPointId, false);
-                }
             }
             case GameEventTypes.FLOOR_CLEARED ->
                 profileService.addGrowth(sn, cc, 80, GameEventTypes.FLOOR_CLEARED, (String) body.getOrDefault("floor", ""));

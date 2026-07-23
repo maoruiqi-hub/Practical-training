@@ -252,7 +252,7 @@ class Module2ServiceTest {
         StudentService studentService = proxy(StudentService.class, (method, args) -> null);
         KnowledgePointService pointService = proxy(KnowledgePointService.class, (method, args) -> null);
         return new TaskSubmissionServiceImpl(taskService, studentService, questionService, answerService,
-                pointService, gameConfigService, floorProgressService, publisher);
+                pointService, gameConfigService, floorProgressService, publisher, null);
     }
 
     private static LearningTask task(String taskNo, String courseCode, String taskType) {

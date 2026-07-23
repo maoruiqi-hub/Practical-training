@@ -43,7 +43,7 @@
     <select id="selectCourseTaskStats" resultType="map">
         SELECT
             t.task_no,
-            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), CONCAT('任务#', t.task_no)) AS task_name,
+            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), '任务#' || t.task_no) AS task_name,
             t.task_type,
             COALESCE(a.assigned_count, 0) AS assigned_count,
             COUNT(s.submission_id) AS submitted_count,
@@ -69,7 +69,7 @@
         SELECT
             ranked.submission_id,
             ranked.task_no,
-            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), CONCAT('任务#', t.task_no)) AS task_name,
+            COALESCE(NULLIF(t.task_name, ''), NULLIF(t.description, ''), '任务#' || t.task_no) AS task_name,
             t.task_type,
             ranked.student_no,
             COALESCE(st.name, '') AS student_name,

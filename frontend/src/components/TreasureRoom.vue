@@ -18,7 +18,10 @@
         </header>
 
         <div v-if="loading" class="loading-panel">
-          <el-skeleton :rows="4" animated />
+          <div class="game-loading-indicator" role="status">
+            <span aria-hidden="true"></span>
+            <p>正在生成奖励</p>
+          </div>
         </div>
 
         <div v-else class="choice-grid reward">

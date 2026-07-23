@@ -39,6 +39,8 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     void publishAssessmentResultEvents(TaskSubmission sub);
 
+    void recordReviewedSubjectiveEvidence(TaskSubmission sub, List<Map<String, Object>> manualAnswers);
+
     int autoScoreChoices(TaskSubmission sub);
 
     /** 将该学生该任务的所有旧提交标记为 superseded */
