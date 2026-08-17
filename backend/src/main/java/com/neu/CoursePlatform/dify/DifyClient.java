@@ -48,6 +48,21 @@ public class DifyClient {
     @Value("${dify.dataset-api-key:}")
     private String datasetApiKey;
 
+    @Value("${dify.workflow-cluster-key:}")
+    private String workflowClusterKey;
+
+    @Value("${dify.workflow-suggestions-key:}")
+    private String workflowSuggestionsKey;
+
+    @Value("${dify.workflow-diagnosis-key:}")
+    private String workflowDiagnosisKey;
+
+    @Value("${dify.workflow-assessment-key:}")
+    private String workflowAssessmentKey;
+
+    @Value("${dify.workflow-recommend-key:}")
+    private String workflowRecommendKey;
+
     public DifyClient() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(3000);
@@ -115,11 +130,51 @@ public class DifyClient {
      * 用于复杂的多步骤 AI 任务。
      */
     public DifyResponse runWorkflow(Map<String, Object> inputs, String userId) {
+        return runWorkflow(inputs, userId, workflowApiKey);
+    }
+
+    /**
+     * 按 capability 选择对应 Workflow Key 后运行工作流。
+     * 用于第一批已迁移到 Dify 的 5 个结构化能力。
+     */
+    public DifyResponse runWorkflow(String capability, Map<String, Object> inputs) {
+        return runWorkflow(inputs, "anonymous", workflowKeyFor(capability));
+    }
+
+    private DifyResponse runWorkflow(Map<String, Object> inputs, String userId, String apiKey) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("inputs", inputs != null ? inputs : Map.of());
         body.put("user", userId != null ? userId : "anonymous");
         body.put("response_mode", "blocking");
-        return callDify("/v1/workflows/run", workflowApiKey, body);
+        return callDify("/v1/workflows/run", apiKey, body);
+    }
+
+    /**
+     * capability -> Workflow App Key 映射。
+     * 未映射的 capability 回退到默认 workflowApiKey。
+     */
+    private String workflowKeyFor(String capability) {
+        if (capability == null) return workflowApiKey;
+        return switch (capability) {
+            case "clusterProblems" -> workflowClusterKey;
+            case "teachingSuggestions" -> workflowSuggestionsKey;
+            case "tower-diagnosis-report" -> workflowDiagnosisKey;
+            case "assessment" -> workflowAssessmentKey;
+            case "recommend" -> workflowRecommendKey;
+            default -> workflowApiKey;
+        };
+    }
+
+    /**
+     * 是否配置了任一 Workflow Key（纯 Workflow 部署下也视为已配置）。
+     */
+    public boolean isWorkflowConfigured() {
+        return hasValue(workflowApiKey) || hasValue(workflowClusterKey) || hasValue(workflowSuggestionsKey)
+                || hasValue(workflowDiagnosisKey) || hasValue(workflowAssessmentKey) || hasValue(workflowRecommendKey);
+    }
+
+    private boolean hasValue(String value) {
+        return value != null && !value.isBlank();
     }
 
     // ---- Knowledge Retrieval API ----
@@ -189,9 +244,20 @@ public class DifyClient {
                 return DifyResponse.success(text);
             }
 
-            // Workflow response: { data: { text: "..." } }
+            // Workflow response: { data: { text: "..." } } or { data: { status, outputs: {...} } }
             JsonNode data = root.path("data");
             if (!data.isMissingNode()) {
+                // Workflow 失败时明确返回错误，而不是把错误对象当成功内容。
+                String status = data.path("status").asText(null);
+                if (status != null && !"succeeded".equals(status) && !"success".equals(status)) {
+                    String error = data.path("error").asText(null);
+                    return DifyResponse.error("Dify workflow " + status + ": " + (error != null ? error : "unknown error"));
+                }
+                // Workflow 结构化输出：优先返回 data.outputs（各 End 输出变量）。
+                JsonNode outputs = data.path("outputs");
+                if (outputs.isObject() && !outputs.isEmpty()) {
+                    return DifyResponse.success(outputs.toString());
+                }
                 String dataText = data.path("text").asText(null);
                 if (dataText != null) {
                     return DifyResponse.success(dataText);

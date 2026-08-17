@@ -14,9 +14,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Agentic 服务 HTTP 客户端。
@@ -94,7 +97,7 @@ public class AgenticClient {
                     && baseUrl != null && !baseUrl.isBlank();
         }
         if ("dify".equalsIgnoreCase(mode)) {
-            return difyClient.isConfigured();
+            return difyClient.isConfigured() || difyClient.isWorkflowConfigured();
         }
         if ("http".equalsIgnoreCase(mode)) {
             return baseUrl != null && !baseUrl.isBlank();
@@ -119,8 +122,9 @@ public class AgenticClient {
         }
         if ("dify".equalsIgnoreCase(mode)) {
             try {
-                DifyResponse resp = difyClient.sendChatMessage(objectMapper.writeValueAsString(request), "system");
-                if (resp.isSuccess()) return resp.getContent();
+                DifyResponse resp = difyClient.runWorkflow("clusterProblems",
+                        Map.of("request_json", objectMapper.writeValueAsString(buildClusterWorkflowInput(request))));
+                if (resp.isSuccess()) return workflowOutputsJson(resp);
                 throw new AgenticException("Dify clusterProblems failed: " + resp.getError());
             } catch (Exception e) {
                 throw new AgenticException("Dify clusterProblems failed: " + e.getMessage(), e);
@@ -146,8 +150,9 @@ public class AgenticClient {
         }
         if ("dify".equalsIgnoreCase(mode)) {
             try {
-                DifyResponse resp = difyClient.sendChatMessage(objectMapper.writeValueAsString(request), "system");
-                if (resp.isSuccess()) return resp.getContent();
+                DifyResponse resp = difyClient.runWorkflow("teachingSuggestions",
+                        Map.of("request_json", objectMapper.writeValueAsString(buildTeachingWorkflowInput(request))));
+                if (resp.isSuccess()) return workflowOutputsJson(resp);
                 throw new AgenticException("Dify teachingSuggestions failed: " + resp.getError());
             } catch (Exception e) {
                 throw new AgenticException("Dify teachingSuggestions failed: " + e.getMessage(), e);
@@ -287,19 +292,31 @@ public class AgenticClient {
     // ---- dify mode internals ----
 
     private AgenticResponse invokeDify(String capability, AgenticRequest request) {
-        if (!difyClient.isConfigured()) {
+        if (!difyClient.isConfigured() && !difyClient.isWorkflowConfigured()) {
             log.warn("Dify not configured, falling back to mock for capability: {}", capability);
             return new AgenticResponse(true, Map.of("capability", capability, "mock", true, "fallback", true),
                     "Dify not configured, using mock response");
         }
         try {
-            String userMessage = buildUserMessage(capability, request);
             String userId = request.getContext() != null ?
                     String.valueOf(request.getContext().getOrDefault("userId", "anonymous")) : "anonymous";
+
+            // 已迁移到 Dify Workflow 的结构化能力：组装 request_json 后走 /v1/workflows/run
+            Map<String, Object> workflowInput = buildWorkflowRequestJson(capability, request);
+            if (workflowInput != null) {
+                DifyResponse resp = difyClient.runWorkflow(capability,
+                        Map.of("request_json", objectMapper.writeValueAsString(workflowInput)));
+                if (!resp.isSuccess()) {
+                    log.warn("Dify workflow {} failed: {}", capability, resp.getError());
+                    return AgenticResponse.unavailable();
+                }
+                return new AgenticResponse(true, workflowOutputsMap(resp), "ok");
+            }
+
+            // 其余能力（lecture/qa 等）继续走 Chat API — lecture/qa 通过 RAG 增强
+            String userMessage = buildUserMessage(capability, request);
             String courseCode = request.getCourseCode();
             String knowledgePointId = request.getKnowledgePointId();
-
-            // 统一走 Chat API — lecture/qa 通过 RAG 增强，结构化任务直接发送
             if ("lecture".equals(capability) || "qa".equals(capability)) {
                 String ragQuery = difyKnowledgeService.buildRagPrompt(userMessage, courseCode, knowledgePointId);
                 DifyResponse resp = difyClient.sendChatMessage(ragQuery, userId);
@@ -313,6 +330,18 @@ public class AgenticClient {
         }
     }
 
+    /**
+     * 已迁移到 Dify Workflow 的 capability：返回组装好的 request_json；未迁移的返回 null。
+     */
+    private Map<String, Object> buildWorkflowRequestJson(String capability, AgenticRequest request) {
+        return switch (capability) {
+            case "tower-diagnosis-report" -> buildTowerWorkflowInput(request);
+            case "assessment" -> buildAssessmentWorkflowInput(request);
+            case "recommend" -> buildRecommendWorkflowInput(request);
+            default -> null;
+        };
+    }
+
     private AgenticResponse difyToAgentic(DifyResponse difyResp) {
         if (!difyResp.isSuccess()) {
             return AgenticResponse.unavailable();
@@ -321,6 +350,263 @@ public class AgenticClient {
                 Map.of("result", difyResp.getContent(), "conversationId",
                         difyResp.getConversationId() != null ? difyResp.getConversationId() : ""),
                 "ok");
+    }
+
+    // ---- dify workflow helpers ----
+
+    /**
+     * 把 Workflow 的 data.outputs 解析并解包为结构化 Map。
+     * 兼容各 Workflow End 输出变量名不一致（result / structured_output / output）。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> workflowOutputsMap(DifyResponse resp) {
+        Map<String, Object> outputs = parseJsonObject(resp.getContent());
+        return unwrapOutputs(outputs, resp.getContent());
+    }
+
+    /** 解包后的结构化输出序列化为 JSON 字符串，供返回 String 的形态 A 方法使用。 */
+    private String workflowOutputsJson(DifyResponse resp) throws Exception {
+        return objectMapper.writeValueAsString(workflowOutputsMap(resp));
+    }
+
+    private Map<String, Object> parseJsonObject(String content) {
+        if (content == null || content.isBlank()) return Map.of();
+        try {
+            JsonNode node = objectMapper.readTree(content);
+            if (node != null && node.isObject()) {
+                return objectMapper.convertValue(node, Map.class);
+            }
+        } catch (Exception ignored) {
+        }
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> unwrapOutputs(Map<String, Object> map, String fallbackRaw) {
+        for (String wrapper : List.of("result", "structured_output", "output", "data", "text")) {
+            Object value = map.get(wrapper);
+            if (value instanceof Map<?, ?> m) {
+                Map<String, Object> inner = new LinkedHashMap<>();
+                m.forEach((k, v) -> inner.put(String.valueOf(k), v));
+                if (!inner.isEmpty()) return inner;
+            }
+            if (value instanceof String s) {
+                Map<String, Object> parsed = parseJsonObject(s);
+                if (!parsed.isEmpty()) return parsed;
+            }
+        }
+        if (!map.isEmpty()) return map;
+        return Map.of("result", fallbackRaw != null ? fallbackRaw : "");
+    }
+
+    // ---- request_json 组装（后端数据 -> Dify Workflow 输入 schema）----
+
+    private Map<String, Object> buildClusterWorkflowInput(Map<String, Object> request) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("courseCode", request.get("course_id"));
+        input.put("questionStats", List.of()); // 后端暂未采集题目级统计
+
+        Map<String, Map<String, Object>> aggregated = new LinkedHashMap<>();
+        Object mistakes = request.get("mistakes");
+        if (mistakes instanceof List<?> list) {
+            for (Object item : list) {
+                Map<String, Object> m = asMap(item);
+                if (m == null) continue;
+                String id = str(m.get("knowledge_point_id"));
+                if (id == null || id.isBlank()) continue;
+                Map<String, Object> agg = aggregated.computeIfAbsent(id, k -> new LinkedHashMap<>());
+                agg.putIfAbsent("id", id);
+                agg.putIfAbsent("name", firstNonBlank(m.get("knowledge_point_name"), id));
+                agg.putIfAbsent("studentIds", new LinkedHashSet<String>());
+                agg.putIfAbsent("rate", num(m.get("mistake_rate")));
+                String sid = str(m.get("student_id"));
+                if (sid != null && !sid.isBlank()) {
+                    ((Set<String>) agg.get("studentIds")).add(sid);
+                }
+            }
+        }
+
+        List<Map<String, Object>> knowledgePoints = new ArrayList<>();
+        for (Map<String, Object> agg : aggregated.values()) {
+            int studentCount = ((Set<String>) agg.get("studentIds")).size();
+            double rate = (Double) agg.get("rate");
+            Map<String, Object> kp = new LinkedHashMap<>();
+            kp.put("id", agg.get("id"));
+            kp.put("name", agg.get("name"));
+            kp.put("studentCount", studentCount);
+            kp.put("wrongCount", studentCount > 0 ? (int) Math.round(rate * studentCount) : 0);
+            knowledgePoints.add(kp);
+        }
+        input.put("knowledgePoints", knowledgePoints);
+        return input;
+    }
+
+    private Map<String, Object> buildTeachingWorkflowInput(Map<String, Object> request) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("courseCode", request.get("course_id"));
+
+        // 学生干预版
+        if (request.containsKey("student_id")) {
+            input.put("student", Map.of("anonymousId", str(request.get("student_id"))));
+            input.put("scores", mapScores(request.get("scores")));
+            input.put("progress", mapProgress(request.get("progress")));
+            input.put("riskLevel", request.getOrDefault("risk_level", "low"));
+            return input;
+        }
+
+        // 班级版
+        Map<String, Object> classSummary = new LinkedHashMap<>();
+        Object studentCount = request.get("student_count");
+        classSummary.put("studentCount", studentCount instanceof Number n ? n.intValue() : 0);
+        Object riskCount = request.get("active_risk_count");
+        classSummary.put("atRiskStudentCount", riskCount instanceof Number n ? n.intValue() : 0);
+
+        double completionRate = 0.0;
+        Object progressData = request.get("progress_data");
+        if (progressData instanceof Map<?, ?> pd) {
+            Object rate = pd.get("avg_completion_rate");
+            completionRate = rate instanceof Number n ? n.doubleValue() : 0.0;
+        }
+        classSummary.put("completionRate", completionRate);
+
+        List<Map<String, Object>> weakPoints = new ArrayList<>();
+        double masterySum = 0.0;
+        int masteryCount = 0;
+        Object weakPointsRaw = request.get("weak_points");
+        if (weakPointsRaw instanceof List<?> list) {
+            for (Object item : list) {
+                Map<String, Object> m = asMap(item);
+                if (m == null) continue;
+                String name = str(m.get("name"));
+                double scoreRate = num(m.get("score_rate"));
+                double mastery = scoreRate * 100;
+                Map<String, Object> w = new LinkedHashMap<>();
+                w.put("knowledgePointId", name); // 后端暂无真实 id，用 name 兜底
+                w.put("name", name);
+                w.put("mastery", mastery);
+                w.put("wrongRate", 1.0 - scoreRate);
+                w.put("affectedStudentCount", 0); // 后端暂未采集
+                weakPoints.add(w);
+                masterySum += mastery;
+                masteryCount++;
+            }
+        }
+        classSummary.put("averageMastery", masteryCount > 0 ? masterySum / masteryCount : 0);
+        input.put("classSummary", classSummary);
+        input.put("weakPoints", weakPoints);
+        input.put("recentClusters", request.getOrDefault("clusters", List.of()));
+        return input;
+    }
+
+    private Map<String, Object> buildTowerWorkflowInput(AgenticRequest request) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("courseCode", request.getCourseCode());
+        Map<String, Object> ctx = request.getContext();
+        if (ctx != null) {
+            input.put("knowledgePointId", ctx.get("knowledgePointId"));
+            input.put("roomType", ctx.get("roomType"));
+            input.put("correctRate", ctx.get("correctRate"));
+            input.put("cleared", ctx.get("cleared"));
+            Object answers = ctx.get("answers");
+            input.put("answers", answers instanceof List<?> ? answers : List.of());
+            input.put("questionCount", answers instanceof List<?> l ? l.size() : 0);
+        } else {
+            input.put("knowledgePointId", null);
+            input.put("roomType", null);
+            input.put("correctRate", null);
+            input.put("cleared", false);
+            input.put("answers", List.of());
+            input.put("questionCount", 0);
+        }
+        return input;
+    }
+
+    private Map<String, Object> buildAssessmentWorkflowInput(AgenticRequest request) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("courseCode", request.getCourseCode());
+
+        Map<String, Object> ctx = request.getContext();
+        Map<String, Object> task = new LinkedHashMap<>();
+        Map<String, Object> submission = new LinkedHashMap<>();
+        if (ctx != null) {
+            task.put("taskNo", ctx.getOrDefault("taskNo", ""));
+            task.put("taskType", ctx.getOrDefault("taskType", ""));
+            task.put("description", ctx.getOrDefault("taskDescription", ""));
+            task.put("rubric", ctx.getOrDefault("rubric", List.of()));
+            submission.put("text", ctx.getOrDefault("submissionText", ""));
+            submission.put("hasAttachment", ctx.getOrDefault("hasAttachment", ctx.getOrDefault("hasFile", false)));
+        } else {
+            task.put("taskNo", "");
+            task.put("taskType", "");
+            task.put("description", "");
+            task.put("rubric", List.of());
+            submission.put("text", "");
+            submission.put("hasAttachment", false);
+        }
+        input.put("task", task);
+        input.put("submission", submission);
+        return input;
+    }
+
+    private Map<String, Object> buildRecommendWorkflowInput(AgenticRequest request) {
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("courseCode", request.getCourseCode());
+        Map<String, Object> ctx = request.getContext();
+        if (ctx != null) {
+            input.put("student", ctx.getOrDefault("student", Map.of()));
+            input.put("recommendations", ctx.getOrDefault("recommendations", List.of()));
+        } else {
+            input.put("student", Map.of());
+            input.put("recommendations", List.of());
+        }
+        return input;
+    }
+
+    private List<Map<String, Object>> mapScores(Object scores) {
+        if (!(scores instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object item : list) {
+            Map<String, Object> m = asMap(item);
+            if (m == null) continue;
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("score", m.getOrDefault("score", 0));
+            s.put("scoredAt", m.getOrDefault("scored_at", m.getOrDefault("scoredAt", "")));
+            out.add(s);
+        }
+        return out;
+    }
+
+    private Map<String, Object> mapProgress(Object progress) {
+        Map<String, Object> m = asMap(progress);
+        if (m == null) return Map.of();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("completionRate", m.getOrDefault("completion_rate", m.getOrDefault("completionRate", 0)));
+        out.put("totalTasks", m.getOrDefault("total_tasks", m.getOrDefault("totalTasks", 0)));
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        if (!(value instanceof Map<?, ?> m)) return null;
+        Map<String, Object> result = new LinkedHashMap<>();
+        m.forEach((k, v) -> result.put(String.valueOf(k), v));
+        return result;
+    }
+
+    private String str(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String firstNonBlank(Object... values) {
+        for (Object value : values) {
+            String s = str(value);
+            if (s != null && !s.isBlank()) return s;
+        }
+        return "";
+    }
+
+    private double num(Object value) {
+        return value instanceof Number n ? n.doubleValue() : 0.0;
     }
 
     // ---- deepseek mode internals ----

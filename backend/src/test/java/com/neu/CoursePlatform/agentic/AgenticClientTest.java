@@ -351,6 +351,45 @@ class AgenticClientTest {
                 () -> localClient.riskDetect(Map.of("data", "test")));
     }
 
+    // ============ workflowOutputsMap 解包（result vs structured_output）============
+
+    @Test
+    void workflowOutputsMapUnwrapsResultKey() throws Exception {
+        Object result = invokePrivate(client, "workflowOutputsMap",
+                DifyResponse.success("{\"result\":{\"summary\":\"ok\"}}"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) result;
+        assertEquals("ok", map.get("summary"));
+    }
+
+    @Test
+    void workflowOutputsMapUnwrapsStructuredOutputKey() throws Exception {
+        Object result = invokePrivate(client, "workflowOutputsMap",
+                DifyResponse.success("{\"structured_output\":{\"summary\":\"ok2\"}}"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) result;
+        assertEquals("ok2", map.get("summary"));
+    }
+
+    @Test
+    void workflowOutputsMapUnwrapsResultAsJsonString() throws Exception {
+        Object result = invokePrivate(client, "workflowOutputsMap",
+                DifyResponse.success("{\"result\":\"{\\\"summary\\\":\\\"ok3\\\"}\"}"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) result;
+        assertEquals("ok3", map.get("summary"));
+    }
+
+    @Test
+    void workflowOutputsMapKeepsPlainMap() throws Exception {
+        Object result = invokePrivate(client, "workflowOutputsMap",
+                DifyResponse.success("{\"a\":1,\"b\":2}"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) result;
+        assertEquals(1, map.get("a"));
+        assertEquals(2, map.get("b"));
+    }
+
     // ============ helper ============
 
     private static AgenticRequest createRequest(String courseCode, String content) {
@@ -380,6 +419,11 @@ class AgenticClientTest {
             @Override
             public DifyResponse runWorkflow(java.util.Map<String, Object> inputs, String userId) {
                 return DifyResponse.success("Dify workflow success");
+            }
+
+            @Override
+            public DifyResponse runWorkflow(String capability, java.util.Map<String, Object> inputs) {
+                return DifyResponse.success("Dify mock success");
             }
 
             @Override
@@ -419,6 +463,11 @@ class AgenticClientTest {
             }
 
             @Override
+            public DifyResponse runWorkflow(String capability, java.util.Map<String, Object> inputs) {
+                return DifyResponse.error("Dify error: service unavailable");
+            }
+
+            @Override
             public DifyResponse retrieveKnowledge(String query, int topK) {
                 return DifyResponse.error("Knowledge base error");
             }
@@ -448,6 +497,20 @@ class AgenticClientTest {
             field.set(target, value);
         } catch (Exception e) {
             throw new RuntimeException("Failed to set field " + fieldName, e);
+        }
+    }
+
+    private static Object invokePrivate(Object target, String methodName, Object... args) {
+        try {
+            Class<?>[] paramTypes = new Class<?>[args.length];
+            for (int i = 0; i < args.length; i++) {
+                paramTypes[i] = args[i].getClass();
+            }
+            var method = target.getClass().getDeclaredMethod(methodName, paramTypes);
+            method.setAccessible(true);
+            return method.invoke(target, args);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to invoke " + methodName, e);
         }
     }
 }

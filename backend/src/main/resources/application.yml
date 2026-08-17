@@ -58,6 +58,12 @@ dify:
   workflow-api-key: ${DIFY_WORKFLOW_API_KEY:}
   dataset-id: ${DIFY_DATASET_ID:}
   dataset-api-key: ${DIFY_DATASET_API_KEY:}
+  # 第一批 5 个 Workflow 的独立 Key（capability -> app）
+  workflow-cluster-key: ${DIFY_WORKFLOW_API_KEY_CLUSTER:}
+  workflow-suggestions-key: ${DIFY_WORKFLOW_API_KEY_SUGGESTIONS:}
+  workflow-diagnosis-key: ${DIFY_WORKFLOW_API_KEY_DIAGNOSIS:}
+  workflow-assessment-key: ${DIFY_WORKFLOW_API_KEY_ASSESSMENT:}
+  workflow-recommend-key: ${DIFY_WORKFLOW_API_KEY_RECOMMEND:}
 logging:
   level:
     "[com.neu.CoursePlatform.mapper]": debug

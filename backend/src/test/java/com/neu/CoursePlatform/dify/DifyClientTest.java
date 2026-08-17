@@ -190,6 +190,76 @@ class DifyClientTest {
         assertFalse(resp.isSuccess()); // HTTP 不可达
     }
 
+    // ============ workflowKeyFor capability 映射 ============
+
+    @Test
+    void workflowKeyForSelectsClusterKey() throws Exception {
+        setField(client, "workflowClusterKey", "app-cluster");
+        assertEquals("app-cluster", invokePrivate(client, "workflowKeyFor", "clusterProblems"));
+    }
+
+    @Test
+    void workflowKeyForSelectsSuggestionsKey() throws Exception {
+        setField(client, "workflowSuggestionsKey", "app-suggestions");
+        assertEquals("app-suggestions", invokePrivate(client, "workflowKeyFor", "teachingSuggestions"));
+    }
+
+    @Test
+    void workflowKeyForSelectsDiagnosisKey() throws Exception {
+        setField(client, "workflowDiagnosisKey", "app-diagnosis");
+        assertEquals("app-diagnosis", invokePrivate(client, "workflowKeyFor", "tower-diagnosis-report"));
+    }
+
+    @Test
+    void workflowKeyForSelectsAssessmentKey() throws Exception {
+        setField(client, "workflowAssessmentKey", "app-assessment");
+        assertEquals("app-assessment", invokePrivate(client, "workflowKeyFor", "assessment"));
+    }
+
+    @Test
+    void workflowKeyForSelectsRecommendKey() throws Exception {
+        setField(client, "workflowRecommendKey", "app-recommend");
+        assertEquals("app-recommend", invokePrivate(client, "workflowKeyFor", "recommend"));
+    }
+
+    @Test
+    void workflowKeyForFallsBackToDefault() throws Exception {
+        setField(client, "workflowApiKey", "app-default");
+        assertEquals("app-default", invokePrivate(client, "workflowKeyFor", "unknown-capability"));
+    }
+
+    // ============ parseResponse：Workflow data.outputs / data.status ============
+
+    @Test
+    void parseResponseExtractsWorkflowOutputs() throws Exception {
+        DifyResponse resp = (DifyResponse) invokePrivate(client, "parseResponse",
+                "{\"data\":{\"status\":\"succeeded\",\"outputs\":{\"result\":\"hello\"}}}");
+        assertTrue(resp.isSuccess());
+        assertTrue(resp.getContent().contains("hello"));
+    }
+
+    @Test
+    void parseResponseReturnsErrorOnFailedStatus() throws Exception {
+        DifyResponse resp = (DifyResponse) invokePrivate(client, "parseResponse",
+                "{\"data\":{\"status\":\"failed\",\"error\":\"boom\"}}");
+        assertFalse(resp.isSuccess());
+        assertTrue(resp.getError().contains("failed"));
+        assertTrue(resp.getError().contains("boom"));
+    }
+
+    // ============ isWorkflowConfigured ============
+
+    @Test
+    void isWorkflowConfiguredTrueWhenAnyWorkflowKeySet() {
+        setField(client, "workflowClusterKey", "app-cluster");
+        assertTrue(client.isWorkflowConfigured());
+    }
+
+    @Test
+    void isWorkflowConfiguredFalseWhenNoWorkflowKeys() {
+        assertFalse(client.isWorkflowConfigured());
+    }
+
     // ============ 辅助方法 ============
 
     private static void setField(Object target, String fieldName, Object value) {
@@ -199,6 +269,20 @@ class DifyClientTest {
             field.set(target, value);
         } catch (Exception e) {
             throw new RuntimeException("Failed to set field " + fieldName, e);
+        }
+    }
+
+    private static Object invokePrivate(Object target, String methodName, Object... args) {
+        try {
+            for (var method : target.getClass().getDeclaredMethods()) {
+                if (method.getName().equals(methodName) && method.getParameterCount() == args.length) {
+                    method.setAccessible(true);
+                    return method.invoke(target, args);
+                }
+            }
+            throw new NoSuchMethodException(methodName);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to invoke " + methodName, e);
         }
     }
 }

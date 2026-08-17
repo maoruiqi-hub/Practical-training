@@ -88,9 +88,13 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
             request.setCourseCode(task != null ? task.getCourseCode() : null);
             request.setContent(buildAgenticPrompt(content, hasFile, task));
             request.setContext(Map.of(
-                    "taskNo", task != null ? task.getTaskNo() : "",
+                    "taskNo", task != null ? normalize(task.getTaskNo()) : "",
                     "taskType", task != null ? normalize(task.getTaskType()) : "",
-                    "hasFile", hasFile
+                    "taskDescription", task != null ? normalize(task.getDescription()) : "",
+                    "rubric", List.of(), // 后端暂无结构化评分标准，Dify 以 description 兜底
+                    "submissionText", content == null ? "" : content,
+                    "hasFile", hasFile,
+                    "hasAttachment", hasFile
             ));
             AgenticResponse response = agenticClient.invoke("assessment", request);
             if (response == null || !response.isSuccess() || response.getData() == null || response.getData().isEmpty()) {

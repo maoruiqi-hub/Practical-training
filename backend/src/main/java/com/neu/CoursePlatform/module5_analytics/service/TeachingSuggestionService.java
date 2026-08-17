@@ -62,7 +62,8 @@ public class TeachingSuggestionService {
                         .toList(),
                 "clusters", List.of(), // Phase 3: 从 ProblemClusterService 获取
                 "progress_data", Map.of("avg_completion_rate", avgRate),
-                "active_risk_count", riskCount
+                "active_risk_count", riskCount,
+                "student_count", studentIds.size()
         );
 
         try {
