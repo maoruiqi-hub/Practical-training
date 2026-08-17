@@ -121,7 +121,10 @@ public class ScoreAnalysisServiceImpl implements ScoreAnalysisService {
 
     @Override
     public ScoreTrendDTO getStudentScoreTrends(String studentId, String courseId, String granularity) {
-        List<StudentScoreDTO> scores = dataProvider.getStudentScores(studentId, courseId);
+        List<StudentScoreDTO> scores = dataProvider.getStudentScores(studentId, courseId).stream()
+                .sorted(Comparator.comparing(StudentScoreDTO::getScoredAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
         ScoreTrendDTO dto = new ScoreTrendDTO();
         dto.setGranularity(granularity != null ? granularity : "exam");
 

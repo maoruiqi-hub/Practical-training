@@ -26,7 +26,8 @@ public class RiskAlert {
     /** 课程ID（→ 模块1.Course） */
     private String courseId;
 
-    /** 风险类型：procrastination / low_score / score_decline / inactive / progress_lag / hp_critical / stuck */
+    /** 风险类型：procrastination / low_score / score_decline / score_volatility / mastery_drop /
+     * learning_break / inactive / progress_lag / hp_critical / stuck */
     private String riskType;
 
     /** 风险等级：high / medium / low */
