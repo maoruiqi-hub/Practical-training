@@ -2,6 +2,7 @@ package com.neu.CoursePlatform.controller;
 
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.dto.LoginResponse;
 import com.neu.CoursePlatform.entity.Teacher;
 import com.neu.CoursePlatform.service.TeacherService;
 import jakarta.servlet.http.HttpSession;
@@ -30,11 +31,11 @@ public class TeacherController {
 
     /** 登录 | 公开 */
     @PostMapping("/login")
-    public Result<Teacher> login(@RequestBody Teacher req, HttpSession session) {
+    public Result<LoginResponse> login(@RequestBody Teacher req, HttpSession session) {
         Teacher teacher = teacherService.login(req.getUsername(), req.getPassword());
         if (teacher == null) return Result.fail("账号或密码错误");
         session.setAttribute("teacher", teacher);
-        return Result.ok(teacher);
+        return Result.ok(LoginResponse.fromTeacher(teacher));
     }
 
     /** 模糊搜索教师 | 登录用户 */

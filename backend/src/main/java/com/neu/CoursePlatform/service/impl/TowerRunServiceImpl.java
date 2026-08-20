@@ -140,6 +140,9 @@ public class TowerRunServiceImpl implements TowerRunService {
         if (planned.isEmpty()) {
             planned = fallbackNodes(run, knowledgePoints(courseCode), Map.of(), Map.of());
         }
+        if (planned.isEmpty()) {
+            throw new IllegalStateException("课程尚未配置知识点，无法生成学习路线");
+        }
         planned.sort(Comparator.comparing(StudentTowerNode::getNodeOrder));
         String firstAvailable = planned.stream()
                 .filter(node -> "available".equals(node.getStatus()))
@@ -404,12 +407,7 @@ public class TowerRunServiceImpl implements TowerRunService {
                 .comparingInt((KnowledgePoint kp) -> mastery.getOrDefault(kp.getKnowledgePointId(), 0))
                 .thenComparing(kp -> kp.getImportance() == null ? 9 : -kp.getImportance()));
         if (selected.size() > 8) selected = new ArrayList<>(selected.subList(0, 8));
-        if (selected.isEmpty()) {
-            KnowledgePoint kp = new KnowledgePoint();
-            kp.setKnowledgePointId("demo-kp");
-            kp.setName("课程基础挑战");
-            selected.add(kp);
-        }
+        if (selected.isEmpty()) return List.of();
 
         List<StudentTowerNode> nodes = new ArrayList<>();
         String previousMain = null;

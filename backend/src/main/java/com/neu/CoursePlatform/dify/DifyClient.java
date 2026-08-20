@@ -66,7 +66,7 @@ public class DifyClient {
     public DifyClient() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(3000);
-        requestFactory.setReadTimeout(10000);
+        requestFactory.setReadTimeout(60000);
         this.restTemplate = new RestTemplate(requestFactory);
         this.objectMapper = new ObjectMapper();
     }

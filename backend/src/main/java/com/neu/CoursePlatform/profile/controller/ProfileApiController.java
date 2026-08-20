@@ -4,6 +4,7 @@ import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.common.SharedIds;
 import com.neu.CoursePlatform.common.event.GameEvent;
+import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.profile.entity.Achievement;
 import com.neu.CoursePlatform.profile.entity.CompetencyScore;
 import com.neu.CoursePlatform.profile.entity.Recommendation;
@@ -67,7 +68,7 @@ public class ProfileApiController {
                                                @RequestParam(name = "course_id", required = false) String courseId,
                                                @RequestParam(name = "courseCode", required = false) String courseCode,
                                                HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -79,7 +80,7 @@ public class ProfileApiController {
                                                        @RequestParam(name = "course_id", required = false) String courseId,
                                                        @RequestParam(name = "courseCode", required = false) String courseCode,
                                                        HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -91,7 +92,7 @@ public class ProfileApiController {
                                                     @RequestParam(name = "course_id", required = false) String courseId,
                                                     @RequestParam(name = "courseCode", required = false) String courseCode,
                                                     HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -103,7 +104,7 @@ public class ProfileApiController {
                                                           @RequestParam(name = "course_id", required = false) String courseId,
                                                           @RequestParam(name = "courseCode", required = false) String courseCode,
                                                           HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -115,7 +116,7 @@ public class ProfileApiController {
                                                         @RequestParam(name = "course_id", required = false) String courseId,
                                                         @RequestParam(name = "courseCode", required = false) String courseCode,
                                                         HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -129,7 +130,7 @@ public class ProfileApiController {
                                                                 @RequestParam(name = "course_id", required = false) String courseId,
                                                                 @RequestParam(name = "courseCode", required = false) String courseCode,
                                                                 HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -141,7 +142,7 @@ public class ProfileApiController {
                                                       @RequestParam(name = "course_id", required = false) String courseId,
                                                       @RequestParam(name = "courseCode", required = false) String courseCode,
                                                       HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -160,7 +161,7 @@ public class ProfileApiController {
                                                 @RequestParam(name = "course_id", required = false) String courseId,
                                                 @RequestParam(name = "courseCode", required = false) String courseCode,
                                                 HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -177,7 +178,7 @@ public class ProfileApiController {
                                                         @RequestParam(name = "courseCode", required = false) String courseCode,
                                                         @RequestParam(defaultValue = "false") boolean force,
                                                         HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -193,7 +194,7 @@ public class ProfileApiController {
                                                  @PathVariable String runId,
                                                  @PathVariable String nodeId,
                                                  HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 必须为数字");
         try {
@@ -208,7 +209,7 @@ public class ProfileApiController {
                                                       @PathVariable String runId,
                                                       @PathVariable String nodeId,
                                                       HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 必须为数字");
         try {
@@ -224,7 +225,7 @@ public class ProfileApiController {
                                                          @PathVariable String nodeId,
                                                          @RequestBody Map<String, Object> body,
                                                          HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 必须为数字");
         try {
@@ -240,7 +241,7 @@ public class ProfileApiController {
                                                          @PathVariable String nodeId,
                                                          @RequestBody Map<String, Object> body,
                                                          HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 必须为数字");
         try {
@@ -254,7 +255,7 @@ public class ProfileApiController {
     public Result<Map<String, Object>> towerAttemptReport(@PathVariable String studentId,
                                                           @PathVariable String evaluationId,
                                                           HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 必须为数字");
         try {
@@ -270,7 +271,7 @@ public class ProfileApiController {
                                                          @PathVariable String nodeId,
                                                          @RequestParam(defaultValue = "battle") String mode,
                                                          HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 蹇呴』涓烘暟瀛?");
         try {
@@ -286,7 +287,7 @@ public class ProfileApiController {
                                                                    @PathVariable String nodeId,
                                                                    @RequestParam(defaultValue = "battle") String mode,
                                                                    HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         if (studentNo == null) return Result.fail("studentId 蹇呴』涓烘暟瀛?");
         try {
@@ -302,7 +303,7 @@ public class ProfileApiController {
                                                            @RequestParam(name = "courseCode", required = false) String courseCode,
                                                            @RequestParam(name = "run_id", required = false) String runId,
                                                            HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -316,7 +317,7 @@ public class ProfileApiController {
                                                     @RequestParam(name = "run_id", required = false) String runId,
                                                     @RequestParam(name = "node_id", required = false) String nodeId,
                                                     HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("璇峰厛鐧诲綍");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 鍜?course_id 蹇呴』涓烘暟瀛?");
@@ -329,7 +330,7 @@ public class ProfileApiController {
                                   @RequestParam(name = "courseCode", required = false) String courseCode,
                                   @RequestBody Map<String, Object> body,
                                   HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -346,7 +347,7 @@ public class ProfileApiController {
                                                        @RequestParam(name = "courseCode", required = false) String courseCode,
                                                        @RequestBody Map<String, Object> body,
                                                        HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
@@ -370,7 +371,9 @@ public class ProfileApiController {
 
     @PostMapping("/students/{studentId}/game-event")
     public Result<Map<String, Object>> receiveGameEvent(@PathVariable String studentId,
-                                                        @RequestBody Map<String, Object> body) {
+                                                        @RequestBody Map<String, Object> body,
+                                                        HttpSession session) {
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         String courseId = stringValue(body, "course_id", "courseId", "courseCode");
         String eventType = stringValue(body, "event_type", "eventType");
         if (courseId == null || eventType == null) return Result.fail("course_id 和 event_type 不能为空");
@@ -394,6 +397,15 @@ public class ProfileApiController {
 
     private static String resolveCourseId(String courseId, String courseCode) {
         return courseId != null ? courseId : courseCode;
+    }
+
+    /** 学生自助接口只能操作本人；管理员保留运维查看能力。 */
+    private boolean canAccessStudent(String studentId, HttpSession session) {
+        Student currentStudent = auth.getStudent(session);
+        if (currentStudent != null) {
+            return studentId != null && studentId.equals(currentStudent.getStudentNo());
+        }
+        return auth.isAdmin(session);
     }
 
     private static Integer parseInt(String value, String field) {

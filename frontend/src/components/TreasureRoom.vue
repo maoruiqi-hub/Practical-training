@@ -47,16 +47,11 @@
             </button>
           </article>
 
-          <button
+          <el-empty
             v-if="!shownResources.length"
-            type="button"
-            class="choice-card reward-card fallback"
-            @click="claimFallback"
-          >
-            <small>兜底奖励</small>
-            <strong>知识卡碎片</strong>
-            <span>课程资源待配置，先获得一份路线奖励。</span>
-          </button>
+            description="当前节点暂无课程资源"
+            :image-size="90"
+          />
         </div>
       </div>
     </section>
@@ -160,11 +155,6 @@ const claimResource = async resource => {
   }
   ElMessage.success('课程资源已收入宝箱')
   closeWithReward(resource.title || '课程资源')
-}
-
-const claimFallback = () => {
-  ElMessage.success('知识卡碎片已收入宝箱')
-  closeWithReward('知识卡碎片')
 }
 
 watch(() => [props.modelValue, props.courseId, props.selectedNode?.kpId], loadResources, { immediate: true })
@@ -313,7 +303,4 @@ watch(() => [props.modelValue, props.courseId, props.selectedNode?.kpId], loadRe
   background: rgba(183, 91, 40, .78);
 }
 
-.fallback {
-  border-style: dashed;
-}
 </style>

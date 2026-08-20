@@ -404,7 +404,7 @@ public class AgenticClient {
     private Map<String, Object> buildClusterWorkflowInput(Map<String, Object> request) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("courseCode", request.get("course_id"));
-        input.put("questionStats", List.of()); // 后端暂未采集题目级统计
+        input.put("questionStats", mapQuestionStats(request));
 
         Map<String, Map<String, Object>> aggregated = new LinkedHashMap<>();
         Object mistakes = request.get("mistakes");
@@ -439,6 +439,45 @@ public class AgenticClient {
         }
         input.put("knowledgePoints", knowledgePoints);
         return input;
+    }
+
+    private List<Map<String, Object>> mapQuestionStats(Map<String, Object> request) {
+        Object raw = request.get("questionStats");
+        if (!(raw instanceof List<?>)) raw = request.get("questions");
+        if (!(raw instanceof List<?> list)) return List.of();
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : list) {
+            Map<String, Object> source = asMap(item);
+            if (source == null) continue;
+            String questionId = firstNonBlank(source.get("questionId"), source.get("question_id"));
+            String knowledgePointId = firstNonBlank(source.get("knowledgePointId"), source.get("knowledge_point_id"));
+            if (questionId.isBlank() || knowledgePointId.isBlank()) continue;
+
+            Map<String, Object> stat = new LinkedHashMap<>();
+            stat.put("questionId", questionId);
+            stat.put("knowledgePointId", knowledgePointId);
+            stat.put("wrongCount", integerValue(source.get("wrongCount"), source.get("wrong_count")));
+            stat.put("wrongRate", num(firstValue(source.get("wrongRate"), source.get("wrong_rate"))));
+            Object patterns = firstValue(source.get("commonWrongPatterns"), source.get("common_wrong_patterns"));
+            stat.put("commonWrongPatterns", patterns instanceof List<?> ? patterns : List.of());
+            result.add(stat);
+        }
+        return result;
+    }
+
+    private Object firstValue(Object first, Object second) {
+        return first != null ? first : second;
+    }
+
+    private int integerValue(Object first, Object second) {
+        Object value = firstValue(first, second);
+        if (value instanceof Number number) return number.intValue();
+        try {
+            return value == null ? 0 : Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private Map<String, Object> buildTeachingWorkflowInput(Map<String, Object> request) {

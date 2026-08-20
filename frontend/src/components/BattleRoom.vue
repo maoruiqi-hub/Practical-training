@@ -417,8 +417,11 @@ const submitBattle = async forcedCleared => {
         choiceLocked.value = false
         return
       }
-    } else if (!props.runId || !props.nodeId) {
-      ElMessage.warning('未找到可提交任务，本次使用本地结算')
+    } else {
+      ElMessage.error('当前挑战缺少真实节点信息，无法结算')
+      finished.value = false
+      choiceLocked.value = false
+      return
     }
 
     emit('profile-refresh')

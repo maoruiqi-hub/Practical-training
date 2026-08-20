@@ -91,7 +91,7 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                     "taskNo", task != null ? normalize(task.getTaskNo()) : "",
                     "taskType", task != null ? normalize(task.getTaskType()) : "",
                     "taskDescription", task != null ? normalize(task.getDescription()) : "",
-                    "rubric", List.of(), // 后端暂无结构化评分标准，Dify 以 description 兜底
+                    "rubric", rubricFor(task),
                     "submissionText", content == null ? "" : content,
                     "hasFile", hasFile,
                     "hasAttachment", hasFile
@@ -200,11 +200,25 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
         JsonNode root = objectMapper.readTree(normalized);
         Map<String, Integer> dimensions = new LinkedHashMap<>();
         JsonNode dimNode = root.path("dimensions");
-        dimensions.put("内容完整性", clamp(dimNode.path("内容完整性").asInt(0)));
-        dimensions.put("知识点覆盖度", clamp(dimNode.path("知识点覆盖度").asInt(0)));
-        dimensions.put("逻辑结构", clamp(dimNode.path("逻辑结构").asInt(0)));
-        dimensions.put("表达规范", clamp(dimNode.path("表达规范").asInt(0)));
-        dimensions.put("任务要求符合度", clamp(dimNode.path("任务要求符合度").asInt(0)));
+        if (dimNode.isArray()) {
+            dimNode.forEach(item -> {
+                String name = normalize(item.path("name").asText());
+                if (!name.isBlank()) dimensions.put(name, clamp(item.path("score").asInt(0)));
+            });
+        } else {
+            dimensions.put("内容完整性", clamp(dimNode.path("内容完整性").asInt(0)));
+            dimensions.put("知识点覆盖度", clamp(dimNode.path("知识点覆盖度").asInt(0)));
+            dimensions.put("逻辑结构", clamp(dimNode.path("逻辑结构").asInt(0)));
+            dimensions.put("表达规范", clamp(dimNode.path("表达规范").asInt(0)));
+            dimensions.put("任务要求符合度", clamp(dimNode.path("任务要求符合度").asInt(0)));
+        }
+        // Keep the persisted review contract stable even if the Workflow omits a dimension
+        // or uses a different ordering in its array output.
+        dimensions.putIfAbsent("内容完整性", 0);
+        dimensions.putIfAbsent("知识点覆盖度", 0);
+        dimensions.putIfAbsent("逻辑结构", 0);
+        dimensions.putIfAbsent("表达规范", 0);
+        dimensions.putIfAbsent("任务要求符合度", 0);
         List<String> suggestions = new ArrayList<>();
         JsonNode suggestionNode = root.path("suggestions");
         if (suggestionNode.isArray()) {
@@ -219,6 +233,19 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
         String summary = normalize(root.path("summary").asText());
         if (summary.isBlank()) summary = buildSummary(score, "", false);
         return new ReviewDraft(score, dimensions, summary, suggestions, riskLevel);
+    }
+
+    private List<Map<String, Object>> rubricFor(LearningTask task) {
+        if (task == null || normalize(task.getGradingRule()).isBlank()) return List.of();
+        String gradingRule = normalize(task.getGradingRule());
+        try {
+            JsonNode node = objectMapper.readTree(gradingRule);
+            if (node.isArray()) return objectMapper.convertValue(node, List.class);
+            if (node.isObject()) return List.of(objectMapper.convertValue(node, Map.class));
+        } catch (Exception ignored) {
+            // Legacy tasks store grading rules as plain text.
+        }
+        return List.of(Map.of("description", gradingRule));
     }
 
     private ReviewDraft generateLocalDraft(String content, boolean hasFile, LearningTask task) {

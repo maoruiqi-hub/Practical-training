@@ -21,8 +21,15 @@
         </div>
 
         <div class="route-map">
+          <el-empty
+            v-if="mapError"
+            class="route-empty"
+            :description="mapError"
+            :image-size="120"
+          />
           <div class="route-lantern" aria-hidden="true"></div>
           <div
+            v-if="!mapError"
             v-for="row in visualRows"
             :key="row.level"
             class="route-row"
@@ -149,6 +156,7 @@ const router = useRouter()
 const user = JSON.parse(localStorage.getItem('user') || '{}')
 
 const loading = ref(false)
+const mapError = ref('')
 const profile = ref({})
 const floors = ref([])
 const towerRun = ref(null)
@@ -159,23 +167,6 @@ const supplyVisible = ref(false)
 const activeRoomType = ref('event')
 
 const roomPattern = ['diagnosis', 'battle', 'treasure', 'battle', 'rest', 'elite', 'event', 'shop', 'battle', 'treasure', 'battle', 'rest', 'elite', 'boss']
-const fallbackNames = [
-  'Python 语法基础',
-  '变量与数据类型',
-  '表达式与运算符',
-  '分支控制',
-  '循环控制',
-  '函数与参数',
-  '列表与元组',
-  '字典与集合',
-  '字符串处理',
-  '文件处理',
-  '异常处理',
-  '模块与包',
-  '综合程序设计',
-  'Python 基础首领'
-]
-
 const normalizeCourseName = name => String(name || '').trim() === 'Python Program Design' ? 'Python 程序设计' : name
 
 const pageStyle = computed(() => ({
@@ -190,21 +181,6 @@ const courseId = computed(() =>
 )
 const courseName = computed(() => normalizeCourseName(route.query.courseName || localStorage.getItem('courseName') || 'Python 程序设计'))
 
-const fallbackFloors = fallbackNames.map((name, index) => ({
-  runId: '',
-  nodeId: `fallback-${index + 1}`,
-  kpId: String(index + 1),
-  kpName: name,
-  level: index + 1,
-  masteryRate: index === 0 ? 42 : 0,
-  masterySource: 'demo',
-  abilityPointId: '',
-  abilityPointName: '',
-  statusReason: 'fallback_demo',
-  status: index === 0 ? 'available' : 'locked',
-  roomType: roomPattern[index]
-}))
-
 const normalizeStatus = (floor, index) => {
   const raw = String(floor.floorStatus || floor.floor_status || floor.status || '').toLowerCase()
   const mastery = Number(floor.masteryRate ?? floor.mastery_rate ?? floor.mastery ?? 0)
@@ -217,7 +193,7 @@ const normalizeStatus = (floor, index) => {
 }
 
 const normalizeFloors = list => {
-  const source = Array.isArray(list) && list.length ? list : fallbackFloors
+  const source = Array.isArray(list) ? list : []
   return source.map((item, index) => {
     const level = Number(item.level || item.nodeOrder || item.node_order || item.floorLevel || index + 1)
     const roomType = item.roomType || item.room_type || roomPattern[index % roomPattern.length]
@@ -369,7 +345,6 @@ const riskText = risk => ({
 const masterySourceLabel = source => ({
   knowledge_mastery: '来自知识点掌握度',
   competency_score: '来自能力评分',
-  demo: '演示数据',
   none: '暂无掌握度'
 })[source] || source
 
@@ -397,6 +372,7 @@ const refreshProfile = async () => {
 
 const loadData = async () => {
   loading.value = true
+  mapError.value = ''
   try {
     const [profileRes, mapRes, rankRes] = await Promise.allSettled([
       getStudentProfile(studentId.value, courseId.value),
@@ -410,6 +386,13 @@ const loadData = async () => {
     if (mapRes.status === 'fulfilled' && mapRes.value.data.code === 200) {
       towerRun.value = mapRes.value.data.data || null
       floors.value = towerRun.value?.nodes || []
+      if (!floors.value.length) mapError.value = '当前课程尚未生成可用路线'
+    } else {
+      towerRun.value = null
+      floors.value = []
+      mapError.value = mapRes.status === 'fulfilled'
+        ? (mapRes.value.data.msg || '路线数据加载失败')
+        : '路线数据加载失败，请稍后重试'
     }
     if (rankRes.status === 'fulfilled' && rankRes.value.data.code === 200) {
       leaderboard.value = rankRes.value.data.data || []
