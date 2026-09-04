@@ -8,6 +8,7 @@ public interface IncentiveService {
             int totalCorrect, int consecutiveCorrect, boolean timedComplete,
             boolean fullScore, int nightSessions, int helpfulFeedback,
             int selfCorrections, int pythonicStyleCount);
+    List<Achievement> evaluateAndAward(Integer studentNo, Integer courseCode);
     List<Achievement> getAchievements(Integer studentNo, Integer courseCode);
     List<Map<String, Object>> getLeaderboard(Integer courseCode, String type);
     String getTitle(Integer studentNo, Integer courseCode);

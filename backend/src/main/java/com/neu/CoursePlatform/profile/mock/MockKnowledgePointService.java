@@ -1,9 +1,11 @@
 package com.neu.CoursePlatform.profile.mock;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 import java.util.*;
 
 @Service
+@Profile("mock")
 public class MockKnowledgePointService {
 
     /** Mock 课程能力点列表（对齐模块1 getAbilityMap 契约） */

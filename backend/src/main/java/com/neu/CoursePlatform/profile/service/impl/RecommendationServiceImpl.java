@@ -41,6 +41,7 @@ public class RecommendationServiceImpl implements RecommendationService {
 
         // 先按分数决定 type/priority，收集批量推荐对象，理由稍后一次性生成。
         for (CompetencyScore cs : scores) {
+            if (cs.getScore() == null) continue;
             Recommendation rec = buildRecommendation(studentNo, courseCode, cs);
             newRecs.add(rec);
             scoreByTarget.put(cs.getAbilityPointId(), cs.getScore());

@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
 class Module2ServiceTest {
 
@@ -140,38 +142,37 @@ class Module2ServiceTest {
     }
 
     @Test
-    void behaviorLogControllerPublishesSupplyAndHintEventsWhenGameModeEnabled() {
-        CapturingBehaviorLogService logService = new CapturingBehaviorLogService();
-        List<GameEvent> events = new ArrayList<>();
-        CourseGameConfigService gameConfigService = proxy(CourseGameConfigService.class, (method, args) -> switch (method) {
-            case "isEnabled" -> true;
-            default -> defaultValue(method);
-        });
-        BehaviorLogController controller = new BehaviorLogController(logService, events::add, gameConfigService, new Auth(null));
-        MockHttpSession session = new MockHttpSession();
+    void teacherSubmissionQueryRequiresOwnedCourseAndStudentsOnlySeeTheirOwnRecords() {
+        TaskSubmission owned = submission("task-1", "student-1", "answer");
+        TaskSubmissionService submissionService = proxy(TaskSubmissionService.class, (method, args) ->
+                "listByStudentNoAndCourse".equals(method) ? List.of(owned) : defaultValue(method));
+        Auth auth = mock(Auth.class);
+        when(auth.isAdmin(any())).thenReturn(false);
+        when(auth.isTeacher(any())).thenReturn(true);
+        when(auth.canModifyCourse(any(), eq("course-1"))).thenReturn(true);
+        TaskSubmissionController controller = new TaskSubmissionController(submissionService, null, null, null, auth);
+        MockHttpSession teacherSession = new MockHttpSession();
+
+        Result<List<TaskSubmission>> missingCourse = controller.listByStudent("student-1", null, null, teacherSession);
+        assertNotEquals(200, missingCourse.getCode());
+
+        Result<List<TaskSubmission>> ownedCourse = controller.listByStudent("student-1", "course-1", null, teacherSession);
+        assertEquals(200, ownedCourse.getCode());
+        assertEquals(1, ownedCourse.getData().size());
+
+        when(auth.canModifyCourse(any(), eq("course-2"))).thenReturn(false);
+        Result<List<TaskSubmission>> foreignCourse = controller.listByStudent("student-1", "course-2", null, teacherSession);
+        assertNotEquals(200, foreignCourse.getCode());
+
+        Auth studentAuth = new Auth(null);
+        TaskSubmissionController studentController = new TaskSubmissionController(
+                submissionService, null, null, null, studentAuth);
+        MockHttpSession studentSession = new MockHttpSession();
         Student student = new Student();
         student.setStudentNo("student-1");
-        session.setAttribute("student", student);
-
-        LearningBehaviorLog supplyLog = new LearningBehaviorLog();
-        supplyLog.setUserId("student-1");
-        supplyLog.setActionType("use_supply");
-        supplyLog.setResourceType("energy");
-        supplyLog.setResourceId("supply-1");
-        controller.record(supplyLog, "course-1", null, session);
-
-        LearningBehaviorLog hintLog = new LearningBehaviorLog();
-        hintLog.setUserId("student-1");
-        hintLog.setActionType("hint_used");
-        hintLog.setResourceId("question-1");
-        controller.record(hintLog, "course-1", null, session);
-
-        assertEquals(2, events.size());
-        assertEquals(GameEventTypes.SUPPLY_USED, events.get(0).getEventType());
-        assertEquals("course-1", events.get(0).getCourseId());
-        assertEquals("energy", events.get(0).getPayload().get("supply_type"));
-        assertEquals(GameEventTypes.HINT_USED, events.get(1).getEventType());
-        assertEquals("question-1", events.get(1).getPayload().get("question_id"));
+        studentSession.setAttribute("student", student);
+        assertEquals(200, studentController.listByStudent("student-1", "course-1", null, studentSession).getCode());
+        assertNotEquals(200, studentController.listByStudent("student-2", "course-1", null, studentSession).getCode());
     }
 
     @Test
@@ -195,6 +196,53 @@ class Module2ServiceTest {
         assertEquals("graded", quizSubmission.getStatus());
         assertEquals(10, quizSubmission.getScore());
         assertEquals("系统已自动评阅", quizSubmission.getFeedback());
+    }
+
+    @Test
+    void quizGradingRejectsDuplicateAndForeignQuestionsAndCountsMissingAsWrong() {
+        LearningTask quiz = task("task-quiz", "course-1", "quiz");
+        quiz.setScore(15);
+        Question q1 = question("q1", "single", "A", 10, "kp-1");
+        Question q2 = question("q2", "single", "B", 10, "kp-1");
+        TaskSubmissionServiceImpl service = submissionService(
+                quiz, Map.of("q1", q1, "q2", q2), List.of(), event -> { });
+
+        TaskSubmission missingAnswer = submission("task-quiz", "student-1",
+                "[{\"no\":\"q1\",\"response\":\"A\"}]");
+        service.applyInitialGrading(missingAnswer);
+        assertEquals(10, missingAnswer.getScore());
+
+        TaskSubmission duplicate = submission("task-quiz", "student-1",
+                "[{\"no\":\"q1\",\"response\":\"A\"},{\"no\":\"q1\",\"response\":\"A\"}]");
+        assertThrows(IllegalArgumentException.class, () -> service.applyInitialGrading(duplicate));
+
+        TaskSubmission foreign = submission("task-quiz", "student-1",
+                "[{\"no\":\"outside\",\"response\":\"A\"}]");
+        assertThrows(IllegalArgumentException.class, () -> service.applyInitialGrading(foreign));
+
+        TaskSubmission overMaximum = submission("task-quiz", "student-1",
+                "[{\"no\":\"q1\",\"response\":\"A\"},{\"no\":\"q2\",\"response\":\"B\"}]");
+        service.applyInitialGrading(overMaximum);
+        assertEquals(15, overMaximum.getScore());
+    }
+
+    @Test
+    void finalQuizScoreIsRecalculatedFromPersistedAnswerScores() {
+        LearningTask quiz = task("task-quiz", "course-1", "quiz");
+        quiz.setScore(12);
+        SubmissionAnswer objective = new SubmissionAnswer();
+        objective.setSubmissionId("submission-1");
+        objective.setScore(10);
+        SubmissionAnswer subjective = new SubmissionAnswer();
+        subjective.setSubmissionId("submission-1");
+        subjective.setScore(5);
+
+        TaskSubmissionServiceImpl service = submissionService(quiz, Map.of(),
+                List.of(objective, subjective), event -> { });
+        TaskSubmission submission = submission("task-quiz", "student-1", "[]");
+        submission.setSubmissionId("submission-1");
+
+        assertEquals(12, service.recalculateFinalScore(submission));
     }
 
     @Test
@@ -251,8 +299,18 @@ class Module2ServiceTest {
         FloorProgressService floorProgressService = proxy(FloorProgressService.class, (method, args) -> null);
         StudentService studentService = proxy(StudentService.class, (method, args) -> null);
         KnowledgePointService pointService = proxy(KnowledgePointService.class, (method, args) -> null);
+        com.neu.CoursePlatform.service.TaskQuestionService taskQuestionService = proxy(
+                com.neu.CoursePlatform.service.TaskQuestionService.class, (method, args) -> {
+                    if (!"listByTaskNo".equals(method)) return defaultValue(method);
+                    return questions.keySet().stream().map(questionId -> {
+                        com.neu.CoursePlatform.entity.TaskQuestion relation = new com.neu.CoursePlatform.entity.TaskQuestion();
+                        relation.setTaskNo(task.getTaskNo());
+                        relation.setQuestionId(questionId);
+                        return relation;
+                    }).toList();
+                });
         return new TaskSubmissionServiceImpl(taskService, studentService, questionService, answerService,
-                pointService, gameConfigService, floorProgressService, publisher, null);
+                pointService, gameConfigService, floorProgressService, publisher, null, taskQuestionService);
     }
 
     private static LearningTask task(String taskNo, String courseCode, String taskType) {

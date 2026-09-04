@@ -30,6 +30,14 @@ export const completeTowerNode = (studentId, runId, nodeId, data) =>
   api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/complete`, data)
 export const diagnoseTowerNode = (studentId, runId, nodeId, data) =>
   api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/diagnose`, data)
+export const getTowerNodeOptions = (studentId, runId, nodeId) =>
+  api.get(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/options`)
+export const chooseTowerNodeOption = (studentId, runId, nodeId, optionId, actionId) =>
+  api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/options/${optionId}/choose`, { actionId })
+export const getTowerInventory = (studentId, runId) =>
+  api.get(`/api/students/${studentId}/tower-run/${runId}/inventory`)
+export const useTowerInventory = (studentId, runId, nodeId, itemCode, actionId) =>
+  api.post(`/api/students/${studentId}/tower-run/${runId}/nodes/${nodeId}/inventory/${itemCode}/use`, { actionId })
 export const getTowerAttemptReport = (studentId, evaluationId) =>
   api.get(`/api/students/${studentId}/tower-run/attempts/${evaluationId}/report`)
 export const getTowerQuestionPack = (studentId, runId, nodeId, mode = 'battle') =>
@@ -40,8 +48,8 @@ export const getAbilityRadar = (studentId, courseId, runId = '', nodeId = '') =>
   api.get(`/api/students/${studentId}/ability-radar`, {
     params: { course_id: courseId, run_id: runId || undefined, node_id: nodeId || undefined }
   })
-export const sendGameEvent = (studentId, body) =>
-  api.post(`/api/students/${studentId}/game-event`, body)
+export const getTrueCompetency = (studentNo, courseCode) =>
+  api.get(`/api/profile/${studentNo}/${courseCode}/true-competency`)
 export const getLeaderboard = (courseId, type = 'progress') =>
   api.get('/api/leaderboard', { params: { course_id: courseId, type } })
 
@@ -76,7 +84,15 @@ export const updateLesson = (code, lessonNo, formData) => api.put(`/api/lessons/
 export const deleteLesson = (code, lessonNo) => api.delete(`/api/lessons/${code}/${lessonNo}`)
 
 // ============ 学习任务 (/api/tasks) ============
-export const getTaskList = (code) => api.get('/api/tasks', { params: { course_id: code } })
+export const getTaskList = (code, filters = {}) => api.get('/api/tasks', {
+  params: {
+    course_id: code,
+    ...(filters.taskType ? { taskType: filters.taskType } : {}),
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.lessonNo ? { lessonNo: filters.lessonNo } : {}),
+    ...(filters.studentId ? { student_id: filters.studentId } : {})
+  }
+})
 export const searchTask = (keyword) => api.get('/api/tasks/search', { params: { keyword } })
 export const addTask = (data) => {
   if (data instanceof FormData) return api.post('/api/tasks', data)
@@ -179,6 +195,17 @@ export const updateAbilityPoint = (abilityPointId, data) => api.put(`/api/abilit
 export const deleteAbilityPoint = (abilityPointId) => api.delete(`/api/ability-map/${abilityPointId}`)
 export const bindAbilityKnowledgePoint = (abilityPointId, knowledgePointId) => api.post(`/api/ability-map/${abilityPointId}/knowledge-points/${knowledgePointId}`)
 export const unbindAbilityKnowledgePoint = (abilityPointId, knowledgePointId) => api.delete(`/api/ability-map/${abilityPointId}/knowledge-points/${knowledgePointId}`)
+
+// ============ 假能力点 → 真能力点映射 (/api/ability-competency-map) ============
+export const getAbilityCompetencyMap = (courseCode) => api.get('/api/ability-competency-map', { params: { courseCode } })
+export const addTrueCompetency = (data) => api.post('/api/ability-competency-map/competencies', data)
+export const updateTrueCompetency = (competencyId, data) => api.put(`/api/ability-competency-map/competencies/${competencyId}`, data)
+export const deleteTrueCompetency = (competencyId, courseCode) => api.delete(`/api/ability-competency-map/competencies/${competencyId}`, { params: { courseCode } })
+export const saveAbilityCompetencyRelation = (data) => api.put('/api/ability-competency-map/relations', data)
+export const saveCompetencyTaskObservation = (data) => api.put('/api/ability-competency-map/observations', data)
+export const saveCompetencyTaskObservations = (data) => api.put('/api/ability-competency-map/observations/batch', data)
+export const calibrateAbilityCompetencyStrengths = (courseCode) => api.post('/api/ability-competency-map/calibrate', null, { params: { courseCode } })
+export const publishAbilityCompetencyVersion = (courseCode, version) => api.post('/api/ability-competency-map/publish', null, { params: { courseCode, version } })
 
 // ============ 班级运营与风险预警 (/api/classes, /api/risk-alerts) ============
 export const getClassList = (teacherId) => api.get('/api/classes', { params: teacherId ? { teacherId } : {} })

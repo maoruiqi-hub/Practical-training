@@ -136,19 +136,20 @@ public class AbilitySnapshotServiceImpl implements AbilitySnapshotService {
                                    List<String> knowledgePointIds, List<Integer> weights,
                                    Map<String, Integer> masteries, Set<String> evidenced) {
         if (knowledgePointIds.isEmpty()) {
-            return new AbilityScore(abilityPointId, name, description, 50, 0, 0, List.of(), List.of());
+            return new AbilityScore(abilityPointId, name, description, null, 0, 0, List.of(), List.of());
         }
         long weightedSum = 0;
-        int totalWeight = 0;
+        int evidencedWeight = 0;
         int evidenceCount = 0;
         for (int i = 0; i < knowledgePointIds.size(); i++) {
             String pointId = knowledgePointIds.get(i);
             int weight = i < weights.size() ? Math.max(1, weights.get(i)) : 1;
-            weightedSum += (long) masteries.getOrDefault(pointId, 50) * weight;
-            totalWeight += weight;
-            if (evidenced.contains(pointId)) evidenceCount++;
+            if (!evidenced.contains(pointId) || !masteries.containsKey(pointId)) continue;
+            weightedSum += (long) masteries.get(pointId) * weight;
+            evidencedWeight += weight;
+            evidenceCount++;
         }
-        int score = totalWeight == 0 ? 50 : (int) Math.round(weightedSum / (double) totalWeight);
+        Integer score = evidencedWeight == 0 ? null : (int) Math.round(weightedSum / (double) evidencedWeight);
         return new AbilityScore(abilityPointId, name, description, score, evidenceCount,
                 knowledgePointIds.size(), List.copyOf(knowledgePointIds), List.copyOf(weights));
     }
@@ -165,7 +166,8 @@ public class AbilitySnapshotServiceImpl implements AbilitySnapshotService {
         snapshot.setPhase(phase);
         snapshot.setAbilityPointId(score.abilityPointId());
         snapshot.setAbilityPointName(score.name());
-        snapshot.setScore(score.score());
+        // 历史快照表的 score 仍为 NOT NULL；0 仅作内部占位，API 根据 evidenceKnowledgeCount 返回暂无证据。
+        snapshot.setScore(score.score() == null ? 0 : score.score());
         snapshot.setEvidenceKnowledgeCount(score.evidenceKnowledgeCount());
         snapshot.setTotalKnowledgeCount(score.totalKnowledgeCount());
         snapshot.setKnowledgePointIdsJson(writeJson(score.knowledgePointIds()));

@@ -34,7 +34,7 @@ public class TeacherController {
     public Result<LoginResponse> login(@RequestBody Teacher req, HttpSession session) {
         Teacher teacher = teacherService.login(req.getUsername(), req.getPassword());
         if (teacher == null) return Result.fail("账号或密码错误");
-        session.setAttribute("teacher", teacher);
+        session.setAttribute("teacher", sessionTeacher(teacher));
         return Result.ok(LoginResponse.fromTeacher(teacher));
     }
 
@@ -75,5 +75,16 @@ public class TeacherController {
         if (!auth.isAdmin(session)) return Result.fail("无权限");
         teacherService.removeById(teacherNo);
         return Result.ok();
+    }
+
+    private Teacher sessionTeacher(Teacher source) {
+        Teacher teacher = new Teacher();
+        teacher.setTeacherNo(source.getTeacherNo());
+        teacher.setName(source.getName());
+        teacher.setUsername(source.getUsername());
+        teacher.setCollege(source.getCollege());
+        teacher.setMajor(source.getMajor());
+        teacher.setRole(source.getRole());
+        return teacher;
     }
 }

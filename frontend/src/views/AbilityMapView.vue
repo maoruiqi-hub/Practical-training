@@ -16,6 +16,7 @@
     </div>
 
     <section class="map-board" v-loading="loading" element-loading-text="正在加载能力图谱...">
+      <el-alert v-if="loadError" title="能力映射加载失败" :description="loadError" type="error" show-icon :closable="false" />
       <div class="map-summary">
         <div class="course-mark">
           <span class="course-code">{{ selectedCourse || '-' }}</span>
@@ -73,6 +74,143 @@
 
       <el-empty v-else description="暂无能力图谱数据" />
     </section>
+
+    <el-card class="competency-card" shadow="never" v-loading="loading">
+      <template #header>
+        <div class="card-head">
+          <div>
+            <span>真能力映射</span>
+            <small class="card-hint">教师只标记关系，系统后续校准相关关系的强度</small>
+          </div>
+          <div class="card-actions">
+            <el-button size="small" type="primary" plain @click="openCompetency()">新增真能力</el-button>
+            <el-button size="small" type="success" plain :loading="calibrating" @click="calibrateStrengths">生成候选版本</el-button>
+            <el-button v-if="candidateVersion" size="small" type="warning" plain :loading="publishing" @click="publishCandidate">发布候选版本</el-button>
+          </div>
+        </div>
+      </template>
+      <el-alert
+        v-if="!competencies.length"
+        title="请先建立课程真能力，例如“调试纠错”“模块化设计”“综合应用”。"
+        type="info"
+        :closable="false"
+        show-icon
+      />
+      <el-table v-else :data="competencyMatrixRows" border stripe empty-text="暂无假能力点">
+        <el-table-column fixed prop="name" label="假能力点" min-width="190" show-overflow-tooltip />
+        <el-table-column
+          v-for="competency in competencies"
+          :key="competency.competencyId"
+          :label="competency.name"
+          min-width="170"
+        >
+          <template #header>
+            <el-tooltip :content="competency.description || '暂无能力说明'" placement="top">
+              <span>{{ competency.name }}</span>
+            </el-tooltip>
+          </template>
+          <template #default="{ row }">
+            <div class="relation-cell">
+              <el-select
+                :model-value="row.relations.find(item => item.competency.competencyId === competency.competencyId)?.relation?.relationStatus || 'uncertain'"
+                size="small"
+                @change="changeCompetencyRelation(row, competency, $event)"
+              >
+                <el-option label="相关" value="related" />
+                <el-option label="不相关" value="unrelated" />
+                <el-option label="不确定" value="uncertain" />
+              </el-select>
+              <el-tag
+                v-if="row.relations.find(item => item.competency.competencyId === competency.competencyId)?.relation?.strength > 0"
+                size="small"
+                effect="plain"
+                type="success"
+              >
+                {{ (Number(row.relations.find(item => item.competency.competencyId === competency.competencyId)?.relation?.strength || 0) * 100).toFixed(0) }}%
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div v-if="competencies.length" class="competency-admin-list">
+        <div v-for="competency in competencies" :key="competency.competencyId" class="competency-admin-item">
+          <span>{{ competency.name }}</span>
+          <small>{{ competency.description || '暂无能力说明' }}</small>
+          <el-button size="small" text @click="openCompetency(competency)">编辑</el-button>
+          <el-popconfirm title="删除该真能力及其映射？" @confirm="removeCompetency(competency)">
+            <template #reference><el-button size="small" type="danger" text>删除</el-button></template>
+          </el-popconfirm>
+        </div>
+      </div>
+      <p v-if="competencies.length" class="matrix-footnote">当前发布版本 {{ matrixVersion }} · 百分比为当前强度，候选版本需教师确认后发布。</p>
+    </el-card>
+
+    <el-card v-if="competencies.length" class="observation-card" shadow="never" v-loading="loading">
+      <template #header>
+        <div class="card-head">
+          <div>
+            <span>真能力观测任务</span>
+            <small class="card-hint">标记已有任务实际测量的真能力，供后续强度校准使用</small>
+          </div>
+        </div>
+      </template>
+      <el-table :data="observationTaskRows" height="360" empty-text="暂无学习任务">
+        <el-table-column prop="taskName" label="任务" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.taskName || row.taskNo }}</template>
+        </el-table-column>
+        <el-table-column prop="taskType" label="类型" width="130" />
+        <el-table-column label="观测真能力" min-width="300">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.selectedCompetencyIds"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              clearable
+              placeholder="选择该任务测量的能力"
+              style="width:100%"
+              @change="changeTaskObservation(row, $event)"
+            >
+              <el-option v-for="item in competencies" :key="item.competencyId" :label="item.name" :value="item.competencyId" />
+            </el-select>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-card v-if="calibrationReport.length" class="observation-card" shadow="never">
+      <template #header>
+        <div class="card-head">
+          <div>
+            <span>最近一次校准报告</span>
+            <small class="card-hint">报告只解释数据支持程度，不会替教师改变“相关 / 不相关 / 不确定”</small>
+          </div>
+        </div>
+      </template>
+      <el-table :data="calibrationReportRows" border stripe empty-text="暂无校准记录">
+        <el-table-column prop="abilityName" label="假能力点" min-width="190" show-overflow-tooltip />
+        <el-table-column prop="competencyName" label="真能力" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="sampleCount" label="共同样本" width="95" />
+        <el-table-column label="行为相关度" width="110">
+          <template #default="{ row }">{{ (Number(row.correlation || 0) * 100).toFixed(1) }}%</template>
+        </el-table-column>
+        <el-table-column label="验证集" width="135">
+          <template #default="{ row }">
+            <span v-if="Number(row.validationSampleCount || 0) < 3">样本不足</span>
+            <el-tag v-else :type="row.validationDirectionConsistent ? 'success' : 'danger'" size="small">
+              {{ row.validationDirectionConsistent ? '方向一致' : '方向冲突' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="置信度" width="100">
+          <template #default="{ row }">
+            <el-tag :type="Number(row.confidence || 0) >= 0.5 ? 'success' : 'warning'" size="small">
+              {{ Number(row.confidence || 0) >= 0.5 ? '较高' : '有限' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
     <el-row :gutter="16" v-loading="loading" element-loading-text="正在加载能力图谱...">
       <el-col :xs="24" :lg="11">
@@ -145,6 +283,17 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="competencyDialog" :title="competencyForm.competencyId ? '编辑真能力' : '新增真能力'" width="520px">
+      <el-form :model="competencyForm" label-width="90px">
+        <el-form-item label="能力名称"><el-input v-model="competencyForm.name" placeholder="例如：调试纠错" /></el-form-item>
+        <el-form-item label="能力说明"><el-input v-model="competencyForm.description" type="textarea" :rows="3" placeholder="描述学生能够完成的任务或行为" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="competencyDialog=false">取消</el-button>
+        <el-button type="primary" @click="saveCompetency">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="aiDraftDialog" title="AI 能力图谱草稿" width="720px">
       <el-empty v-if="!aiDraft.length" description="暂无可采纳草稿" />
       <div v-else class="draft-list">
@@ -185,12 +334,21 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   addAbilityPoint,
+  addTrueCompetency,
+  calibrateAbilityCompetencyStrengths,
+  publishAbilityCompetencyVersion,
   bindAbilityKnowledgePoint,
   deleteAbilityPoint,
+  getAbilityCompetencyMap,
+  getTaskList,
   generateAbilityMap,
   getAbilityMap,
   getKnowledgeGraph,
   searchCourse,
+  saveAbilityCompetencyRelation,
+  saveCompetencyTaskObservations,
+  updateTrueCompetency,
+  deleteTrueCompetency,
   unbindAbilityKnowledgePoint,
   updateAbilityPoint
 } from '../api'
@@ -199,6 +357,9 @@ const courses = ref([])
 const route = useRoute()
 const selectedCourse = ref('')
 const loading = ref(false)
+const loadError = ref('')
+const calibrating = ref(false)
+const publishing = ref(false)
 const generating = ref(false)
 const abilityPoints = ref([])
 const mappings = ref([])
@@ -206,10 +367,19 @@ const knowledgePoints = ref([])
 const abilityDialog = ref(false)
 const bindDialog = ref(false)
 const aiDraftDialog = ref(false)
+const competencyDialog = ref(false)
 const aiDraft = ref([])
 const adoptingDraft = ref(false)
 const abilityForm = reactive({ abilityPointId: '', name: '', description: '' })
 const bindForm = reactive({ abilityPointId: '', knowledgePointId: '' })
+const competencyForm = reactive({ competencyId: '', name: '', description: '' })
+const competencies = ref([])
+const competencyRelations = ref([])
+const competencyTasks = ref([])
+const competencyObservations = ref([])
+const matrixVersion = ref('v1')
+const calibrationReport = ref([])
+const candidateVersion = ref('')
 const MAX_ABILITY_POINTS = 20
 
 const currentCourse = computed(() => courses.value.find(course => String(course.courseCode) === String(selectedCourse.value)))
@@ -243,6 +413,32 @@ const mappingRows = computed(() => mappings.value.map(item => {
   }
 }))
 
+const competencyMatrixRows = computed(() => abilityPoints.value.map(ability => ({
+  ...ability,
+  relations: competencies.value.map(competency => ({
+    competency,
+    relation: competencyRelations.value.find(item =>
+      String(item.abilityPointId) === String(ability.abilityPointId) &&
+      String(item.competencyId) === String(competency.competencyId)
+    )
+  }))
+})))
+
+const observationTaskRows = computed(() => competencyTasks.value.map(task => ({
+  ...task,
+  selectedCompetencyIds: competencies.value
+    .filter(competency => competencyObservations.value.some(item =>
+      String(item.taskNo) === String(task.taskNo) && String(item.competencyId) === String(competency.competencyId)
+    ))
+    .map(item => item.competencyId)
+})))
+
+const calibrationReportRows = computed(() => calibrationReport.value.map(item => ({
+  ...item,
+  abilityName: abilityPoints.value.find(point => String(point.abilityPointId) === String(item.abilityPointId))?.name || item.abilityPointId,
+  competencyName: competencies.value.find(point => String(point.competencyId) === String(item.competencyId))?.name || item.competencyId
+})))
+
 async function loadCourses() {
   const res = await searchCourse('')
   if (res.data.code === 200) {
@@ -254,21 +450,155 @@ async function loadCourses() {
 
 async function loadAll() {
   if (!selectedCourse.value) return
+  loadError.value = ''
+  abilityPoints.value = []
+  mappings.value = []
+  knowledgePoints.value = []
+  competencies.value = []
+  competencyRelations.value = []
+  competencyTasks.value = []
+  competencyObservations.value = []
+  calibrationReport.value = []
+  candidateVersion.value = ''
+  matrixVersion.value = 'v1'
   loading.value = true
   try {
-    const [mapRes, graphRes] = await Promise.all([
+    const [mapRes, graphRes, competencyRes, taskRes] = await Promise.all([
       getAbilityMap(selectedCourse.value),
-      getKnowledgeGraph(selectedCourse.value)
+      getKnowledgeGraph(selectedCourse.value),
+      getAbilityCompetencyMap(selectedCourse.value),
+      getTaskList(selectedCourse.value)
     ])
+    const failed = [mapRes, graphRes, competencyRes, taskRes].find(response => response.data?.code !== 200)
+    if (failed) throw new Error(failed.data?.msg || '课程能力数据加载失败')
     if (mapRes.data.code === 200) {
       abilityPoints.value = mapRes.data.data?.abilityPoints || []
       mappings.value = mapRes.data.data?.mappings || []
     } else ElMessage.error(mapRes.data.msg || '能力图谱加载失败')
     if (graphRes.data.code === 200) knowledgePoints.value = graphRes.data.data?.nodes || []
+    if (competencyRes.data.code === 200) {
+      competencies.value = competencyRes.data.data?.competencies || []
+      competencyRelations.value = competencyRes.data.data?.relations || []
+      matrixVersion.value = competencyRes.data.data?.matrixVersion || 'v1'
+    }
+    if (taskRes.data.code === 200) competencyTasks.value = taskRes.data.data || []
+    else competencyTasks.value = []
   } catch {
+    loadError.value = '当前课程的能力、知识点或观测任务暂时无法加载，请刷新重试。'
     ElMessage.error('能力图谱加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+function openCompetency(row) {
+  Object.assign(competencyForm, row
+    ? { competencyId: row.competencyId, name: row.name, description: row.description || '' }
+    : { competencyId: '', name: '', description: '' })
+  competencyDialog.value = true
+}
+
+async function saveCompetency() {
+  const name = String(competencyForm.name || '').trim()
+  if (!selectedCourse.value || !name) return ElMessage.warning('请填写真能力名称')
+  if (competencies.value.some(item => item.competencyId !== competencyForm.competencyId
+    && normalizeName(item.name) === normalizeName(name))) {
+    return ElMessage.warning('该课程已存在同名真能力')
+  }
+  const res = competencyForm.competencyId
+    ? await updateTrueCompetency(competencyForm.competencyId, {
+        courseCode: selectedCourse.value, name, description: competencyForm.description
+      })
+    : await addTrueCompetency({ courseCode: selectedCourse.value, name, description: competencyForm.description })
+  if (res.data.code === 200) {
+    ElMessage.success(competencyForm.competencyId ? '真能力已更新' : '真能力已创建')
+    competencyDialog.value = false
+    await loadAll()
+  } else ElMessage.error(res.data.msg || '创建失败')
+}
+
+async function removeCompetency(competency) {
+  try {
+    const res = await deleteTrueCompetency(competency.competencyId, selectedCourse.value)
+    if (res.data.code !== 200) throw new Error(res.data.msg || '真能力删除失败')
+    ElMessage.success('真能力已删除')
+    await loadAll()
+  } catch (error) {
+    ElMessage.error(error.message || '真能力删除失败')
+  }
+}
+
+function relationLabel(status) {
+  return { related: '相关', unrelated: '不相关', uncertain: '不确定' }[status] || '不确定'
+}
+
+function relationTagType(status) {
+  return { related: 'success', unrelated: 'info', uncertain: 'warning' }[status] || 'warning'
+}
+
+async function changeCompetencyRelation(ability, competency, status) {
+  const res = await saveAbilityCompetencyRelation({
+    courseCode: selectedCourse.value,
+    abilityPointId: ability.abilityPointId,
+    competencyId: competency.competencyId,
+    relationStatus: status
+  })
+  if (res.data.code === 200) {
+    ElMessage.success('关系状态已保存')
+    await loadAll()
+  } else ElMessage.error(res.data.msg || '关系保存失败')
+}
+
+async function calibrateStrengths() {
+  if (!selectedCourse.value) return
+  calibrating.value = true
+  try {
+    const res = await calibrateAbilityCompetencyStrengths(selectedCourse.value)
+    if (res.data.code === 200) {
+      const count = res.data.data?.relationCount || 0
+      calibrationReport.value = res.data.data?.relations || []
+      candidateVersion.value = res.data.data?.candidateVersion || ''
+      ElMessage.success(`已生成候选版本 ${candidateVersion.value}，共 ${count} 条相关关系`)
+    } else ElMessage.error(res.data.msg || '强度校准失败')
+  } catch {
+    ElMessage.error('强度校准失败')
+  } finally {
+    calibrating.value = false
+  }
+}
+
+async function publishCandidate() {
+  if (!selectedCourse.value || !candidateVersion.value) return
+  publishing.value = true
+  try {
+    const res = await publishAbilityCompetencyVersion(selectedCourse.value, candidateVersion.value)
+    if (res.data.code === 200) {
+      ElMessage.success(`已发布版本 ${candidateVersion.value}`)
+      candidateVersion.value = ''
+      calibrationReport.value = []
+      await loadAll()
+    } else ElMessage.error(res.data.msg || '版本发布失败')
+  } catch {
+    ElMessage.error('版本发布失败')
+  } finally {
+    publishing.value = false
+  }
+}
+
+async function changeTaskObservation(task, competencyIds) {
+  try {
+    const selected = new Set((competencyIds || []).map(String))
+    const res = await saveCompetencyTaskObservations(competencies.value.map(competency => ({
+      courseCode: selectedCourse.value,
+      taskNo: task.taskNo,
+      competencyId: competency.competencyId,
+      status: selected.has(String(competency.competencyId)) ? 'active' : 'inactive'
+    })))
+    if (res.data.code !== 200) throw new Error(res.data.msg || '观测任务标注保存失败')
+    ElMessage.success('观测任务标注已保存')
+    await loadAll()
+  } catch {
+    ElMessage.error('观测任务标注保存失败')
   }
 }
 
@@ -489,6 +819,17 @@ onMounted(async () => {
 .page-head p { margin:0; color:#606266; }
 .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
 .card-head { display:flex; justify-content:space-between; align-items:center; }
+.card-actions { display:flex; gap:8px; align-items:center; }
+.card-hint { display:block; margin-top:4px; color:#909399; font-size:12px; }
+.competency-card { margin:16px 0; }
+.competency-admin-list { display:grid; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--el-border-color-lighter); }
+.competency-admin-item { display:flex; align-items:center; gap:10px; min-height:32px; }
+.competency-admin-item span { min-width:150px; font-weight:600; }
+.competency-admin-item small { flex:1; overflow:hidden; color:var(--el-text-color-secondary); text-overflow:ellipsis; white-space:nowrap; }
+.observation-card { margin:16px 0; }
+.relation-cell { display:flex; align-items:center; gap:6px; }
+.relation-cell .el-select { width:108px; }
+.matrix-footnote { margin:12px 0 0; color:#909399; font-size:12px; }
 .map-board {
   background:
     linear-gradient(90deg, rgba(37, 99, 235, 0.07), transparent 30%),

@@ -51,6 +51,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { getLessonDetail, reportBehaviorLog } from '../api'
+import { getCurrentUser, getStudentId, getTeacherId } from '../utils/authContext'
 
 const route = useRoute()
 const lesson = ref(null)
@@ -60,7 +61,7 @@ const videoStartTime = ref(null)
 const progressTimer = ref(null)
 const logged = ref(false)
 
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const isDocType = computed(() => ['ppt', 'doc', 'pdf'].includes(lesson.value?.resourceType))
 
 const resourceTag = (type) => {
@@ -70,7 +71,7 @@ const resourceTag = (type) => {
 const logAction = (actionType, duration) => {
   if (!lesson.value) return
   reportBehaviorLog({
-    userId: user.studentNo || user.teacherNo || '1',
+    userId: user.role === 'student' ? getStudentId(user) : getTeacherId(user),
     userType: user.role || 'student',
     resourceType: lesson.value.resourceType || 'unknown',
     resourceId: lesson.value.lessonNo,

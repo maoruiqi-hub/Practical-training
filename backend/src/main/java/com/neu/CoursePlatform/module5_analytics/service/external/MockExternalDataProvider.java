@@ -19,7 +19,7 @@ import java.util.Random;
  * Phase 3+ 当其他模块就绪后替换为真实实现。
  */
 @Service
-@Profile("default")  // 默认激活；真实实现用 @Profile("production")
+@Profile("mock")  // 只在明确的 mock 环境启用；默认使用真实数据适配器
 public class MockExternalDataProvider implements ExternalDataProvider {
 
     private final Random rng = new Random(42); // 固定种子，可复现

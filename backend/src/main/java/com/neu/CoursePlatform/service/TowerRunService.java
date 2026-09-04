@@ -10,6 +10,7 @@ public interface TowerRunService {
     Map<String, Object> enterNode(String studentNo, String runId, String nodeId);
     Map<String, Object> completeNode(String studentNo, String runId, String nodeId, Map<String, Object> request);
     Map<String, Object> diagnoseNode(String studentNo, String runId, String nodeId, Map<String, Object> request);
+    Map<String, Object> completeNonCombatNode(String studentNo, String runId, String nodeId, String result);
     Map<String, Object> getAttemptReport(String studentNo, String evaluationId);
     List<Map<String, Object>> getAbilityDeltas(String studentNo, String courseCode, String runId);
 }

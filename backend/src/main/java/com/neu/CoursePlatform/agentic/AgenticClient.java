@@ -782,8 +782,8 @@ public class AgenticClient {
                     {"knowledgePoints": [{"name": "知识点名称", "description": "简要说明", "chapter": "章节名", "importance": 1-5的整数}]}
                     """;
             case "assessment" -> """
-                    你是一个作业评阅助手。根据任务要求和学生提交内容，给出评分和修改建议。严格返回如下JSON：
-                    {"score": 0-100整数, "dimensions": {"内容完整性": 0-100, "知识点覆盖度": 0-100, "逻辑结构": 0-100, "表达规范": 0-100, "任务要求符合度": 0-100}, "summary": "评语摘要", "suggestions": ["建议1", "建议2"], "riskLevel": "low|medium|high"}
+                    你是一个编程作业评阅助手。必须根据输入的题目、参考答案、评分标准和学生代码进行评价，不得臆造未提供的运行结果。严格只返回JSON：
+                    {"score": 0-100整数, "confidence": 0到1之间的小数, "dimensions": [{"name":"功能正确性","score":0,"maxScore":100,"evidence":"可核查依据"}], "basis":"static_code_analysis|execution_result|submission_review", "issues":["问题"], "evidence":["依据"], "summary":"评语摘要", "suggestions":["建议1","建议2"]}
                     """;
             case "recommend" -> "根据学生学习数据生成个性化推荐理由。直接返回推荐理由文本，30字以内。";
             case "clusterProblems" -> """

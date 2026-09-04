@@ -156,6 +156,8 @@
           <el-descriptions :column="2" size="small" border>
             <el-descriptions-item label="建议分数">{{ aiReview.aiScore ?? '-' }} 分</el-descriptions-item>
             <el-descriptions-item label="风险等级">{{ riskLabel(aiReview.riskLevel) }}</el-descriptions-item>
+            <el-descriptions-item label="评价状态">{{ aiReviewStatusLabel(aiReview.status) }}</el-descriptions-item>
+            <el-descriptions-item label="可信度">{{ aiReview.confidence == null ? '-' : Math.round(aiReview.confidence * 100) + '%' }}</el-descriptions-item>
             <el-descriptions-item label="评价摘要" :span="2">{{ aiReview.summary || '-' }}</el-descriptions-item>
           </el-descriptions>
           <div class="dimension-list">
@@ -239,11 +241,12 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { searchCourse, getGradeDetail, gradeSubmission, getMySubmissions, getTaskList, getSubmissionsByTask, generateAiReview, getAiReview } from '../api'
 import { getProfileSummary, getTestFeedback } from '../api/profile'
+import { getCurrentUser, getStudentId } from '../utils/authContext'
 import { ElMessage } from 'element-plus'
 import { DocumentChecked, MagicStick, Timer, WarningFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const userRole = user.role
 const ONLINE_QUIZ_TYPE = '在线测验'
 const isQuizType = type => type === ONLINE_QUIZ_TYPE
@@ -494,8 +497,10 @@ const recentChanges = computed(() => {
 const loadSuggestion = async () => {
   suggestionLoading.value = true
   try {
-    const studentNo = parseInt(user.studentNo) || 1
-    const { data } = await getTestFeedback(studentNo, 1)
+    const studentNo = getStudentId(user)
+    const courseId = localStorage.getItem('courseId') || ''
+    if (!studentNo || !courseId) return
+    const { data } = await getTestFeedback(studentNo, courseId)
     if (data.code === 200) suggestion.value = data.data
   } catch (e) { suggestion.value = null }
   suggestionLoading.value = false
@@ -572,6 +577,10 @@ const reviewDimensions = computed(() => {
 const reviewSuggestions = computed(() => parseJson(aiReview.value?.suggestions, []))
 
 const riskLabel = risk => ({ low: '低风险', medium: '中风险', high: '高风险' }[risk] || risk || '-')
+const aiReviewStatusLabel = status => ({
+  accepted: '已自动评价', generated: '已生成待复核', needs_review: '待教师复核',
+  pending_review: '等待评价', provider_error: '评价失败'
+}[status] || '评价中')
 
 const hasAiReviewableQuestions = computed(() => {
   return gradeDetails.value.some(item => ['fill', 'essay', 'program'].includes(item.type))

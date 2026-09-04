@@ -105,6 +105,7 @@
 </template>
 
 <script setup>
+import { getCurrentUser, getStudentId } from '../utils/authContext'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getQuestionById, getQuestionsByKnowledgePoint, getTaskQuestions, getTowerQuestionPack } from '../api'
@@ -156,8 +157,9 @@ const loadQuestions = async () => {
   packError.value = ''
   try {
     if (props.runId && props.nodeId) {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      const studentId = props.studentId || user.studentNo || user.student_no || user.no || user.id || '1'
+      const user = getCurrentUser()
+      const studentId = props.studentId || getStudentId(user)
+      if (!studentId) throw new Error('缺少学生身份信息，请重新登录')
       const packRes = await getTowerQuestionPack(studentId, props.runId, props.nodeId, 'diagnosis')
       if (packRes.data.code === 200) {
         packId.value = packRes.data.data?.packId || ''

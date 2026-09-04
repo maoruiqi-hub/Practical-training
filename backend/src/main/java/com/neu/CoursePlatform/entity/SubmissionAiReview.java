@@ -19,6 +19,10 @@ public class SubmissionAiReview {
     private String taskNo;
     private String studentNo;
     private Integer aiScore;
+    /** 模型对本次评价的自评可信度，0~1；只用于是否自动接受，不直接参与成绩计算。 */
+    private Double confidence;
+    /** 评价依据：static_code_analysis / execution_result / submission_review。 */
+    private String basis;
     private String dimensions;
     private String summary;
     private String suggestions;

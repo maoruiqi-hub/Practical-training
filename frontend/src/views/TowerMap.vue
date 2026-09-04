@@ -20,7 +20,7 @@
           </div>
         </div>
 
-        <div class="route-map">
+        <div class="route-map" :style="routeMapStyle">
           <el-empty
             v-if="mapError"
             class="route-empty"
@@ -28,24 +28,27 @@
             :image-size="120"
           />
           <div class="route-lantern" aria-hidden="true"></div>
-          <div
-            v-if="!mapError"
-            v-for="row in visualRows"
-            :key="row.level"
-            class="route-row"
-            :class="{ boss: row.nodes.some(node => node.roomType === 'boss') }"
-          >
+          <svg v-if="!mapError" class="route-paths" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <path
+              v-for="edge in routeEdges"
+              :key="edge.key"
+              class="route-path"
+              :class="{ cleared: edge.cleared, active: edge.active }"
+              :d="edge.path"
+            />
+          </svg>
+          <div v-if="!mapError" class="route-nodes">
             <button
-              v-for="node in row.nodes"
+              v-for="node in visualNodes"
               :key="node.nodeId"
               type="button"
               class="route-node"
               :class="[node.status, node.roomType, { selected: selectedNode?.nodeId === node.nodeId }]"
               :disabled="node.status === 'locked'"
               :aria-label="`${node.kpName}, ${roomLabel(node.roomType)}, ${statusText(node.status)}`"
-              @mouseenter="previewNode(node)"
-              @focus="previewNode(node)"
-              @click="enterNode(node)"
+              :style="node.positionStyle"
+              @focus="selectNode(node)"
+              @click="handleNodeClick(node)"
             >
               <span class="node-glow" aria-hidden="true"></span>
               <img class="node-icon" :src="iconFor(node)" alt="" />
@@ -57,6 +60,13 @@
       </section>
 
       <aside class="node-panel" aria-label="节点详情">
+        <button class="activity-challenge" type="button" aria-label="打开活动挑战，完成老师布置的作业" @click="openActivityChallenges">
+          <span class="activity-challenge-icon">
+            <img :src="referenceTokenIcons.magicOrb" alt="" />
+          </span>
+          <strong>活动挑战</strong>
+          <small>完成作业</small>
+        </button>
         <section class="panel-card primary">
           <p class="kicker">下一步选择</p>
           <h2>{{ previewTitle }}</h2>
@@ -69,7 +79,6 @@
             <span>房间 <b>{{ roomLabel(selectedNode.roomType) }}</b></span>
             <span>风险 <b>{{ riskText(selectedNode.risk) }}</b></span>
             <span>奖励 <b>{{ rewardText(selectedNode) }}</b></span>
-            <span v-if="selectedNode.statusReason">状态原因 <b :title="selectedNode.statusReason">{{ selectedNode.statusReason }}</b></span>
           </div>
           <el-button
             class="spire-button"
@@ -77,83 +86,66 @@
             @click="enterSelected"
           >
             <el-icon><Aim /></el-icon>
-            进入房间
+            {{ enterButtonText }}
           </el-button>
         </section>
 
       </aside>
     </main>
 
-    <TreasureRoom
-      v-if="activeRoomType === 'treasure'"
-      v-model="roomVisible"
-      :course-id="courseId"
-      :course-name="courseName"
-      :selected-node="selectedNode"
-      @room-complete="completeRoom"
-    />
+    <el-dialog
+      v-model="optionDialogVisible"
+      :title="optionDialogTitle"
+      width="min(680px, 92vw)"
+      append-to-body
+      :close-on-click-modal="!optionSubmitting"
+    >
+      <div v-loading="optionLoading" class="server-option-panel">
+        <p class="server-option-hint">选项和数值由服务端生成，选择后会同步更新库存、成长记录和路线状态。</p>
+        <div class="server-option-grid">
+          <button
+            v-for="option in nodeOptions"
+            :key="option.optionId"
+            type="button"
+            class="server-option-card"
+            :disabled="optionSubmitting || optionEnvelope.resolved"
+            @click="chooseOption(option)"
+          >
+            <strong>{{ option.title }}</strong>
+            <span>{{ option.description }}</span>
+            <small v-if="option.selected">已选择</small>
+          </button>
+        </div>
+        <div v-if="nodeInventory.length" class="inventory-strip">
+          <span v-for="item in nodeInventory" :key="item.itemCode">
+            {{ item.name }} × {{ item.quantity }}
+            <el-button
+              v-if="item.itemCode === 'healing_supply'"
+              size="small"
+              :disabled="optionSubmitting"
+              @click="useSupply(item)"
+            >使用</el-button>
+          </span>
+        </div>
+      </div>
+    </el-dialog>
 
-    <ShopRoom
-      v-else-if="activeRoomType === 'shop'"
-      v-model="roomVisible"
-      :student-id="studentId"
-      :course-id="courseId"
-      :profile="profile"
-      @room-complete="completeRoom"
-    />
-
-    <RestSiteRoom
-      v-else-if="activeRoomType === 'rest'"
-      v-model="roomVisible"
-      :student-id="studentId"
-      :course-id="courseId"
-      :profile="profile"
-      :selected-node="selectedNode"
-      @open-supply="openSupply"
-      @room-complete="completeRoom"
-    />
-
-    <GameRoomModal
-      v-else
-      v-model="roomVisible"
-      :room-type="activeRoomType"
-      :profile="profile"
-      :user="user"
-      :student-id="studentId"
-      :course-name="courseName"
-      :run-stats="runStats"
-      @open-supply="openSupply"
-      @course-picked="pickCourse"
-      @room-complete="completeRoom"
-    />
-
-    <SupplyModal
-      v-model="supplyVisible"
-      :student-id="studentId"
-      :course-id="courseId"
-      :profile="profile"
-      @used="refreshProfile"
-    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { getCurrentUser, getCourseId, getStudentId } from '../utils/authContext'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Aim, Refresh, SwitchButton } from '@element-plus/icons-vue'
 import GameHud from '../components/GameHud.vue'
-import GameRoomModal from '../components/GameRoomModal.vue'
-import RestSiteRoom from '../components/RestSiteRoom.vue'
-import ShopRoom from '../components/ShopRoom.vue'
-import SupplyModal from '../components/SupplyModal.vue'
-import TreasureRoom from '../components/TreasureRoom.vue'
 import { gameBackgrounds, mapLegendIcons, referenceTokenIcons } from '../data/gameAssetManifest'
-import { completeTowerNode, enterTowerNode, getLeaderboard, getStudentProfile, getTowerRun, sendGameEvent } from '../api'
+import { chooseTowerNodeOption, enterTowerNode, getLeaderboard, getStudentProfile, getTowerNodeOptions, getTowerRun, useTowerInventory } from '../api'
 
 const route = useRoute()
 const router = useRouter()
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 
 const loading = ref(false)
 const mapError = ref('')
@@ -162,9 +154,11 @@ const floors = ref([])
 const towerRun = ref(null)
 const leaderboard = ref([])
 const selectedNode = ref(null)
-const roomVisible = ref(false)
-const supplyVisible = ref(false)
-const activeRoomType = ref('event')
+const optionDialogVisible = ref(false)
+const optionLoading = ref(false)
+const optionSubmitting = ref(false)
+const optionEnvelope = ref({ options: [], inventory: [], resolved: false })
+const optionNode = ref(null)
 
 const roomPattern = ['diagnosis', 'battle', 'treasure', 'battle', 'rest', 'elite', 'event', 'shop', 'battle', 'treasure', 'battle', 'rest', 'elite', 'boss']
 const normalizeCourseName = name => String(name || '').trim() === 'Python Program Design' ? 'Python 程序设计' : name
@@ -174,10 +168,10 @@ const pageStyle = computed(() => ({
 }))
 
 const studentId = computed(() =>
-  user.studentNo || user.student_no || user.no || user.id || user.username || user.name || '1'
+  getStudentId(user)
 )
 const courseId = computed(() =>
-  route.query.courseId || route.query.course_id || localStorage.getItem('courseId') || '1'
+  getCourseId(route)
 )
 const courseName = computed(() => normalizeCourseName(route.query.courseName || localStorage.getItem('courseName') || 'Python 程序设计'))
 
@@ -244,17 +238,80 @@ const routeRows = computed(() => {
 
 const visualRows = computed(() => routeRows.value.slice().reverse())
 
+const mapHeight = computed(() => Math.max(720, visualRows.value.length * 86 + 80))
+
+const xPositions = count => {
+  if (count <= 1) return [50]
+  const padding = count >= 4 ? 18 : 28
+  return Array.from({ length: count }, (_, index) => padding + ((100 - padding * 2) * index) / (count - 1))
+}
+
+const visualNodes = computed(() => {
+  const rows = visualRows.value
+  const rowStep = rows.length > 1 ? 86 / (rows.length - 1) : 0
+    return rows.flatMap((row, rowIndex) => {
+      const positions = xPositions(row.nodes.length)
+      return row.nodes.map((node, nodeIndex) => ({
+        ...node,
+        mapRow: rowIndex,
+        mapX: positions[nodeIndex],
+      mapY: 7 + rowIndex * rowStep,
+      positionStyle: {
+        left: `${positions[nodeIndex]}%`,
+        top: `${7 + rowIndex * rowStep}%`
+      }
+    }))
+  })
+})
+
+const routeEdges = computed(() => {
+  const nodesByRow = visualRows.value.map((row, rowIndex) =>
+    row.nodes
+      .map(node => visualNodes.value.find(item => item.nodeId === node.nodeId && item.mapRow === rowIndex))
+      .filter(Boolean)
+  )
+  const populatedRows = nodesByRow.filter(row => row.length)
+  const edges = []
+
+  for (let rowIndex = 0; rowIndex < populatedRows.length - 1; rowIndex += 1) {
+    const fromNodes = populatedRows[rowIndex]
+    const toNodes = populatedRows[rowIndex + 1]
+    fromNodes.forEach(from => {
+      const nearest = toNodes
+        .slice()
+        .sort((a, b) => Math.abs(a.mapX - from.mapX) - Math.abs(b.mapX - from.mapX))
+      const targets = nearest.length > 1 && Math.abs(nearest[0].mapX - from.mapX) > 22
+        ? nearest.slice(0, 2)
+        : nearest.slice(0, 1)
+      targets.forEach(to => {
+        const midY = (from.mapY + to.mapY) / 2
+        const isCleared = from.status === 'cleared' && to.status === 'cleared'
+        const isActive = selectedNode.value && [from.nodeId, to.nodeId].includes(selectedNode.value.nodeId)
+        edges.push({
+          key: `${from.nodeId}-${to.nodeId}`,
+          cleared: isCleared,
+          active: isActive,
+          path: `M ${from.mapX} ${from.mapY} C ${from.mapX} ${midY}, ${to.mapX} ${midY}, ${to.mapX} ${to.mapY}`
+        })
+      })
+    })
+  }
+  return edges
+})
+
+const routeMapStyle = computed(() => ({ minHeight: `${mapHeight.value}px` }))
+
 const activeAct = computed(() => Math.min(3, Math.max(1, Math.ceil((baseNodes.value[firstOpenIndex.value]?.level || 1) / 5))))
 const actTitle = computed(() => ['基础路线', '数据城堡', '最终高塔'][activeAct.value - 1])
 
 const allVisualNodes = computed(() => routeRows.value.flatMap(row => row.nodes))
-const runStats = computed(() => ({
-  cleared: baseNodes.value.filter(node => node.status === 'cleared').length,
-  weak: baseNodes.value.filter(node => node.status === 'weak').length,
-  available: allVisualNodes.value.filter(node => node.status === 'available' || node.status === 'weak').length
-}))
-
-const canEnterSelected = computed(() => selectedNode.value && selectedNode.value.status !== 'locked')
+const backendReadyRoomTypes = new Set(['diagnosis', 'battle', 'elite', 'boss', 'treasure', 'rest', 'shop', 'event'])
+const canEnterSelected = computed(() => selectedNode.value && selectedNode.value.status !== 'locked'
+  && backendReadyRoomTypes.has(selectedNode.value.roomType))
+const enterButtonText = computed(() => '进入房间')
+const nodeOptions = computed(() => optionEnvelope.value.options || [])
+const nodeInventory = computed(() => optionEnvelope.value.inventory || [])
+const optionDialogTitle = computed(() => optionNode.value ? `${roomLabel(optionNode.value.roomType)}·${optionNode.value.kpName}` : '节点选择')
 const previewTitle = computed(() => selectedNode.value ? roomLabel(selectedNode.value.roomType) : '选择下一节点')
 const previewCopy = computed(() => {
   if (!selectedNode.value) return '点击已解锁的地图节点，查看知识点、风险和奖励。'
@@ -362,6 +419,7 @@ const rewardText = node => ({
 const pickProfile = payload => payload?.profile || payload || {}
 
 const refreshProfile = async () => {
+  if (!studentId.value || !courseId.value) return
   try {
     const res = await getStudentProfile(studentId.value, courseId.value)
     if (res.data.code === 200) profile.value = pickProfile(res.data.data)
@@ -371,6 +429,10 @@ const refreshProfile = async () => {
 }
 
 const loadData = async () => {
+  if (!studentId.value || !courseId.value) {
+    mapError.value = '缺少学生或课程信息，请先选择课程。'
+    return
+  }
   loading.value = true
   mapError.value = ''
   try {
@@ -408,10 +470,6 @@ const loadData = async () => {
   }
 }
 
-const previewNode = node => {
-  if (node.status !== 'locked') selectedNode.value = node
-}
-
 const selectNode = node => {
   if (node.status === 'locked') {
     ElMessage.warning('节点尚未解锁')
@@ -420,10 +478,20 @@ const selectNode = node => {
   selectedNode.value = node
 }
 
-const enterNode = node => {
-  selectNode(node)
-  if (node.status === 'locked') return
+const handleNodeClick = node => {
+  if (node.status === 'locked') {
+    selectNode(node)
+    return
+  }
+  selectedNode.value = node
   enterSelected()
+}
+
+const openActivityChallenges = () => {
+  router.push({
+    path: `/task/${courseId.value}`,
+    query: { courseName: courseName.value }
+  })
 }
 
 const enterSelected = async () => {
@@ -456,72 +524,55 @@ const enterSelected = async () => {
     })
     return
   }
-  activeRoomType.value = node.roomType
-  roomVisible.value = true
-}
-
-const openSupply = () => {
-  roomVisible.value = false
-  supplyVisible.value = true
-}
-
-const roomEventType = roomType => ({
-  treasure: 'treasure_opened',
-  rest: 'rest_taken',
-  shop: 'shop_purchased',
-  event: 'event_resolved'
-})[roomType] || 'event_resolved'
-
-const sendRoomEvent = async (roomType, payload = {}) => {
-  const node = selectedNode.value
-  if (node?.runId && node?.nodeId) {
-    const result = roomEventType(roomType)
-    const res = await completeTowerNode(studentId.value, node.runId, node.nodeId, {
-      result,
-      roomType,
-      rewardName: payload.rewardName || payload.reward_name || '',
-      correctRate: 1
-    })
-    if (res.data.code === 200) {
-      towerRun.value = res.data.data || towerRun.value
-      floors.value = towerRun.value?.nodes || floors.value
-    }
-    return
-  }
-  const res = await sendGameEvent(studentId.value, {
-    course_id: courseId.value,
-    event_type: roomEventType(roomType),
-    room_type: roomType,
-    reward_name: payload.rewardName || payload.reward_name || '',
-    knowledge_point_id: node?.kpId || '',
-    source_id: node?.kpId || ''
-  })
-  if (res.data.code === 200) profile.value = pickProfile(res.data.data)
-}
-
-const completeRoom = async payload => {
-  roomVisible.value = false
+  optionNode.value = node
+  optionDialogVisible.value = true
+  optionLoading.value = true
   try {
-    await sendRoomEvent(payload?.roomType || activeRoomType.value, payload || {})
-  } catch {
-    ElMessage.warning('房间事件同步失败')
+    const response = await getTowerNodeOptions(studentId.value, node.runId, node.nodeId)
+    if (response.data.code !== 200) throw new Error(response.data.msg || '节点选项加载失败')
+    optionEnvelope.value = response.data.data || { options: [], inventory: [] }
+  } catch (error) {
+    optionDialogVisible.value = false
+    ElMessage.error(error?.message || '节点选项加载失败')
+  } finally {
+    optionLoading.value = false
   }
-  ElMessage.success('房间已完成')
-  loadData()
 }
 
-const pickCourse = async course => {
-  const code = course.courseCode || course.code || course.id
-  const name = course.courseName || course.name || courseName.value
-  if (code) localStorage.setItem('courseId', code)
-  if (name) localStorage.setItem('courseName', name)
+const newActionId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+const chooseOption = async option => {
+  const node = optionNode.value
+  if (!node || !option?.optionId) return
+  optionSubmitting.value = true
   try {
-    await sendRoomEvent('treasure', { rewardName: 'course_card' })
-  } catch {
-    ElMessage.warning('宝箱事件同步失败')
+    const response = await chooseTowerNodeOption(studentId.value, node.runId, node.nodeId, option.optionId, newActionId())
+    if (response.data.code !== 200) throw new Error(response.data.msg || '节点结算失败')
+    ElMessage.success(response.data.data?.title || '节点结算完成')
+    optionDialogVisible.value = false
+    await loadData()
+  } catch (error) {
+    ElMessage.error(error?.message || '节点结算失败')
+  } finally {
+    optionSubmitting.value = false
   }
-  ElMessage.success('知识卡已加入')
-  loadData()
+}
+
+const useSupply = async item => {
+  const node = optionNode.value
+  if (!node) return
+  optionSubmitting.value = true
+  try {
+    const response = await useTowerInventory(studentId.value, node.runId, node.nodeId, item.itemCode, newActionId())
+    if (response.data.code !== 200) throw new Error(response.data.msg || '补给使用失败')
+    optionEnvelope.value = { ...optionEnvelope.value, inventory: response.data.data?.inventory || [] }
+    profile.value = response.data.data?.profile || profile.value
+    ElMessage.success('恢复补给已使用')
+  } catch (error) {
+    ElMessage.error(error?.message || '补给使用失败')
+  } finally {
+    optionSubmitting.value = false
+  }
 }
 
 const logout = () => {
@@ -529,21 +580,66 @@ const logout = () => {
   router.push('/login')
 }
 
-const openRoomFromQuery = () => {
-  const room = route.query.room
-  if (!room) return
-  activeRoomType.value = String(room)
-  roomVisible.value = true
-}
-
-watch(() => route.query.room, openRoomFromQuery)
 onMounted(async () => {
   await loadData()
-  openRoomFromQuery()
 })
 </script>
 
 <style scoped>
+.server-option-panel {
+  min-height: 180px;
+}
+
+.server-option-hint {
+  margin: 0 0 16px;
+  color: #7a684f;
+  line-height: 1.65;
+}
+
+.server-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.server-option-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid #d3a958;
+  border-radius: 8px;
+  color: #3c2a19;
+  text-align: left;
+  background: linear-gradient(160deg, #fff9e9, #f0dfba);
+  cursor: pointer;
+}
+
+.server-option-card:disabled {
+  cursor: default;
+  opacity: .62;
+}
+
+.server-option-card strong { font-size: 17px; }
+.server-option-card span { line-height: 1.5; }
+.server-option-card small { color: #8a5c17; font-weight: 700; }
+
+.inventory-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #ead8b3;
+}
+
+.inventory-strip > span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .tower-page {
   min-height: 100vh;
   color: #f8edcf;
@@ -590,6 +686,61 @@ onMounted(async () => {
   text-shadow: 0 4px 18px rgba(0, 0, 0, .78);
 }
 
+.activity-challenge {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  right: calc(50vw + min(21.5vw, 310px) - 12px);
+  display: grid;
+  width: 122px;
+  padding: 10px 8px 12px;
+  place-items: center;
+  border: 1px solid rgba(232, 184, 91, .52);
+  border-radius: 12px;
+  color: #fff1c9;
+  background: linear-gradient(180deg, rgba(72, 42, 22, .9), rgba(17, 15, 17, .9));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .42), 0 0 18px rgba(232, 184, 91, .14);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: transform .18s ease, border-color .18s ease, filter .18s ease;
+}
+
+.activity-challenge:hover,
+.activity-challenge:focus-visible {
+  border-color: #ffda85;
+  filter: brightness(1.12);
+  outline: none;
+  transform: translateY(calc(-50% - 5px));
+}
+
+.activity-challenge-icon {
+  display: grid;
+  width: 84px;
+  height: 84px;
+  place-items: center;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(241, 190, 92, .34), transparent 68%);
+}
+
+.activity-challenge-icon img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .5));
+}
+
+.activity-challenge strong {
+  font-size: 16px;
+  letter-spacing: .08em;
+}
+
+.activity-challenge small {
+  margin-top: 4px;
+  color: #d8b779;
+  font-size: 12px;
+}
+
 .act-actions {
   display: flex;
   gap: 10px;
@@ -622,12 +773,7 @@ h2 {
 .route-map {
   position: relative;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 18px;
   width: min(43vw, 620px);
-  min-height: calc(100vh - 126px);
   margin: 62px auto 0;
   padding: 70px 0 20px;
 }
@@ -641,30 +787,51 @@ h2 {
   pointer-events: none;
 }
 
-.route-row {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  gap: clamp(28px, 7vw, 120px);
-}
-
-.route-row::before {
-  content: '';
+.route-paths,
+.route-nodes {
   position: absolute;
-  top: -18px;
-  left: 24%;
-  right: 24%;
-  height: 34px;
-  border-top: 2px dashed rgba(232, 184, 92, .22);
-  border-radius: 50%;
+  inset: 0;
 }
 
-.route-row:first-child::before {
-  display: none;
+.route-paths {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.route-path {
+  fill: none;
+  stroke: rgba(232, 184, 91, .62);
+  stroke-width: 1.25;
+  stroke-dasharray: 2.8 2.4;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px rgba(255, 215, 128, .3));
+  transition: stroke .2s ease, stroke-width .2s ease, opacity .2s ease;
+}
+
+.route-path.cleared {
+  stroke: #e8b85b;
+  stroke-dasharray: none;
+}
+
+.route-path.active {
+  stroke: #ffda85;
+  stroke-width: 2.2;
+  filter: drop-shadow(0 0 5px rgba(232, 184, 91, .8));
+}
+
+.route-path.active:not(.cleared) {
+  stroke-dasharray: 2.8 2.4;
+}
+
+.route-nodes {
+  z-index: 2;
 }
 
 .route-node {
-  position: relative;
+  position: absolute;
   display: grid;
   width: 92px;
   height: 108px;
@@ -673,6 +840,7 @@ h2 {
   color: #faedcd;
   background: transparent;
   cursor: pointer;
+  transform: translate(-50%, -50%);
   transition: transform .18s ease-out, filter .18s ease-out, opacity .18s ease-out;
 }
 
@@ -684,7 +852,7 @@ h2 {
 
 .route-node:hover:not(:disabled),
 .route-node.selected {
-  transform: translateY(-6px);
+  transform: translate(-50%, calc(-50% - 6px));
   filter: brightness(1.12);
 }
 
@@ -848,6 +1016,9 @@ h2 {
   .node-panel {
     right: 24px;
   }
+  .activity-challenge {
+    right: calc(50vw + min(29vw, 310px) - 12px);
+  }
 }
 
 @media (max-width: 760px) {
@@ -863,15 +1034,30 @@ h2 {
   }
   .route-map {
     width: min(100%, 520px);
-    min-height: 580px;
     margin-top: 118px;
     padding-inline: 10px;
   }
-  .route-row {
-    gap: 18px;
-  }
   .route-node {
     width: 74px;
+  }
+  .activity-challenge {
+    top: 104px;
+    left: 16px;
+    right: auto;
+    width: 104px;
+    transform: none;
+  }
+  .activity-challenge:hover,
+  .activity-challenge:focus-visible {
+    transform: translateY(-5px);
+  }
+  .activity-challenge-icon {
+    width: 64px;
+    height: 64px;
+  }
+  .activity-challenge-icon img {
+    width: 56px;
+    height: 56px;
   }
   .node-icon {
     width: 56px;
@@ -892,7 +1078,7 @@ h2 {
   }
   .route-node:hover:not(:disabled),
   .route-node.selected {
-    transform: none;
+    transform: translate(-50%, -50%);
   }
 }
 </style>

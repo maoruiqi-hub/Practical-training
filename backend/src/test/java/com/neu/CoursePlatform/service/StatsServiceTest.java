@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -49,6 +50,15 @@ class StatsServiceTest {
                     if ("listByStudentNo".equals(method.getName())) {
                         String sn = (String) args[0];
                         return subStore.stream().filter(s -> sn.equals(s.getStudentNo())).toList();
+                    }
+                    if ("listByStudentNoAndCourse".equals(method.getName())) {
+                        String sn = (String) args[0];
+                        String cc = (String) args[1];
+                        Set<String> courseTasks = taskStore.values().stream()
+                                .filter(t -> cc.equals(t.getCourseCode()))
+                                .map(LearningTask::getTaskNo).collect(Collectors.toSet());
+                        return subStore.stream().filter(s -> sn.equals(s.getStudentNo())
+                                && courseTasks.contains(s.getTaskNo())).toList();
                     }
                     if ("listByTaskNo".equals(method.getName())) {
                         String tn = (String) args[0];
@@ -117,6 +127,18 @@ class StatsServiceTest {
         Map<String, Object> stats = service.buildStudentCourseStats("student-1", "course-999");
         assertEquals(0, stats.get("totalTasks"));
         assertEquals(0L, stats.get("completionRate"));
+    }
+
+    @Test
+    void courseStatsDoesNotIncludeAnotherCoursesSubmission() {
+        taskStore.put("t3", task("t3", "course-2", "其他课程作业", "homework", 100));
+        subStore.add(submission("sub-3", "t3", "student-1", "graded", 100, null));
+
+        Map<String, Object> stats = service.buildStudentCourseStats("student-1", "course-1");
+
+        assertEquals(2, stats.get("totalSubmissions"));
+        assertEquals(2, stats.get("completedCount"));
+        assertEquals(90.0, stats.get("averageScore"));
     }
 
     // ============ helpers ============

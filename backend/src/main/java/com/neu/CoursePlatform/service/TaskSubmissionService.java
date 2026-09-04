@@ -41,8 +41,11 @@ public interface TaskSubmissionService extends IService<TaskSubmission> {
 
     void recordReviewedSubjectiveEvidence(TaskSubmission sub, List<Map<String, Object>> manualAnswers);
 
+    int recalculateFinalScore(TaskSubmission submission);
+
+    /** 在服务端最终评分后通知画像模块核验 Boss 任务奖励。 */
+    void publishBossCompletionEvent(TaskSubmission sub);
+
     int autoScoreChoices(TaskSubmission sub);
 
-    /** 将该学生该任务的所有旧提交标记为 superseded */
-    void supersedePrevious(String taskNo, String studentNo);
 }

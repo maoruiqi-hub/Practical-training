@@ -171,8 +171,10 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { searchCourse, getStudentProgress, getCourseProgress, getStudentCourseStats } from '../api'
 import * as echarts from 'echarts'
+import { getCurrentUser, getStudentId } from '../utils/authContext'
 
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
+const studentId = getStudentId(user)
 const userRole = user.role
 const courses = ref([])
 const selectedCourse = ref('')
@@ -231,8 +233,8 @@ const loadStudentProgress = async () => {
   sLoading.value = true
   try {
     const [pRes, sRes] = await Promise.all([
-      getStudentProgress(user.studentNo || '1', selectedCourse.value),
-      getStudentCourseStats(user.studentNo || '1', selectedCourse.value)
+      getStudentProgress(studentId, selectedCourse.value),
+      getStudentCourseStats(studentId, selectedCourse.value)
     ])
     if (pRes.data.code === 200) {
       studentProgress.value = pRes.data.data

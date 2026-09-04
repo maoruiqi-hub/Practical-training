@@ -66,6 +66,9 @@ public class SeedPythonCourseStructure {
     );
 
     public static void main(String[] args) throws Exception {
+        if (!"1".equals(System.getenv("SEED_ALLOW_DEMO"))) {
+            throw new IllegalStateException("这是演示数据脚本。请仅在测试环境显式设置 SEED_ALLOW_DEMO=1 后执行。");
+        }
         Properties env = loadEnv(Path.of("backend/.env"));
         Class.forName(required(env, "DB_DRIVER"));
         try (Connection connection = DriverManager.getConnection(

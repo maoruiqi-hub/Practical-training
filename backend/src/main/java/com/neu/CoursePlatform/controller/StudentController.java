@@ -38,7 +38,7 @@ public class StudentController {
     public Result<LoginResponse> login(@RequestBody Student req, HttpSession session) {
         Student student = studentService.login(req.getUsername(), req.getPassword());
         if (student == null) return Result.fail("账号或密码错误");
-        session.setAttribute("student", student);
+        session.setAttribute("student", sessionStudent(student));
         return Result.ok(LoginResponse.fromStudent(student));
     }
 
@@ -117,5 +117,15 @@ public class StudentController {
         response.setContentType("application/vnd.ms-excel");
         response.setHeader("Content-Disposition", "attachment; filename=students.xls");
         studentService.exportToExcel(response.getOutputStream());
+    }
+
+    private Student sessionStudent(Student source) {
+        Student student = new Student();
+        student.setStudentNo(source.getStudentNo());
+        student.setName(source.getName());
+        student.setUsername(source.getUsername());
+        student.setCollege(source.getCollege());
+        student.setClassName(source.getClassName());
+        return student;
     }
 }

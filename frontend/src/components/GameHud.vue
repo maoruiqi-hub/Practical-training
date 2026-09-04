@@ -1,9 +1,9 @@
 <template>
   <section class="game-hud" :class="{ compact }" aria-label="学生游戏状态">
     <div class="hud-brand">
-      <span class="avatar-mark" aria-hidden="true">
+      <button class="avatar-mark" type="button" aria-label="打开数据统计中心" @click="openDataCenter">
         <img class="avatar-image" :src="characterSprites.playerKnightIdle" alt="" />
-      </span>
+      </button>
       <div class="brand-copy">
         <p class="eyebrow">登塔试炼</p>
         <h1>{{ displayCourseName }}</h1>
@@ -49,11 +49,14 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { characterSprites } from '../data/gameAssetManifest'
+
+const router = useRouter()
 
 const props = defineProps({
   profile: { type: Object, default: () => ({}) },
-  courseName: { type: String, default: 'Python 程序设计' },
+  courseName: { type: String, default: '' },
   compact: { type: Boolean, default: false },
   showHp: { type: Boolean, default: true }
 })
@@ -80,13 +83,19 @@ const hpPercent = computed(() =>
 
 const displayCourseName = computed(() => {
   const name = String(props.courseName || '').trim()
-  return name === 'Python Program Design' ? 'Python 程序设计' : name
+  return name === 'Python Program Design' ? 'Python 程序设计' : name || '未选择课程'
 })
 
 const levelName = computed(() => {
   const names = { 1: '入门', 2: '初级', 3: '进阶', 4: '熟练', 5: '精通' }
   return names[safeProfile.value.level] || '挑战者'
 })
+
+const openDataCenter = () => {
+  const courseId = localStorage.getItem('courseId') || ''
+  if (!courseId) return
+  router.push({ path: '/data-center', query: { courseId, courseName: displayCourseName.value } })
+}
 </script>
 
 <style scoped>
@@ -129,11 +138,17 @@ const levelName = computed(() => {
   place-items: center;
   border: 2px solid #e2ad57;
   border-radius: 12px 12px 7px 7px;
+  padding: 0;
   background:
     radial-gradient(circle at 50% 22%, rgba(255, 230, 150, .92) 0 7px, transparent 8px),
     linear-gradient(180deg, #6d2f1f, #1c1210);
   box-shadow: inset 0 0 0 4px rgba(255, 236, 187, .08), 0 0 24px rgba(208, 88, 33, .22);
+  cursor: pointer;
+  transition: transform .18s ease, filter .18s ease;
 }
+
+.avatar-mark:hover,
+.avatar-mark:focus-visible { filter: brightness(1.16); outline: none; transform: translateY(-2px); }
 
 .avatar-image {
   width: 44px;

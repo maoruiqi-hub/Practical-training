@@ -9,6 +9,12 @@ public interface FileStorageService {
 
     String store(MultipartFile file, String directory) throws IOException;
 
+    /** Stores an upload below the temporary upload area and returns its stored path. */
+    String storeTemporary(MultipartFile file, String directory) throws IOException;
+
+    /** Atomically moves one temporary upload into its final directory. */
+    String promoteTemporary(String temporaryStoredPath, String finalDirectory) throws IOException;
+
     byte[] readPrivateFile(String storedPath) throws IOException;
 
     String getPrivateFileContentType(String storedPath) throws IOException;
@@ -19,4 +25,7 @@ public interface FileStorageService {
 
     /** Deletes one file from the private resource root. Missing files are ignored. */
     void deletePrivateFileIfExists(String storedPath) throws IOException;
+
+    /** Deletes one stored resource from the shared resource root. Missing files are ignored. */
+    void deleteStoredFileIfExists(String storedPath) throws IOException;
 }

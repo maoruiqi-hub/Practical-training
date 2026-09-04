@@ -8,21 +8,29 @@ import com.neu.CoursePlatform.agentic.AgenticClient;
 import com.neu.CoursePlatform.agentic.AgenticRequest;
 import com.neu.CoursePlatform.agentic.AgenticResponse;
 import com.neu.CoursePlatform.entity.LearningTask;
+import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.SubmissionAiReview;
 import com.neu.CoursePlatform.entity.TaskSubmission;
+import com.neu.CoursePlatform.entity.TaskQuestion;
 import com.neu.CoursePlatform.mapper.SubmissionAiReviewMapper;
 import com.neu.CoursePlatform.service.LearningTaskService;
+import com.neu.CoursePlatform.service.LearningEvidenceService;
 import com.neu.CoursePlatform.service.SubmissionAiReviewService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
+import com.neu.CoursePlatform.service.QuestionService;
+import com.neu.CoursePlatform.service.TaskQuestionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Async;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiReviewMapper, SubmissionAiReview> implements SubmissionAiReviewService {
@@ -32,13 +40,21 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
     private final TaskSubmissionService submissionService;
     private final LearningTaskService taskService;
     private final AgenticClient agenticClient;
+    private final QuestionService questionService;
+    private final TaskQuestionService taskQuestionService;
+    private final LearningEvidenceService learningEvidenceService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SubmissionAiReviewServiceImpl(TaskSubmissionService submissionService, LearningTaskService taskService,
-                                         AgenticClient agenticClient) {
+                                         AgenticClient agenticClient, QuestionService questionService,
+                                         TaskQuestionService taskQuestionService,
+                                         LearningEvidenceService learningEvidenceService) {
         this.submissionService = submissionService;
         this.taskService = taskService;
         this.agenticClient = agenticClient;
+        this.questionService = questionService;
+        this.taskQuestionService = taskQuestionService;
+        this.learningEvidenceService = learningEvidenceService;
     }
 
     @Override
@@ -47,6 +63,16 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 .eq("submission_id", submissionId)
                 .orderByDesc("create_time")
                 .last("LIMIT 1"));
+    }
+
+    @Override
+    @Async
+    public void requestAutomaticReview(String submissionId) {
+        try {
+            generateReview(submissionId);
+        } catch (Exception e) {
+            log.warn("Automatic AI assessment failed; manual review remains available, submission={}", submissionId, e);
+        }
     }
 
     @Override
@@ -64,26 +90,62 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 ? buildQuizReviewContent(submission, task)
                 : normalize(submission.getContent());
         boolean hasFile = submission.getFilePath() != null && !submission.getFilePath().isBlank();
+        // 没有真实模型结果时不能用本地规则伪造评分；提交保留并转教师复核。
         ReviewDraft draft = generateWithAgentic(content, hasFile, task);
-        if (draft == null) draft = generateLocalDraft(content, hasFile, task);
 
         SubmissionAiReview review = new SubmissionAiReview();
         review.setSubmissionId(submission.getSubmissionId());
         review.setTaskNo(submission.getTaskNo());
         review.setStudentNo(submission.getStudentNo());
-        review.setAiScore(draft.score());
-        review.setDimensions(toJson(draft.dimensions()));
-        review.setSummary(draft.summary());
-        review.setSuggestions(toJson(draft.suggestions()));
-        review.setRiskLevel(draft.riskLevel());
-        review.setStatus("generated");
+        review.setAiScore(draft == null ? null : draft.score());
+        review.setConfidence(draft == null ? null : draft.confidence());
+        review.setBasis(draft == null ? null : draft.basis());
+        review.setDimensions(toJson(draft == null ? Map.of() : draft.dimensions()));
+        review.setSummary(draft == null ? "模型评价暂不可用，请教师复核原始提交。" : draft.summary());
+        review.setSuggestions(toJson(draft == null
+                ? List.of("请检查模型服务配置，或由教师直接复核。")
+                : draft.suggestions()));
+        review.setRiskLevel(draft == null ? "high" : draft.riskLevel());
+        boolean accepted = draft != null && draft.confidence() >= 0.70D;
+        review.setStatus(draft == null ? "pending_review" : accepted ? "accepted" : "needs_review");
         review.setCreateTime(LocalDateTime.now());
         save(review);
+        if (accepted) applyAcceptedAssessment(submission, task, draft);
         return review;
+    }
+
+    private void applyAcceptedAssessment(TaskSubmission submission, LearningTask task, ReviewDraft draft) {
+        if (task == null || draft == null || submission == null) return;
+        int maxScore = task.getScore() == null ? 100 : Math.max(0, task.getScore());
+        int finalScore = Math.max(0, Math.min(maxScore, Math.round(maxScore * draft.score() / 100F)));
+        submission.setPreviousScore(submission.getScore());
+        submission.setScore(finalScore);
+        submission.setStatus("graded");
+        submission.setFeedback("AI 自动评价已生成，教师可复核覆盖；" + (draft.summary() == null ? "" : draft.summary()));
+        submissionService.updateById(submission);
+
+        List<TaskQuestion> bindings = taskQuestionService.listByTaskNo(task.getTaskNo());
+        // 总分评价不能复制成多道题的证据；多题任务等待后续逐题评价或教师复核。
+        if (bindings == null || bindings.size() != 1 || learningEvidenceService == null) return;
+        String questionId = bindings.get(0).getQuestionId();
+        Question question = questionId == null ? null : questionService.getById(questionId);
+        if (question == null || question.getKnowledgePointId() == null || question.getKnowledgePointId().isBlank()) return;
+        Map<String, Object> answer = new LinkedHashMap<>();
+        answer.put("questionId", questionId);
+        answer.put("studentAnswer", normalize(submission.getContent()));
+        answer.put("correct", draft.score() >= 60);
+        List<Map<String, Object>> answers = List.of(answer);
+        Set<String> allowed = answers.stream().map(item -> String.valueOf(item.get("questionId")))
+                .collect(java.util.stream.Collectors.toSet());
+        learningEvidenceService.recordAiReviewedAnswers(submission.getStudentNo(), task.getCourseCode(),
+                submission.getSubmissionId(), answers, allowed);
     }
 
     private ReviewDraft generateWithAgentic(String content, boolean hasFile, LearningTask task) {
         try {
+            if (agenticClient.isMockMode() || !agenticClient.isConfiguredForRealAi()) {
+                return null;
+            }
             AgenticRequest request = new AgenticRequest();
             request.setCourseCode(task != null ? task.getCourseCode() : null);
             request.setContent(buildAgenticPrompt(content, hasFile, task));
@@ -92,6 +154,7 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                     "taskType", task != null ? normalize(task.getTaskType()) : "",
                     "taskDescription", task != null ? normalize(task.getDescription()) : "",
                     "rubric", rubricFor(task),
+                    "questionAndReference", questionAndReference(task),
                     "submissionText", content == null ? "" : content,
                     "hasFile", hasFile,
                     "hasAttachment", hasFile
@@ -103,7 +166,7 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
             String json = objectMapper.writeValueAsString(response.getData());
             return parseDraft(json);
         } catch (Exception e) {
-            log.warn("Agentic assessment failed, fallback to local draft. submission task={}", task != null ? task.getTaskNo() : "", e);
+            log.warn("Direct AI assessment failed; keep review pending. submission task={}", task != null ? task.getTaskNo() : "", e);
             return null;
         }
     }
@@ -114,6 +177,9 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 如果材料中包含填空题、简答题或编程题，请结合题干、参考答案、学生答案和得分点给出评分建议；填空题允许合理同义表达，但不要替代教师最终判断。
                 任务类型：%s
                 任务要求：%s
+                题目与参考答案：
+                %s
+                评分标准：%s
                 是否包含附件：%s
                 学生文字提交：
                 %s
@@ -135,9 +201,29 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
                 """.formatted(
                 task != null ? normalize(task.getTaskType()) : "",
                 task != null ? normalize(task.getDescription()) : "",
+                questionAndReference(task),
+                task != null ? normalize(task.getGradingRule()) : "",
                 hasFile ? "是" : "否",
                 content.isBlank() ? "（无文字提交）" : content
         );
+    }
+
+    private String questionAndReference(LearningTask task) {
+        if (task == null || taskQuestionService == null || questionService == null) return "（未绑定题目）";
+        List<TaskQuestion> bindings = taskQuestionService.listByTaskNo(task.getTaskNo());
+        if (bindings == null || bindings.isEmpty()) return "（未绑定题目）";
+        List<String> ids = bindings.stream().map(TaskQuestion::getQuestionId)
+                .filter(id -> id != null && !id.isBlank()).distinct().toList();
+        if (ids.isEmpty()) return "（未绑定题目）";
+        Collection<Question> questions = questionService.listByIds(ids);
+        if (questions == null || questions.isEmpty()) return "（题目不存在）";
+        List<String> blocks = new ArrayList<>();
+        for (Question question : questions) {
+            blocks.add("题干：" + normalize(question.getStem())
+                    + "\n参考答案：" + normalize(question.getAnswer())
+                    + "\n知识点：" + normalize(question.getKnowledgePointId()));
+        }
+        return String.join("\n---\n", blocks);
     }
 
     private String buildQuizReviewContent(TaskSubmission submission, LearningTask task) {
@@ -232,7 +318,9 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
         if (!List.of("low", "medium", "high").contains(riskLevel)) riskLevel = score >= 80 ? "low" : score >= 60 ? "medium" : "high";
         String summary = normalize(root.path("summary").asText());
         if (summary.isBlank()) summary = buildSummary(score, "", false);
-        return new ReviewDraft(score, dimensions, summary, suggestions, riskLevel);
+        double confidence = root.has("confidence") ? Math.max(0D, Math.min(1D, root.path("confidence").asDouble())) : 0D;
+        String basis = normalize(root.path("basis").asText("submission_review"));
+        return new ReviewDraft(score, dimensions, summary, suggestions, riskLevel, confidence, basis);
     }
 
     private List<Map<String, Object>> rubricFor(LearningTask task) {
@@ -248,56 +336,14 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
         return List.of(Map.of("description", gradingRule));
     }
 
-    private ReviewDraft generateLocalDraft(String content, boolean hasFile, LearningTask task) {
-        Map<String, Integer> dimensions = buildDimensions(content, hasFile, task);
-        int score = Math.round((float) dimensions.values().stream().mapToInt(Integer::intValue).average().orElse(0));
-        List<String> suggestions = buildSuggestions(content, hasFile, dimensions, task);
-        return new ReviewDraft(score, dimensions, buildSummary(score, content, hasFile), suggestions,
-                score >= 80 ? "low" : score >= 60 ? "medium" : "high");
-    }
-
-    private Map<String, Integer> buildDimensions(String content, boolean hasFile, LearningTask task) {
-        Map<String, Integer> dimensions = new LinkedHashMap<>();
-        int lengthScore = content.length() >= 600 ? 90 : content.length() >= 300 ? 78 : content.length() >= 120 ? 65 : hasFile ? 60 : 45;
-        int taskFit = task != null && containsAny(content, task.getDescription()) ? 82 : content.length() >= 120 || hasFile ? 68 : 50;
-        int structure = containsAny(content, "一、", "1.", "首先", "其次", "最后", "总结", "结论") ? 82 : content.length() >= 300 ? 70 : 55;
-        int expression = content.isBlank() && hasFile ? 62 : content.length() >= 120 ? 76 : 58;
-        int coverage = containsAny(content, "知识点", "实验", "结果", "分析", "代码", "函数", "数据") ? 78 : 60;
-        dimensions.put("内容完整性", lengthScore);
-        dimensions.put("知识点覆盖度", coverage);
-        dimensions.put("逻辑结构", structure);
-        dimensions.put("表达规范", expression);
-        dimensions.put("任务要求符合度", taskFit);
-        return dimensions;
-    }
-
-    private List<String> buildSuggestions(String content, boolean hasFile, Map<String, Integer> dimensions, LearningTask task) {
-        List<String> suggestions = new ArrayList<>();
-        if (content.length() < 120 && !hasFile) suggestions.add("提交内容偏少，建议补充实现过程、关键步骤和结果说明。");
-        if (content.length() < 120 && hasFile) suggestions.add("当前主要依赖附件，建议在文字说明中概括报告结构、核心结论和关键知识点。");
-        if (dimensions.getOrDefault("逻辑结构", 0) < 70) suggestions.add("建议按背景、过程、结果、问题分析、总结的结构组织内容。");
-        if (dimensions.getOrDefault("知识点覆盖度", 0) < 70) suggestions.add("建议明确写出涉及的知识点，并说明这些知识点如何用于完成任务。");
-        if (task != null && !containsAny(content, task.getDescription())) suggestions.add("建议对照任务要求逐项说明完成情况，避免只描述笼统结果。");
-        if (suggestions.isEmpty()) suggestions.add("整体完成度较好，可进一步补充反思、边界情况和改进方向。");
-        return suggestions;
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private String buildSummary(int score, String content, boolean hasFile) {
-        if (score >= 80) return "提交内容较完整，结构和任务匹配度较好，可作为教师复核参考。";
-        if (score >= 60) return hasFile ? "提交具备基础材料，但文字说明和结构化表达仍可加强。" : "提交具备基础内容，但完整性、结构和知识点说明仍需完善。";
-        return content.isBlank() && hasFile ? "提交主要为附件，系统无法充分判断内容质量，建议教师重点查看附件。" : "提交内容较弱，建议补充任务过程、知识点说明和结果分析。";
-    }
-
-    private boolean containsAny(String content, String... values) {
-        if (content == null) return false;
-        for (String value : values) {
-            if (value != null && !value.isBlank() && content.contains(value)) return true;
-        }
-        return false;
-    }
-
-    private String normalize(String value) {
-        return value == null ? "" : value.trim();
+        if (score >= 80) return "提交完成度较好，可作为教师复核参考。";
+        if (score >= 60) return "提交具备基础内容，但仍有需要完善的部分。";
+        return "提交完成度较低，建议教师结合原始答案重点复核。";
     }
 
     private String toJson(Object value) {
@@ -313,6 +359,6 @@ public class SubmissionAiReviewServiceImpl extends ServiceImpl<SubmissionAiRevie
     }
 
     private record ReviewDraft(int score, Map<String, Integer> dimensions, String summary,
-                               List<String> suggestions, String riskLevel) {
+                               List<String> suggestions, String riskLevel, double confidence, String basis) {
     }
 }

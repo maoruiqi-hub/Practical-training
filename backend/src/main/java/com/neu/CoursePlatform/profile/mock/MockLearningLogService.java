@@ -1,9 +1,11 @@
 package com.neu.CoursePlatform.profile.mock;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 import java.util.*;
 
 @Service
+@Profile("mock")
 public class MockLearningLogService {
 
     /** Mock 学生行为日志（对齐模块2 getStudentLogs 契约） */

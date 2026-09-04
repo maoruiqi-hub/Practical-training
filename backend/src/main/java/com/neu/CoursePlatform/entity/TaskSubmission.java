@@ -39,6 +39,14 @@ public class TaskSubmission {
     private String status;
     /** 教师反馈 */
     private String feedback;
+    /** 最近一次教师异常干预的原因。 */
+    private String interventionReason;
+    /** 最近一次教师异常干预的操作者。 */
+    private String interventionBy;
+    /** 最近一次教师异常干预时间。 */
+    private LocalDateTime interventionAt;
+    /** 最近一次教师干预前的最终分数。 */
+    private Integer previousScore;
     /** 教师逐题复核结果，不持久化到提交表。 */
     @TableField(exist = false)
     private List<Map<String, Object>> manualAnswers;

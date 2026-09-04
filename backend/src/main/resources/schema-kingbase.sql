@@ -117,6 +117,76 @@ CREATE TABLE IF NOT EXISTS ability_knowledge_point (
 CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_knowledge_point
     ON ability_knowledge_point(ability_point_id, knowledge_point_id);
 
+CREATE TABLE IF NOT EXISTS competency_point (
+    competency_id VARCHAR(64) PRIMARY KEY,
+    course_code VARCHAR(64) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    description TEXT,
+    status VARCHAR(32) NOT NULL DEFAULT 'active',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT ck_competency_status CHECK (status IN ('active', 'inactive')),
+    CONSTRAINT fk_competency_course FOREIGN KEY (course_code) REFERENCES course(course_code)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_competency_point_course_name
+    ON competency_point(course_code, name);
+
+CREATE TABLE IF NOT EXISTS ability_point_competency_relation (
+    id VARCHAR(64) PRIMARY KEY,
+    course_code VARCHAR(64) NOT NULL,
+    ability_point_id VARCHAR(64) NOT NULL,
+    competency_id VARCHAR(64) NOT NULL,
+    relation_status VARCHAR(32) NOT NULL,
+    strength DECIMAL(8, 6) NOT NULL DEFAULT 0,
+    confidence DECIMAL(8, 6) NOT NULL DEFAULT 0,
+    strength_source VARCHAR(32) NOT NULL DEFAULT 'uniform_prior',
+    evidence_count INTEGER NOT NULL DEFAULT 0,
+    matrix_version VARCHAR(64) NOT NULL DEFAULT 'v1',
+    review_note TEXT,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_mapping_relation_status CHECK (relation_status IN ('related', 'unrelated', 'uncertain')),
+    CONSTRAINT ck_mapping_strength CHECK (strength >= 0 AND strength <= 1),
+    CONSTRAINT ck_mapping_confidence CHECK (confidence >= 0 AND confidence <= 1),
+    CONSTRAINT ck_mapping_evidence_count CHECK (evidence_count >= 0),
+    CONSTRAINT fk_mapping_ability FOREIGN KEY (ability_point_id) REFERENCES ability_point(ability_point_id),
+    CONSTRAINT fk_mapping_competency FOREIGN KEY (competency_id) REFERENCES competency_point(competency_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_relation
+    ON ability_point_competency_relation(course_code, ability_point_id, competency_id, matrix_version);
+
+CREATE TABLE IF NOT EXISTS competency_task_observation (
+    id VARCHAR(64) PRIMARY KEY,
+    course_code VARCHAR(64) NOT NULL,
+    task_no VARCHAR(64) NOT NULL,
+    competency_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'active',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_observation_status CHECK (status IN ('active', 'inactive')),
+    CONSTRAINT fk_observation_competency FOREIGN KEY (competency_id) REFERENCES competency_point(competency_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_competency_task_observation
+    ON competency_task_observation(course_code, task_no, competency_id);
+
+CREATE TABLE IF NOT EXISTS ability_competency_matrix_version (
+    id VARCHAR(64) PRIMARY KEY,
+    course_code VARCHAR(64) NOT NULL,
+    version VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    based_on_version VARCHAR(64),
+    sample_count INTEGER NOT NULL DEFAULT 0,
+    validation_sample_count INTEGER NOT NULL DEFAULT 0,
+    algorithm_version VARCHAR(32) NOT NULL DEFAULT 'pearson-v1',
+    published_by VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    published_at TIMESTAMP,
+    CONSTRAINT ck_mapping_version_status CHECK (status IN ('draft', 'published', 'archived')),
+    CONSTRAINT fk_mapping_version_course FOREIGN KEY (course_code) REFERENCES course(course_code)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_matrix_version
+    ON ability_competency_matrix_version(course_code, version);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_published_course
+    ON ability_competency_matrix_version(course_code)
+    WHERE status = 'published';
+
 CREATE TABLE IF NOT EXISTS knowledge_mastery (
     mastery_id VARCHAR(36) PRIMARY KEY,
     student_no VARCHAR(64) NOT NULL,
@@ -262,7 +332,11 @@ CREATE TABLE IF NOT EXISTS task_submission (
     is_overdue INTEGER DEFAULT 0,
     score INTEGER,
     status VARCHAR(32),
-    feedback TEXT
+    feedback TEXT,
+    intervention_reason TEXT,
+    intervention_by VARCHAR(64),
+    intervention_at TIMESTAMP,
+    previous_score INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_task_submission_task ON task_submission(task_no);
 CREATE INDEX IF NOT EXISTS idx_task_submission_student ON task_submission(student_no);
@@ -273,6 +347,8 @@ CREATE TABLE IF NOT EXISTS submission_ai_review (
     task_no VARCHAR(64),
     student_no VARCHAR(64),
     ai_score INTEGER,
+    confidence DECIMAL(4,3),
+    basis VARCHAR(32),
     dimensions TEXT,
     summary TEXT,
     suggestions TEXT,
@@ -302,6 +378,8 @@ CREATE TABLE IF NOT EXISTS submission_answer (
 CREATE INDEX IF NOT EXISTS idx_submission_answer_submission ON submission_answer(submission_id);
 CREATE INDEX IF NOT EXISTS idx_submission_answer_student ON submission_answer(student_no);
 CREATE INDEX IF NOT EXISTS idx_submission_answer_task ON submission_answer(task_no);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_submission_answer_submission_question
+    ON submission_answer(submission_id, question_id);
 
 CREATE TABLE IF NOT EXISTS exam (
     exam_id VARCHAR(64) PRIMARY KEY DEFAULT CAST(nextval('exam_id_seq') AS VARCHAR(64)),
@@ -373,6 +451,8 @@ CREATE TABLE IF NOT EXISTS task_question (
 );
 CREATE INDEX IF NOT EXISTS idx_task_question_task ON task_question(task_no);
 CREATE INDEX IF NOT EXISTS idx_task_question_question ON task_question(question_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_task_question_task_question
+    ON task_question(task_no, question_id);
 
 CREATE TABLE IF NOT EXISTS learning_behavior_log (
     log_id VARCHAR(64) PRIMARY KEY DEFAULT CAST(nextval('learning_behavior_log_id_seq') AS VARCHAR(64)),
@@ -420,7 +500,7 @@ CREATE TABLE IF NOT EXISTS competency_score (
     course_code VARCHAR(64) NOT NULL,
     ability_point_id VARCHAR(64),
     ability_point_name VARCHAR(128),
-    score INTEGER DEFAULT 50,
+    score INTEGER,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uk_competency_student_ability
@@ -445,12 +525,15 @@ CREATE TABLE IF NOT EXISTS achievement (
     student_no VARCHAR(64) NOT NULL,
     course_code VARCHAR(64) NOT NULL,
     achievement_type VARCHAR(32),
+    badge_code VARCHAR(64),
     name VARCHAR(128),
     description VARCHAR(512),
     earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     metadata TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_achievement_student_course ON achievement(student_no, course_code);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_achievement_student_badge
+    ON achievement(student_no, course_code, badge_code);
 
 CREATE TABLE IF NOT EXISTS competency_score_history (
     id VARCHAR(36) PRIMARY KEY,
@@ -476,6 +559,20 @@ CREATE TABLE IF NOT EXISTS growth_history (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_growth_history_student_course ON growth_history(student_no, course_code);
+
+CREATE TABLE IF NOT EXISTS profile_projection_ledger (
+    id VARCHAR(64) PRIMARY KEY,
+    student_no VARCHAR(64) NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    source_type VARCHAR(64) NOT NULL,
+    source_id VARCHAR(64) NOT NULL,
+    projection_type VARCHAR(64) NOT NULL,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_profile_projection_source
+    ON profile_projection_ledger(source_type, source_id, projection_type);
+CREATE INDEX IF NOT EXISTS idx_profile_projection_student_course
+    ON profile_projection_ledger(student_no, course_code, applied_at);
 
 CREATE TABLE IF NOT EXISTS analytics_class (
     id VARCHAR(36) PRIMARY KEY,
@@ -592,6 +689,47 @@ CREATE TABLE IF NOT EXISTS student_tower_attempt (
 );
 CREATE INDEX IF NOT EXISTS idx_tower_attempt_node
 ON student_tower_attempt(node_id, finished_at);
+
+CREATE TABLE IF NOT EXISTS tower_run_inventory (
+    id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    student_no VARCHAR(64) NOT NULL,
+    item_code VARCHAR(64) NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_tower_inventory_item
+ON tower_run_inventory(run_id, item_code);
+
+CREATE TABLE IF NOT EXISTS tower_action_log (
+    action_id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(64),
+    student_no VARCHAR(64) NOT NULL,
+    action_type VARCHAR(64) NOT NULL,
+    target_id VARCHAR(64),
+    result_json TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tower_action_run
+ON tower_action_log(run_id, created_at);
+
+CREATE TABLE IF NOT EXISTS tower_node_option (
+    option_id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(64) NOT NULL,
+    option_kind VARCHAR(32) NOT NULL,
+    option_code VARCHAR(64) NOT NULL,
+    option_snapshot_json TEXT NOT NULL,
+    selected BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    selected_at TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_tower_node_option_code
+ON tower_node_option(run_id, node_id, option_code);
+CREATE INDEX IF NOT EXISTS idx_tower_node_option_node
+ON tower_node_option(run_id, node_id, selected);
 
 CREATE TABLE IF NOT EXISTS student_ability_delta_log (
     id VARCHAR(64) PRIMARY KEY,

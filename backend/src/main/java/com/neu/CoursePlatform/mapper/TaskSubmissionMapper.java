@@ -30,5 +30,7 @@ public interface TaskSubmissionMapper extends BaseMapper<TaskSubmission> {
 
     List<TaskSubmissionDTO> selectLatestDtoByTaskNo(@Param("taskNo") String taskNo);
 
-    int markSupersededPrevious(@Param("taskNo") String taskNo, @Param("studentNo") String studentNo);
+    int markSupersededPrevious(@Param("taskNo") String taskNo,
+                               @Param("studentNo") String studentNo,
+                               @Param("currentSubmissionId") String currentSubmissionId);
 }

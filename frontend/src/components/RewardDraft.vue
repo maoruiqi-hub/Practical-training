@@ -9,7 +9,8 @@
         </p>
       </header>
 
-      <div class="reward-grid">
+      <div v-if="loading" class="reward-loading">正在读取服务端奖励…</div>
+      <div v-else class="reward-grid">
         <button
           v-for="reward in rewards"
           :key="reward.id"
@@ -30,22 +31,21 @@
         </button>
       </div>
 
-      <footer class="reward-actions">
-        <el-button class="ghost-button" @click="skipReward">跳过，换 10 金币</el-button>
-      </footer>
     </div>
   </section>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { Coin, FirstAidKit, Lightning, Lock, MagicStick } from '@element-plus/icons-vue'
+import { Coin, FirstAidKit, Lightning, Lock } from '@element-plus/icons-vue'
 import { gameBackgrounds } from '../data/gameAssetManifest'
 
 const props = defineProps({
   battleResult: { type: Object, default: () => ({}) },
   floorName: { type: String, default: '当前知识点' },
-  roomType: { type: String, default: 'battle' }
+  roomType: { type: String, default: 'battle' },
+  options: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['reward-picked'])
@@ -54,75 +54,23 @@ const roomStyle = computed(() => ({
   backgroundImage: `linear-gradient(180deg, rgba(8, 10, 14, .2), rgba(8, 10, 14, .78)), url(${gameBackgrounds.reward})`
 }))
 
-const rewards = computed(() => {
-  const strongRun = Number(props.battleResult.correctRate || 0) >= 0.9
-  const elite = props.roomType === 'elite' || props.roomType === 'boss'
-  return [
-    {
-      id: 'trace-variable',
-      name: '变量追踪',
-      type: 'card',
-      typeLabel: '知识卡',
-      rarity: strongRun ? 'rare' : 'common',
-      badge: '1',
-      icon: MagicStick,
-      description: `下次遇到 ${props.floorName} 相关题目时，可排除一个干扰项。`
-    },
-    {
-      id: 'indent-shield',
-      name: '缩进护盾',
-      type: 'card',
-      typeLabel: '防御卡',
-      rarity: 'common',
-      badge: '1',
-      icon: Lock,
-      description: '下一场战斗答错时减少 10 点伤害，适合稳住血量。'
-    },
-    {
-      id: elite ? 'focus-relic' : 'recover-pack',
-      name: elite ? '专注徽章' : '复习补给',
-      type: elite ? 'relic' : 'heal',
-      typeLabel: elite ? '遗物' : '补给',
-      rarity: elite ? 'rare' : 'common',
-      badge: elite ? '★' : '+',
-      icon: elite ? Lightning : FirstAidKit,
-      description: elite ? '本局后续战斗初始能量 +1。' : '立即恢复 15 HP，并获得一份复习提示。'
-    },
-    {
-      id: 'coin-bundle',
-      name: '金币袋',
-      type: 'coin',
-      typeLabel: '资源',
-      rarity: 'common',
-      badge: '金',
-      icon: Coin,
-      description: '获得 20 金币，可在商店购买提示、回血或净化错题卡。'
-    }
-  ].slice(0, 3)
-})
-
-const profileDeltaFor = reward => {
-  if (reward.type === 'coin') return { coins: 20 }
-  if (reward.type === 'heal') return { hp: 15, def: 1 }
-  if (reward.type === 'relic') return { energy: 1, atk: 1 }
-  if (reward.id === 'indent-shield') return { def: 2 }
-  return { atk: 1 }
-}
+const rewards = computed(() => props.options.map(option => {
+  const code = String(option.optionCode || '')
+  const isCoin = code.includes('coin')
+  const isSupply = code.includes('supply')
+  return {
+    ...option,
+    id: option.optionId,
+    name: option.title,
+    typeLabel: '服务端奖励',
+    rarity: props.roomType === 'elite' || props.roomType === 'boss' ? 'rare' : 'common',
+    badge: isCoin ? '金' : isSupply ? '+' : '★',
+    icon: isCoin ? Coin : isSupply ? FirstAidKit : code.includes('focus') ? Lightning : Lock
+  }
+}))
 
 const pickReward = reward => {
-  emit('reward-picked', {
-    reward,
-    profileDelta: profileDeltaFor(reward),
-    card: reward.type === 'card' ? reward : null,
-    relic: reward.type === 'relic' ? reward : null
-  })
-}
-
-const skipReward = () => {
-  emit('reward-picked', {
-    reward: { id: 'skip-coin', name: '跳过奖励', type: 'coin' },
-    profileDelta: { coins: 10 }
-  })
+  emit('reward-picked', { optionId: reward.optionId, optionCode: reward.optionCode })
 }
 </script>
 

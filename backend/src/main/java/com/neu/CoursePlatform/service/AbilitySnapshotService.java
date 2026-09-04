@@ -12,7 +12,7 @@ public interface AbilitySnapshotService {
 
     List<AbilityScore> currentScores(String studentNo, String courseCode);
 
-    record AbilityScore(String abilityPointId, String name, String description, int score,
+    record AbilityScore(String abilityPointId, String name, String description, Integer score,
                         int evidenceKnowledgeCount, int totalKnowledgeCount,
                         List<String> knowledgePointIds, List<Integer> weights) {}
 }

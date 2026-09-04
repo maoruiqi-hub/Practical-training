@@ -1,6 +1,7 @@
 package com.neu.CoursePlatform.profile.mock;
 
 import org.springframework.stereotype.Component;
+import org.springframework.context.annotation.Profile;
 import java.util.*;
 
 /**
@@ -8,6 +9,7 @@ import java.util.*;
  * When module 3 is implemented, replace with real service calls.
  */
 @Component
+@Profile("mock")
 public class MockScoreService {
 
     public List<Map<String, Object>> getStudentScores(Integer studentNo, Integer courseCode) {
