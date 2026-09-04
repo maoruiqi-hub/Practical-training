@@ -14,7 +14,6 @@ vi.stubGlobal('localStorage', {
 // 从 router/index.js 提取的纯逻辑
 const studentRoomRedirects = {
   '/dashboard': 'start',
-  '/courses': 'treasure',
   '/stats': 'event',
   '/profile': 'rest',
   '/wrong-book': 'shop',
@@ -92,12 +91,11 @@ describe('路由表结构', () => {
 // ======================== 学生房间重定向映射 ========================
 
 describe('学生房间重定向映射', () => {
-  it('包含 7 个重定向规则', () => {
-    expect(Object.keys(studentRoomRedirects)).toHaveLength(7)
+  it('包含 6 个重定向规则', () => {
+    expect(Object.keys(studentRoomRedirects)).toHaveLength(6)
   })
 
   it('dashboard → start', () => { expect(studentRoomRedirects['/dashboard']).toBe('start') })
-  it('courses → treasure', () => { expect(studentRoomRedirects['/courses']).toBe('treasure') })
   it('stats → event', () => { expect(studentRoomRedirects['/stats']).toBe('event') })
   it('profile → rest', () => { expect(studentRoomRedirects['/profile']).toBe('rest') })
   it('wrong-book → shop', () => { expect(studentRoomRedirects['/wrong-book']).toBe('shop') })
@@ -120,10 +118,10 @@ describe('beforeEach 导航守卫', () => {
     expect(result.query.room).toBe('start')
   })
 
-  it('学生访问 courses → 重定向到塔地图 treasure', () => {
+  it('学生访问 courses → 正常通过并选择课程', () => {
     store.user = JSON.stringify({ role: 'student' })
-    const result = beforeEachGuard({ path: '/courses' })
-    expect(result.query.room).toBe('treasure')
+    delete store.courseId
+    expect(beforeEachGuard({ path: '/courses' })).toBe(true)
   })
 
   it('学生访问 stats → 重定向到塔地图 event', () => {

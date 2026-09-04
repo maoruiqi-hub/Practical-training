@@ -48,7 +48,6 @@ const router = createRouter({
 
 const studentRoomRedirects = {
   '/dashboard': 'start',
-  '/courses': 'treasure',
   '/stats': 'event',
   '/profile': 'rest',
   '/wrong-book': 'shop',
