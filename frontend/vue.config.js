@@ -28,6 +28,11 @@ module.exports = {
   },
   devServer: {
     port: 3000,
+    // Vue Router 使用 HTML5 history 模式；直接打开 /data-center 等深层链接时，
+    // 必须回退到 index.html，再由前端路由完成页面渲染。
+    historyApiFallback: {
+      disableDotRule: true
+    },
     proxy: {
       '/practical-training': {
         target: 'http://localhost:8081',

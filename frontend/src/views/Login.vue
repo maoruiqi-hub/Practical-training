@@ -48,11 +48,12 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { studentLogin, teacherLogin } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 const loginType = ref('student')
 const form = reactive({ username: '', password: '' })
 
@@ -71,7 +72,9 @@ const handleLogin = async () => {
       user.role = loginType.value === 'student' ? 'student' : (res.data.data.role || 'teacher')
       localStorage.setItem('user', JSON.stringify(user))
       ElMessage.success('登录成功')
-      router.push(user.role === 'student' ? '/tower-map' : '/dashboard')
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+      const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : ''
+      router.push(safeRedirect || (user.role === 'student' ? '/tower-map' : '/dashboard'))
     } else {
       ElMessage.error(res.data.msg || '登录失败')
     }
