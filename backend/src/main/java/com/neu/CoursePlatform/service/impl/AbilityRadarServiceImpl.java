@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class AbilityRadarServiceImpl implements AbilityRadarService {
@@ -43,13 +44,14 @@ public class AbilityRadarServiceImpl implements AbilityRadarService {
         int largestDelta = 0;
         for (StudentAbilitySnapshot previous : before) {
             StudentAbilitySnapshot current = afterIndex.getOrDefault(previous.getAbilityPointId(), previous);
-            int beforeScore = clamp(previous.getScore());
-            int afterScore = clamp(current.getScore());
-            int delta = afterScore - beforeScore;
-            if (delta != 0) {
+            Integer beforeScore = visibleScore(previous);
+            Integer afterScore = visibleScore(current);
+            Integer delta = beforeScore == null || afterScore == null ? null : afterScore - beforeScore;
+            if (!Objects.equals(beforeScore, afterScore)) {
                 changed++;
-                if (Math.abs(delta) > largestDelta) {
-                    largestDelta = Math.abs(delta);
+                int magnitude = delta == null ? 101 : Math.abs(delta);
+                if (magnitude > largestDelta) {
+                    largestDelta = magnitude;
                     topChange = previous.getAbilityPointName();
                 }
             }
@@ -67,7 +69,8 @@ public class AbilityRadarServiceImpl implements AbilityRadarService {
         List<Map<String, Object>> dimensions = new ArrayList<>();
         List<Integer> scores = new ArrayList<>();
         for (AbilitySnapshotService.AbilityScore score : snapshotService.currentScores(studentNo, courseCode)) {
-            dimensions.add(dimension(score.abilityPointId(), score.name(), score.score(), score.score(), 0,
+            dimensions.add(dimension(score.abilityPointId(), score.name(), score.score(), score.score(),
+                    score.score() == null ? null : 0,
                     score.evidenceKnowledgeCount(), score.totalKnowledgeCount()));
             scores.add(score.score());
         }
@@ -96,7 +99,7 @@ public class AbilityRadarServiceImpl implements AbilityRadarService {
                 .orderByAsc(StudentAbilitySnapshot::getAbilityPointId));
     }
 
-    private Map<String, Object> dimension(String abilityPointId, String name, int before, int after, int delta,
+    private Map<String, Object> dimension(String abilityPointId, String name, Integer before, Integer after, Integer delta,
                                           Integer evidenceCount, Integer totalCount) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("abilityPointId", abilityPointId);
@@ -108,7 +111,10 @@ public class AbilityRadarServiceImpl implements AbilityRadarService {
         item.put("totalKnowledgeCount", totalCount == null ? 0 : totalCount);
         item.put("coverageRate", totalCount == null || totalCount == 0 ? 0
                 : Math.round((evidenceCount == null ? 0 : evidenceCount) * 100D / totalCount));
-        item.put("reason", delta == 0 ? "本次无有效分数变化" : "由本次答题证据和知识点掌握度变化聚合得出");
+        item.put("hasEvidence", evidenceCount != null && evidenceCount > 0);
+        item.put("formulaVersion", "knowledge_mastery_weighted_v1");
+        item.put("reason", after == null ? "暂无答题证据" : delta == null || delta == 0
+                ? "本次无有效分数变化" : "由本次答题证据和知识点掌握度变化聚合得出");
         return item;
     }
 
@@ -126,7 +132,12 @@ public class AbilityRadarServiceImpl implements AbilityRadarService {
         return result;
     }
 
-    private int clamp(Integer value) {
-        return Math.max(0, Math.min(100, value == null ? 50 : value));
+    private Integer visibleScore(StudentAbilitySnapshot snapshot) {
+        return snapshot == null || snapshot.getEvidenceKnowledgeCount() == null
+                || snapshot.getEvidenceKnowledgeCount() <= 0 ? null : clamp(snapshot.getScore());
+    }
+
+    private Integer clamp(Integer value) {
+        return value == null ? null : Math.max(0, Math.min(100, value));
     }
 }

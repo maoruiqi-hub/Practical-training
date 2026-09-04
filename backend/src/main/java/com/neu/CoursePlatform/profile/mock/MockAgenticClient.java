@@ -1,9 +1,11 @@
 package com.neu.CoursePlatform.profile.mock;
 
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 import java.util.*;
 
 @Service
+@Profile("mock")
 public class MockAgenticClient {
 
     /** Mock 推荐理由生成（对齐 agentic /recommend 契约） */

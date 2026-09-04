@@ -42,6 +42,8 @@ class StudentServiceTest {
         Student r = service.login("zhangsan", "123456");
         assertNotNull(r);
         assertEquals("张三", r.getName());
+        assertTrue(r.getPassword().startsWith("$2"));
+        assertNotEquals("123456", r.getPassword());
     }
 
     @Test
@@ -66,6 +68,7 @@ class StudentServiceTest {
     void registerSuccess() {
         Student s = student("2024002", "lisi", "pass", "李四");
         assertTrue(service.register(s));
+        assertTrue(s.getPassword().startsWith("$2"));
         assertNotNull(service.login("lisi", "pass"));
     }
 

@@ -2,16 +2,22 @@ package com.neu.CoursePlatform.controller;
 
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
+import com.neu.CoursePlatform.common.event.SubmissionAssessmentRequestedEvent;
 import com.neu.CoursePlatform.dto.TaskSubmissionDTO;
 import com.neu.CoursePlatform.entity.LearningTask;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.entity.Teacher;
 import com.neu.CoursePlatform.entity.TaskSubmission;
 import com.neu.CoursePlatform.service.FileStorageService;
 import com.neu.CoursePlatform.service.LearningTaskService;
 import com.neu.CoursePlatform.service.TaskAssignmentService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,20 +33,31 @@ public class TaskSubmissionController {
     private final TaskAssignmentService assignmentService;
     private final FileStorageService fileStorageService;
     private final Auth auth;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
+    @Autowired
     public TaskSubmissionController(TaskSubmissionService submissionService, LearningTaskService taskService,
                                     TaskAssignmentService assignmentService, FileStorageService fileStorageService,
-                                    Auth auth) {
+                                    Auth auth, ApplicationEventPublisher applicationEventPublisher) {
         this.submissionService = submissionService;
         this.taskService = taskService;
         this.assignmentService = assignmentService;
         this.fileStorageService = fileStorageService;
         this.auth = auth;
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
+
+    /** 保留旧测试和旧调用方的构造方式。 */
+    public TaskSubmissionController(TaskSubmissionService submissionService, LearningTaskService taskService,
+                                    TaskAssignmentService assignmentService, FileStorageService fileStorageService,
+                                    Auth auth) {
+        this(submissionService, taskService, assignmentService, fileStorageService, auth, null);
     }
 
     /** 提交任务（文字+附件）| student
      *  新路由: POST /api/tasks/{taskNo}/submit  旧路由: POST /submission */
     @PostMapping({"/api/tasks/{taskNo}/submit", "/submission"})
+    @Transactional
     public Result<String> submit(@PathVariable(required = false) String taskNo,
                                  @RequestParam(required = false) String taskNoParam,
                                  @RequestParam(required = false) String content,
@@ -73,9 +90,6 @@ public class TaskSubmissionController {
             return Result.fail("已达最大提交次数（" + maxAttempts + "次），如需修改请联系教师");
         }
 
-        // 覆盖旧提交：将学生之前对该任务的所有提交标记为 superseded
-        submissionService.supersedePrevious(resolvedTaskNo, student.getStudentNo());
-
         // 校验附件格式
         if (file != null && !file.isEmpty() && task.getAttachmentFormats() != null
                 && !task.getAttachmentFormats().isEmpty()) {
@@ -104,17 +118,55 @@ public class TaskSubmissionController {
         sub.setSubmitTime(LocalDateTime.now());
         sub.setIsOverdue(isOverdue ? 1 : 0);
 
+        String promotedFilePath = null;
+        String temporaryFilePath = null;
         if (file != null && !file.isEmpty()) {
             try {
-                sub.setFilePath(fileStorageService.store(file, "../resource/HomeworkUpload/"));
+                temporaryFilePath = fileStorageService.storeTemporary(file, "../resource/HomeworkUpload/");
+                promotedFilePath = fileStorageService.promoteTemporary(temporaryFilePath, "../resource/HomeworkUpload/");
+                sub.setFilePath(promotedFilePath);
+                registerRollbackFileCleanup(promotedFilePath, temporaryFilePath);
             } catch (IOException e) {
+                deleteUploadQuietly(promotedFilePath);
+                deleteUploadQuietly(temporaryFilePath);
                 return Result.fail("文件上传失败");
             }
         }
 
         submissionService.submitWithGrading(sub);
         assignmentService.markSubmitted(resolvedTaskNo, student.getStudentNo());
+        if (applicationEventPublisher != null && isProgramTask(task)) {
+            applicationEventPublisher.publishEvent(new SubmissionAssessmentRequestedEvent(sub.getSubmissionId()));
+        }
         return Result.ok("提交成功");
+    }
+
+    private boolean isProgramTask(LearningTask task) {
+        if (task == null || task.getTaskType() == null) return false;
+        String type = task.getTaskType().trim().toLowerCase(Locale.ROOT);
+        return type.contains("program") || type.contains("code") || type.contains("编程");
+    }
+
+    private void registerRollbackFileCleanup(String promotedPath, String temporaryPath) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    deleteUploadQuietly(promotedPath);
+                    deleteUploadQuietly(temporaryPath);
+                }
+            }
+        });
+    }
+
+    private void deleteUploadQuietly(String storedPath) {
+        if (storedPath == null) return;
+        try {
+            fileStorageService.deleteStoredFileIfExists(storedPath);
+        } catch (IOException ignored) {
+            // The database transaction must still finish; a later cleanup job can retry this path.
+        }
     }
 
     /** 查看某任务的所有提交（含学生名、任务类型）| admin/授课教师
@@ -135,10 +187,17 @@ public class TaskSubmissionController {
                                                        @RequestParam(name = "course_id", required = false) String courseId,
                                                        HttpSession session) {
         Student loginStudent = (Student) session.getAttribute("student");
-        if (!auth.isAdmin(session) && !auth.isTeacher(session)
-                && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo)))
+        boolean admin = auth.isAdmin(session);
+        boolean teacher = auth.isTeacher(session);
+        if (!admin && !teacher && (loginStudent == null || !loginStudent.getStudentNo().equals(studentNo)))
             return Result.fail("无权限");
         String resolvedCourseCode = firstNonBlank(courseCode, courseId);
+
+        if (teacher) {
+            if (resolvedCourseCode == null) return Result.fail("教师查询必须指定课程");
+            if (!auth.canModifyCourse(session, resolvedCourseCode)) return Result.fail("无权限");
+        }
+
         List<TaskSubmission> subs = resolvedCourseCode == null
                 ? submissionService.listByStudentNo(studentNo)
                 : submissionService.listByStudentNoAndCourse(studentNo, resolvedCourseCode);
@@ -184,15 +243,41 @@ public class TaskSubmissionController {
         if (code == null || !auth.canModifyCourse(session, code))
             return Result.fail("无权限");
 
-        if (body.getScore() != null) {
-            sub.setScore(body.getScore());
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        List<Map<String, Object>> manualAnswers = body.getManualAnswers();
+        boolean hasIntervention = manualAnswers != null && !manualAnswers.isEmpty();
+        boolean scoreOverride = body.getScore() != null && !Objects.equals(body.getScore(), sub.getScore());
+        if ((hasIntervention || scoreOverride) && (body.getFeedback() == null || body.getFeedback().isBlank())) {
+            return Result.fail("教师干预必须填写原因");
+        }
+
+        Integer taskMaxScore = task.getScore();
+        if (hasIntervention) {
+            submissionService.recordReviewedSubjectiveEvidence(sub, manualAnswers);
+            sub.setPreviousScore(sub.getScore());
+            sub.setScore(submissionService.recalculateFinalScore(sub));
+        } else if (body.getScore() != null) {
+            int maxScore = taskMaxScore == null ? Integer.MAX_VALUE : Math.max(0, taskMaxScore);
+            int boundedScore = Math.max(0, Math.min(maxScore, body.getScore()));
+            if (taskService.isQuizTask(task) && !Objects.equals(boundedScore, sub.getScore())) {
+                return Result.fail("在线测验成绩必须由分题结果计算；如需干预请提交主观题复核结果");
+            }
+            if (!Objects.equals(boundedScore, sub.getScore())) sub.setPreviousScore(sub.getScore());
+            sub.setScore(boundedScore);
         } else {
-            sub.setScore(submissionService.autoScoreChoices(sub));
+            if (taskService.isQuizTask(task)) sub.setScore(submissionService.recalculateFinalScore(sub));
+            else sub.setScore(submissionService.autoScoreChoices(sub));
         }
         sub.setFeedback(body.getFeedback());
         sub.setStatus("graded");
+        if (hasIntervention || scoreOverride) {
+            Teacher teacher = auth.getTeacher(session);
+            sub.setInterventionReason(body.getFeedback());
+            sub.setInterventionBy(teacher == null ? null : String.valueOf(teacher.getTeacherNo()));
+            sub.setInterventionAt(LocalDateTime.now());
+        }
         submissionService.updateById(sub);
-        submissionService.recordReviewedSubjectiveEvidence(sub, body.getManualAnswers());
+        submissionService.publishBossCompletionEvent(sub);
         assignmentService.markCompleted(sub.getTaskNo(), sub.getStudentNo());
         return Result.ok();
     }

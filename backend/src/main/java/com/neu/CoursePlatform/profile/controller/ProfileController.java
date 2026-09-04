@@ -1,9 +1,9 @@
 package com.neu.CoursePlatform.profile.controller;
 
 import com.neu.CoursePlatform.common.Auth;
-import com.neu.CoursePlatform.common.GameEventTypes;
 import com.neu.CoursePlatform.common.Result;
 import com.neu.CoursePlatform.entity.Student;
+import com.neu.CoursePlatform.service.StudentAbilityProjectionService;
 import com.neu.CoursePlatform.profile.entity.*;
 import com.neu.CoursePlatform.profile.service.*;
 import jakarta.servlet.http.HttpSession;
@@ -17,15 +17,18 @@ public class ProfileController {
     private final ProfileService profileService;
     private final RecommendationService recommendationService;
     private final IncentiveService incentiveService;
+    private final StudentAbilityProjectionService abilityProjectionService;
     private final Auth auth;
 
     public ProfileController(ProfileService profileService,
                             RecommendationService recommendationService,
                             IncentiveService incentiveService,
+                            StudentAbilityProjectionService abilityProjectionService,
                             Auth auth) {
         this.profileService = profileService;
         this.recommendationService = recommendationService;
         this.incentiveService = incentiveService;
+        this.abilityProjectionService = abilityProjectionService;
         this.auth = auth;
     }
 
@@ -71,11 +74,21 @@ public class ProfileController {
 
     /** 获取能力评分 | 学生本人 */
     @GetMapping("/{studentNo}/{courseCode}/competency")
-    public Result<List<CompetencyScore>> competency(@PathVariable Integer studentNo,
-                                                   @PathVariable Integer courseCode,
-                                                   HttpSession session) {
+    public Result<List<Map<String, Object>>> competency(@PathVariable Integer studentNo,
+                                                        @PathVariable Integer courseCode,
+                                                        HttpSession session) {
         if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
-        return Result.ok(profileService.getCompetencyScores(studentNo, courseCode));
+        return Result.ok(abilityProjectionService.coursePoints(studentNo.toString(), courseCode.toString()));
+    }
+
+    /** 获取由假能力点映射得到的真能力评分 | 学生本人或任课教师 */
+    @GetMapping("/{studentNo}/{courseCode}/true-competency")
+    public Result<List<Map<String, Object>>> trueCompetency(@PathVariable Integer studentNo,
+                                                             @PathVariable Integer courseCode,
+                                                             HttpSession session) {
+        if (!canViewStudentProfile(studentNo, courseCode, session)) return Result.fail("无权限");
+        return Result.ok(abilityProjectionService.trueCompetencies(
+                studentNo.toString(), courseCode.toString()));
     }
 
     /** 获取推荐列表 | 学生本人 */
@@ -134,76 +147,6 @@ public class ProfileController {
         return Result.ok(incentiveService.getLeaderboard(courseCode, type));
     }
 
-    /** 模拟答题触发画像更新 | 测试用 */
-    @PostMapping("/{studentNo}/{courseCode}/submit")
-    public Result<Map<String, Object>> submit(@PathVariable Integer studentNo,
-                                              @PathVariable Integer courseCode,
-                                              @RequestParam(defaultValue = "true") boolean correct,
-                                              @RequestParam(defaultValue = "default") String taskType,
-                                              @RequestParam(required = false) String abilityPointId,
-                                              HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        profileService.updateProfileFromSubmission(studentNo, courseCode, correct, taskType);
-        if (abilityPointId != null) {
-            profileService.updateCompetencyScores(studentNo, courseCode, abilityPointId, correct);
-        }
-        return Result.ok(profileService.getProfileSummary(studentNo, courseCode));
-    }
-
-    /** 增加成长值 | 其他模块调用 */
-    @PostMapping("/{studentNo}/{courseCode}/growth/add")
-    public Result<Void> addGrowth(@PathVariable Integer studentNo,
-                                  @PathVariable Integer courseCode,
-                                  @RequestBody Map<String, Object> body,
-                                  HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        int amount = body.get("amount") != null ? ((Number) body.get("amount")).intValue() : 0;
-        String source = (String) body.getOrDefault("source", "unknown");
-        String sourceId = (String) body.getOrDefault("sourceId", "");
-        profileService.addGrowth(studentNo, courseCode, amount, source, sourceId);
-        return Result.ok();
-    }
-
-    /** 授予徽章 | 系统自动判定 */
-    @PostMapping("/{studentNo}/{courseCode}/achievements/award")
-    public Result<List<Achievement>> awardAchievements(@PathVariable Integer studentNo,
-                                                        @PathVariable Integer courseCode,
-                                                        @RequestBody Map<String, Object> body,
-                                                        HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        int totalCorrect = body.get("totalCorrect") != null ? ((Number) body.get("totalCorrect")).intValue() : 0;
-        int consecutiveCorrect = body.get("consecutiveCorrect") != null ? ((Number) body.get("consecutiveCorrect")).intValue() : 0;
-        boolean timedComplete = body.get("timedComplete") != null && (Boolean) body.get("timedComplete");
-        boolean fullScore = body.get("fullScore") != null && (Boolean) body.get("fullScore");
-        int nightSessions = body.get("nightSessions") != null ? ((Number) body.get("nightSessions")).intValue() : 0;
-        int helpfulFeedback = body.get("helpfulFeedback") != null ? ((Number) body.get("helpfulFeedback")).intValue() : 0;
-        int selfCorrections = body.get("selfCorrections") != null ? ((Number) body.get("selfCorrections")).intValue() : 0;
-        int pythonicStyleCount = body.get("pythonicStyleCount") != null ? ((Number) body.get("pythonicStyleCount")).intValue() : 0;
-        List<Achievement> newBadges = incentiveService.checkAndAwardBadges(
-                studentNo, courseCode, totalCorrect, consecutiveCorrect,
-                timedComplete, fullScore, nightSessions, helpfulFeedback,
-                selfCorrections, pythonicStyleCount);
-        return Result.ok(newBadges);
-    }
-
-    /** 手动触发画像生成 */
-    @PostMapping("/{studentNo}/{courseCode}/generate")
-    public Result<Map<String, Object>> generateProfile(@PathVariable Integer studentNo,
-                                                        @PathVariable Integer courseCode,
-                                                        HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        return Result.ok(profileService.generateProfile(studentNo, courseCode));
-    }
-
-    /** 手动触发能力评分更新 */
-    @PostMapping("/{studentNo}/{courseCode}/competency/update")
-    public Result<List<CompetencyScore>> updateCompetency(@PathVariable Integer studentNo,
-                                                           @PathVariable Integer courseCode,
-                                                           HttpSession session) {
-        if (!auth.isLoggedIn(session)) return Result.fail("请先登录");
-        return Result.ok(profileService.updateAllCompetencyScores(studentNo, courseCode));
-    }
-
     /** 能力评分变更历史 | 学生本人 (R4.6) */
     @GetMapping("/{studentNo}/{courseCode}/competency/history")
     public Result<List<Map<String, Object>>> competencyHistory(@PathVariable Integer studentNo,
@@ -232,60 +175,4 @@ public class ProfileController {
         return Result.ok(profileService.generateTestFeedback(studentNo, courseCode));
     }
 
-    // ========== String-based cross-module API (§12.3 VARCHAR(36) compatibility) ==========
-
-    /** 跨模块：接收游戏事件并更新画像（模块1/2/3 → 模块4） */
-    @PostMapping("/event/receive")
-    public Result<Map<String, Object>> receiveGameEvent(@RequestBody Map<String, Object> body) {
-        String studentNo = (String) body.get("studentNo");
-        String courseCode = (String) body.get("courseCode");
-        String eventType = (String) body.get("eventType");
-
-        if (studentNo == null || courseCode == null || eventType == null) {
-            return Result.fail("studentNo, courseCode, eventType 不能为空");
-        }
-
-        Integer sn = Integer.parseInt(studentNo);
-        Integer cc = Integer.parseInt(courseCode);
-
-        switch (eventType) {
-            case GameEventTypes.ANSWER_CORRECT -> {
-                String taskType = (String) body.getOrDefault("taskType", "quiz");
-                profileService.updateProfileFromSubmission(sn, cc, true, taskType);
-            }
-            case GameEventTypes.ANSWER_WRONG -> {
-                String taskType = (String) body.getOrDefault("taskType", "quiz");
-                profileService.updateProfileFromSubmission(sn, cc, false, taskType);
-            }
-            case GameEventTypes.FLOOR_CLEARED ->
-                profileService.addGrowth(sn, cc, 80, GameEventTypes.FLOOR_CLEARED, (String) body.getOrDefault("floor", ""));
-            case GameEventTypes.BOSS_DEFEATED ->
-                profileService.addGrowth(sn, cc, 250, GameEventTypes.BOSS_DEFEATED, "");
-            case GameEventTypes.SUPPLY_USED ->
-                profileService.addGrowth(sn, cc, -10, GameEventTypes.SUPPLY_USED, (String) body.getOrDefault("supplyType", ""));
-            default ->
-                profileService.addGrowth(sn, cc, 5, eventType, "");
-        }
-
-        return Result.ok(profileService.getProfileSummary(sn, cc));
-    }
-
-    /** 跨模块：获取画像摘要（String ID，供模块5等调用） */
-    @GetMapping("/string/{studentNo}/{courseCode}")
-    public Result<Map<String, Object>> summaryStr(@PathVariable String studentNo,
-                                                   @PathVariable String courseCode) {
-        return Result.ok(profileService.getProfileSummaryStr(studentNo, courseCode));
-    }
-
-    /** 跨模块：增加成长值（String ID） */
-    @PostMapping("/string/{studentNo}/{courseCode}/growth")
-    public Result<Void> addGrowthStr(@PathVariable String studentNo,
-                                      @PathVariable String courseCode,
-                                      @RequestBody Map<String, Object> body) {
-        int amount = body.get("amount") != null ? ((Number) body.get("amount")).intValue() : 0;
-        String source = (String) body.getOrDefault("source", "unknown");
-        String sourceId = (String) body.getOrDefault("sourceId", "");
-        profileService.addGrowthStr(studentNo, courseCode, amount, source, sourceId);
-        return Result.ok();
-    }
 }

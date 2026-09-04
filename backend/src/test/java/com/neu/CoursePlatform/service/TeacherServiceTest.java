@@ -93,6 +93,8 @@ class TeacherServiceTest {
         Teacher result = service.login("admin", "admin123");
         assertNotNull(result);
         assertEquals("管理员", result.getName());
+        assertTrue(result.getPassword().startsWith("$2"));
+        assertNotEquals("admin123", result.getPassword());
     }
 
     @Test
@@ -118,6 +120,7 @@ class TeacherServiceTest {
     void registerSuccess() {
         Teacher t = teacher("3", "newteacher", "pass", "新老师");
         assertTrue(service.register(t));
+        assertTrue(t.getPassword().startsWith("$2"));
         assertNotNull(service.login("newteacher", "pass"));
     }
 

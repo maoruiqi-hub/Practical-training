@@ -1,19 +1,19 @@
 -- Foundational demo data. Every statement is idempotent so it may safely run again.
 
 INSERT INTO teacher (teacher_no, name, college, major, phone, role, username, password)
-SELECT '1', '教务管理员', '教务处', '教育技术', '13800000000', 'admin', 'admin', 'admin123'
+SELECT '1', '教务管理员', '教务处', '教育技术', '13800000000', 'admin', 'admin', '$2y$10$vw9EBac9jqqmeeVTIXcJpOVyf3BdxKZyvjTl03cyGJr01HQd/oYwG'
 WHERE NOT EXISTS (SELECT 1 FROM teacher WHERE teacher_no = '1');
 
 INSERT INTO teacher (teacher_no, name, college, major, phone, role, username, password)
-SELECT '2', '李明', '软件学院', '软件工程', '13800000001', 'teacher', 'liming', '123456'
+SELECT '2', '李明', '软件学院', '软件工程', '13800000001', 'teacher', 'liming', '$2y$10$g.6iH4XGxY0ajdQsi6nxNOxd/Yej86soWE.GpXeRGdPFiEDnVPBuO'
 WHERE NOT EXISTS (SELECT 1 FROM teacher WHERE teacher_no = '2');
 
 INSERT INTO student (student_no, name, college, class_name, course_grades, username, password, phone)
-SELECT '1', '张三', '软件学院', '软件工程2班', '{}', 'zhangsan', '123456', '13821010299'
+SELECT '1', '张三', '软件学院', '软件工程2班', '{}', 'zhangsan', '$2y$10$g.6iH4XGxY0ajdQsi6nxNOxd/Yej86soWE.GpXeRGdPFiEDnVPBuO', '13821010299'
 WHERE NOT EXISTS (SELECT 1 FROM student WHERE student_no = '1');
 
 INSERT INTO student (student_no, name, college, class_name, course_grades, username, password, phone)
-SELECT v.student_no, v.name, '软件学院', v.class_name, '{}', v.username, '123456', v.phone
+SELECT v.student_no, v.name, '软件学院', v.class_name, '{}', v.username, '$2y$10$g.6iH4XGxY0ajdQsi6nxNOxd/Yej86soWE.GpXeRGdPFiEDnVPBuO', v.phone
 FROM (VALUES
     ('2', '徐清源', '软件工程1班', 'xuqingyuan', '13821010302'),
     ('3', '沈佳怡', '软件工程1班', 'shenjiayi', '13821010303'),

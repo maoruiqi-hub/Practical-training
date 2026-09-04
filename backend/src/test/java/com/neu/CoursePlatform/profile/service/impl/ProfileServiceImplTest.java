@@ -32,6 +32,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -77,14 +78,8 @@ class ProfileServiceImplTest {
     private KnowledgeMasteryMapper knowledgeMasteryMapper;
 
     @Test
-    void profileInitializationUsesRealAbilityPoints() {
-        AbilityPoint abilityPoint = new AbilityPoint();
-        abilityPoint.setAbilityPointId("AP-REAL-1");
-        abilityPoint.setCourseCode("101");
-        abilityPoint.setName("真实能力点");
-        abilityPoint.setDescription("来自模块1");
+    void profileInitializationDoesNotCreateFixedFiftyAbilityScores() {
         when(profileMapper.selectOne(any())).thenReturn(null);
-        when(abilityPointService.listByCourseCode("101")).thenReturn(List.of(abilityPoint));
         ProfileServiceImpl service = new ProfileServiceImpl(
                 profileMapper,
                 competencyMapper,
@@ -99,14 +94,7 @@ class ProfileServiceImplTest {
 
         service.getOrCreateProfile(2024001, 101);
 
-        ArgumentCaptor<CompetencyScore> captor = ArgumentCaptor.forClass(CompetencyScore.class);
-        verify(competencyMapper).insert(captor.capture());
-        CompetencyScore saved = captor.getValue();
-        assertEquals(2024001, saved.getStudentNo());
-        assertEquals(101, saved.getCourseCode());
-        assertEquals("AP-REAL-1", saved.getAbilityPointId());
-        assertEquals("真实能力点", saved.getAbilityPointName());
-        assertEquals(50, saved.getScore());
+        verify(competencyMapper, never()).insert(any(CompetencyScore.class));
     }
 
     @Test

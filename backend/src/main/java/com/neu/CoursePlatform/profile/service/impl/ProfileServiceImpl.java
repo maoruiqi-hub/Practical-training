@@ -20,6 +20,7 @@ import com.neu.CoursePlatform.profile.mapper.*;
 import com.neu.CoursePlatform.profile.rule.GrowthRuleEngine;
 import com.neu.CoursePlatform.profile.service.ProfileService;
 import com.neu.CoursePlatform.service.AbilityPointService;
+import com.neu.CoursePlatform.service.AbilitySnapshotService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +47,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final KnowledgePointService knowledgePointService;
     private final AbilityKnowledgePointMapper abilityKnowledgePointMapper;
     private final KnowledgeMasteryMapper knowledgeMasteryMapper;
+    private final AbilitySnapshotService abilitySnapshotService;
 
     @Autowired
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
@@ -61,7 +63,8 @@ public class ProfileServiceImpl implements ProfileService {
                              KnowledgePointFloorStatusMapper floorStatusMapper,
                              KnowledgePointService knowledgePointService,
                              AbilityKnowledgePointMapper abilityKnowledgePointMapper,
-                             KnowledgeMasteryMapper knowledgeMasteryMapper) {
+                             KnowledgeMasteryMapper knowledgeMasteryMapper,
+                             AbilitySnapshotService abilitySnapshotService) {
         this.profileMapper = profileMapper;
         this.competencyMapper = competencyMapper;
         this.historyMapper = historyMapper;
@@ -76,6 +79,26 @@ public class ProfileServiceImpl implements ProfileService {
         this.knowledgePointService = knowledgePointService;
         this.abilityKnowledgePointMapper = abilityKnowledgePointMapper;
         this.knowledgeMasteryMapper = knowledgeMasteryMapper;
+        this.abilitySnapshotService = abilitySnapshotService;
+    }
+
+    public ProfileServiceImpl(StudentProfileMapper profileMapper,
+                              CompetencyScoreMapper competencyMapper,
+                              CompetencyScoreHistoryMapper historyMapper,
+                              GrowthHistoryMapper growthHistoryMapper,
+                              AchievementMapper achievementMapper,
+                              StudentMapper studentMapper,
+                              AbilityPointService abilityPointService,
+                              GrowthRuleEngine growthEngine,
+                              GameEventPublisher eventPublisher,
+                              CourseGameConfigService gameConfigService,
+                              KnowledgePointFloorStatusMapper floorStatusMapper,
+                              KnowledgePointService knowledgePointService,
+                              AbilityKnowledgePointMapper abilityKnowledgePointMapper,
+                              KnowledgeMasteryMapper knowledgeMasteryMapper) {
+        this(profileMapper, competencyMapper, historyMapper, growthHistoryMapper, achievementMapper,
+                studentMapper, abilityPointService, growthEngine, eventPublisher, gameConfigService,
+                floorStatusMapper, knowledgePointService, abilityKnowledgePointMapper, knowledgeMasteryMapper, null);
     }
 
     public ProfileServiceImpl(StudentProfileMapper profileMapper,
@@ -90,7 +113,7 @@ public class ProfileServiceImpl implements ProfileService {
                              CourseGameConfigService gameConfigService) {
         this(profileMapper, competencyMapper, historyMapper, growthHistoryMapper, achievementMapper,
                 studentMapper, abilityPointService, growthEngine, eventPublisher, gameConfigService,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     @Override
@@ -123,28 +146,20 @@ public class ProfileServiceImpl implements ProfileService {
             throw e;
         }
 
-        // 初始化能力评分
-        List<AbilityPoint> abilityPoints = abilityPointService.listByCourseCode(String.valueOf(courseCode));
-        for (AbilityPoint ap : abilityPoints) {
-            CompetencyScore cs = new CompetencyScore();
-            cs.setStudentNo(studentNo);
-            cs.setCourseCode(courseCode);
-            cs.setAbilityPointId(ap.getAbilityPointId());
-            cs.setAbilityPointName(ap.getName());
-            cs.setScore(50);
-            try {
-                competencyMapper.insert(cs);
-            } catch (DuplicateKeyException ignored) {
-            }
-        }
-
         return profile;
     }
 
     @Override
     public void updateProfileFromSubmission(Integer studentNo, Integer courseCode,
                                            boolean correct, String taskType) {
-        StudentProfile profile = getOrCreateProfile(studentNo, courseCode);
+        updateProfileFromEvidence(studentNo, courseCode, correct, taskType, null);
+    }
+
+    @Override
+    @Transactional
+    public void updateProfileFromEvidence(Integer studentNo, Integer courseCode,
+                                          boolean correct, String taskType, String evidenceId) {
+        StudentProfile profile = lockedProfile(studentNo, courseCode);
 
         int expGain = growthEngine.calcExpGain(taskType, correct);
         int coinGain = growthEngine.calcCoinGain(taskType, correct);
@@ -203,8 +218,8 @@ public class ProfileServiceImpl implements ProfileService {
 
         // R6.6: 记录成长值变更明细
         if (expGain > 0 || coinGain > 0) {
-            recordGrowthHistory(studentNo, courseCode, expGain, "exp", taskType, null);
-            recordGrowthHistory(studentNo, courseCode, coinGain, "coins", taskType, null);
+            recordGrowthHistory(studentNo, courseCode, expGain, "exp", taskType, evidenceId);
+            recordGrowthHistory(studentNo, courseCode, coinGain, "coins", taskType, evidenceId);
         }
     }
 
@@ -293,7 +308,18 @@ public class ProfileServiceImpl implements ProfileService {
 
     @Override
     public List<CompetencyScore> getCompetencyScores(Integer studentNo, Integer courseCode) {
-        getOrCreateProfile(studentNo, courseCode);
+        if (abilitySnapshotService != null) {
+            return abilitySnapshotService.currentScores(String.valueOf(studentNo), String.valueOf(courseCode)).stream()
+                    .map(score -> {
+                        CompetencyScore projected = new CompetencyScore();
+                        projected.setStudentNo(studentNo);
+                        projected.setCourseCode(courseCode);
+                        projected.setAbilityPointId(score.abilityPointId());
+                        projected.setAbilityPointName(score.name());
+                        projected.setScore(score.score());
+                        return projected;
+                    }).toList();
+        }
         LambdaQueryWrapper<CompetencyScore> q = new LambdaQueryWrapper<>();
         q.eq(CompetencyScore::getStudentNo, studentNo)
          .eq(CompetencyScore::getCourseCode, courseCode);
@@ -337,6 +363,7 @@ public class ProfileServiceImpl implements ProfileService {
     private void recomputeDef(Integer studentNo, Integer courseCode) {
         List<CompetencyScore> allScores = getCompetencyScores(studentNo, courseCode);
         double avgDef = allScores.stream()
+            .filter(score -> score.getScore() != null)
             .mapToInt(CompetencyScore::getScore)
             .average()
             .orElse(50);
@@ -385,8 +412,9 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
+    @Transactional
     public void addGrowth(Integer studentNo, Integer courseCode, int amount, String source, String sourceId) {
-        StudentProfile profile = getOrCreateProfile(studentNo, courseCode);
+        StudentProfile profile = lockedProfile(studentNo, courseCode);
         int expGain = 0, coinGain = 0;
         switch (source != null ? source : "") {
             case "task_complete":
@@ -421,10 +449,11 @@ public class ProfileServiceImpl implements ProfileService {
     }
 
     @Override
+    @Transactional
     public void applyGameDelta(Integer studentNo, Integer courseCode,
                                int hpDelta, int atkDelta, int defDelta, int expDelta, int coinDelta, int energyDelta,
                                String source, String sourceId) {
-        StudentProfile profile = getOrCreateProfile(studentNo, courseCode);
+        StudentProfile profile = lockedProfile(studentNo, courseCode);
         profile.setHp(clamp(intValue(profile.getHp(), 100) + hpDelta, 0, 100));
         profile.setAtk(clamp(intValue(profile.getAtk(), 50) + atkDelta, 0, 100));
         profile.setDef(clamp(intValue(profile.getDef(), 50) + defDelta, 0, 100));
@@ -442,6 +471,12 @@ public class ProfileServiceImpl implements ProfileService {
         if (expDelta != 0) recordGrowthHistory(studentNo, courseCode, expDelta, "exp", source, sourceId);
         if (coinDelta != 0) recordGrowthHistory(studentNo, courseCode, coinDelta, "coins", source, sourceId);
         if (energyDelta != 0) recordGrowthHistory(studentNo, courseCode, energyDelta, "energy", source, sourceId);
+    }
+
+    private StudentProfile lockedProfile(Integer studentNo, Integer courseCode) {
+        StudentProfile current = getOrCreateProfile(studentNo, courseCode);
+        StudentProfile locked = profileMapper.lockForUpdate(studentNo, courseCode);
+        return locked == null ? current : locked;
     }
 
     private static int intValue(Integer value, int fallback) {

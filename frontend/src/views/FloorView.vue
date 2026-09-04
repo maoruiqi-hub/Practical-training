@@ -16,10 +16,6 @@
             <el-icon><ChatLineRound /></el-icon>
             AI 导师
           </el-button>
-          <el-button class="ghost-button" @click="supplyVisible = true">
-            <el-icon><Box /></el-icon>
-            补给
-          </el-button>
           <el-button
             v-if="false"
             class="spire-button"
@@ -89,8 +85,10 @@
         <RewardDraft
           v-else-if="phase === 'reward'"
           :battle-result="battleResult"
-          :floor-name="floor.kpName || floorName"
+          :floor-name="activeFloorName"
           :room-type="activeRoomType"
+          :options="rewardOptions"
+          :loading="rewardLoading || rewardSubmitting"
           @reward-picked="handleRewardPicked"
         />
 
@@ -101,9 +99,8 @@
             <p class="settlement-copy">{{ settlementCopy }}</p>
 
             <div class="report-grid">
-              <span>正确率 <b>{{ Math.round((battleResult.correctRate || 0) * 100) }}%</b></span>
+              <span>正确率 <b>{{ correctRatePercent(battleResult.correctRate) }}%</b></span>
               <span>节点结果 <b>{{ battleResult.cleared ? '已通关' : '需要练习' }}</b></span>
-              <span>奖励 <b>{{ pickedReward?.name || '无' }}</b></span>
             </div>
 
             <div class="settlement-actions">
@@ -130,7 +127,7 @@
           <h2>诊断结果</h2>
           <div v-if="diagnosisSyncing" class="diagnosis-card syncing">
             <strong>AI 诊断生成中</strong>
-            <span>{{ Math.round((diagnosisResult?.correctRate || battleResult.correctRate || 0) * 100) }}%</span>
+            <span>{{ correctRatePercent(diagnosisResult?.correctRate, battleResult.correctRate) }}%</span>
             <p>AI 正在分析本次答题记录，生成完成后会自动显示诊断方案。</p>
             <div class="game-loading-indicator compact" role="status">
               <span aria-hidden="true"></span>
@@ -143,7 +140,7 @@
           </div>
           <div v-else-if="diagnosisResult" class="diagnosis-card" :class="diagnosisResult.status">
             <strong>{{ diagnosisText }}</strong>
-            <span>{{ Math.round((diagnosisResult.correctRate || 0) * 100) }}%</span>
+            <span>{{ correctRatePercent(diagnosisResult.correctRate) }}%</span>
             <p v-if="diagnosisResult.report?.summary">{{ diagnosisResult.report.summary }}</p>
             <ul v-if="diagnosisResult.report?.weaknesses?.length">
               <li v-for="item in diagnosisResult.report.weaknesses" :key="item">{{ item }}</li>
@@ -174,15 +171,6 @@
       </aside>
     </main>
 
-    <SupplyModal
-      v-model="supplyVisible"
-      :student-id="studentId"
-      :course-id="courseId"
-      :current-kp-id="kpId"
-      :profile="profile"
-      @used="refreshProfile"
-    />
-
     <AiTutorPanel
       v-model="aiVisible"
       :knowledge-point-id="kpId"
@@ -195,10 +183,11 @@
 </template>
 
 <script setup>
+import { getCurrentUser, getCourseId, getStudentId } from '../utils/authContext'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Aim, ArrowLeft, Box, ChatLineRound } from '@element-plus/icons-vue'
+import { Aim, ArrowLeft, ChatLineRound } from '@element-plus/icons-vue'
 import AiTutorPanel from '../components/AiTutorPanel.vue'
 import BattleRoom from '../components/BattleRoom.vue'
 import BossRoom from '../components/BossRoom.vue'
@@ -207,13 +196,13 @@ import GameHud from '../components/GameHud.vue'
 import KnowledgeContextPanel from '../components/KnowledgeContextPanel.vue'
 import RewardDraft from '../components/RewardDraft.vue'
 import StudentAbilityMapPanel from '../components/StudentAbilityMapPanel.vue'
-import SupplyModal from '../components/SupplyModal.vue'
 import { gameBackgrounds } from '../data/gameAssetManifest'
-import { completeTowerNode, diagnoseTowerNode, enterTowerNode, getStudentProfile, getTaskList, getTowerAttemptReport, getTowerMap, getTowerNode, sendGameEvent } from '../api'
+import { correctRateOr, correctRatePercent, firstCorrectRate } from '../utils/correctRate'
+import { chooseTowerNodeOption, completeTowerNode, diagnoseTowerNode, enterTowerNode, getStudentProfile, getTaskList, getTowerAttemptReport, getTowerMap, getTowerNode, getTowerNodeOptions } from '../api'
 
 const route = useRoute()
 const router = useRouter()
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 
 const loading = ref(false)
 const profile = ref({})
@@ -226,9 +215,10 @@ const diagnosisResult = ref(null)
 const diagnosisSyncing = ref(false)
 const diagnosisSyncError = ref('')
 const battleResult = ref({ cleared: false, correctRate: 0 })
-const pickedReward = ref(null)
+const rewardOptions = ref([])
+const rewardLoading = ref(false)
+const rewardSubmitting = ref(false)
 const radarRefreshKey = ref(0)
-const supplyVisible = ref(false)
 const aiVisible = ref(false)
 const aiMode = ref('qa')
 const aiResourceId = ref('')
@@ -247,7 +237,7 @@ const activeFloorName = computed(() =>
   floor.value.kpName ||
   floorName.value
 )
-const courseId = computed(() => route.query.courseId || route.query.course_id || localStorage.getItem('courseId') || '1')
+const courseId = computed(() => getCourseId(route))
 const normalizeCourseName = name => {
   const value = String(name || '').trim()
   return value === 'Python Program Design' ? 'Python 程序设计' : value
@@ -255,7 +245,7 @@ const normalizeCourseName = name => {
 const courseName = computed(() => normalizeCourseName(route.query.courseName || localStorage.getItem('courseName') || 'Python 程序设计'))
 const floorName = computed(() => route.query.floorName || floor.value.kpName || floor.value.knowledgePointName || `第 ${kpId.value} 层`)
 const studentId = computed(() =>
-  user.studentNo || user.student_no || user.no || user.id || user.username || user.name || '1'
+  getStudentId(user)
 )
 const isBossFloor = computed(() => roomType.value === 'boss' || route.query.boss === '1' || floor.value.boss || floor.value.isBoss)
 const initialPhase = computed(() => {
@@ -264,16 +254,16 @@ const initialPhase = computed(() => {
   return 'battle'
 })
 const phase = ref('battle')
-const scenePhase = computed(() => ['diagnosis', 'battle', 'boss'].includes(phase.value))
-const showAbilityRadar = computed(() => ['reward', 'settlement'].includes(phase.value))
+const scenePhase = computed(() => ['diagnosis', 'battle', 'boss', 'reward'].includes(phase.value))
+const showAbilityRadar = computed(() => phase.value === 'settlement')
 const playerInitialHp = computed(() => Number(profile.value.hp || profile.value.currentHp || profile.value.current_hp || 100))
 const playerMaxHp = computed(() => Number(profile.value.maxHp || profile.value.max_hp || 100))
 
 const backgroundForPhase = computed(() => {
   if (phase.value === 'diagnosis') return gameBackgrounds.diagnosis
   if (phase.value === 'boss') return gameBackgrounds.boss
-  if (phase.value === 'reward') return gameBackgrounds.reward
   if (phase.value === 'settlement') return gameBackgrounds.mapAct1
+  if (phase.value === 'reward') return gameBackgrounds.reward
   return activeRoomType.value === 'boss' ? gameBackgrounds.boss : gameBackgrounds.combat
 })
 
@@ -289,7 +279,7 @@ const roomFrameStyle = computed(() => ({
 
 const roomKicker = computed(() => {
   if (phase.value === 'diagnosis') return '诊断房'
-  if (phase.value === 'reward') return '奖励选择'
+  if (phase.value === 'reward') return '通关奖励'
   if (phase.value === 'settlement') return '结算'
   return activeRoomType.value === 'boss' ? '首领房' : activeRoomType.value === 'elite' ? '精英房' : '战斗房'
 })
@@ -306,8 +296,8 @@ const roomLabel = computed(() => ({
 
 const progressItems = computed(() => [
   { key: 'diagnosis', label: '诊断', done: Boolean(diagnosisResult.value) },
-  { key: activeRoomType.value === 'boss' ? 'boss' : 'battle', label: activeRoomType.value === 'boss' ? '首领' : activeRoomType.value === 'elite' ? '精英' : '战斗', done: ['reward', 'settlement'].includes(phase.value) },
-  { key: 'reward', label: '奖励', done: Boolean(pickedReward.value) },
+  { key: activeRoomType.value === 'boss' ? 'boss' : 'battle', label: activeRoomType.value === 'boss' ? '首领' : activeRoomType.value === 'elite' ? '精英' : '战斗', done: phase.value === 'settlement' },
+  { key: 'reward', label: '奖励', done: phase.value === 'settlement' },
   { key: 'settlement', label: '结算', done: phase.value === 'settlement' }
 ])
 
@@ -366,7 +356,6 @@ const restartEvaluation = async () => {
     diagnosisResult.value = null
     diagnosisSyncError.value = ''
     battleResult.value = { cleared: false, correctRate: 0 }
-    pickedReward.value = null
     phase.value = activeRoomType.value === 'diagnosis'
       ? 'diagnosis'
       : activeRoomType.value === 'boss' ? 'boss' : 'battle'
@@ -380,6 +369,7 @@ const restartEvaluation = async () => {
 const pickProfile = payload => payload?.profile || payload || {}
 
 const refreshProfile = async () => {
+  if (!studentId.value || !courseId.value) return
   try {
     const res = await getStudentProfile(studentId.value, courseId.value)
     if (res.data.code === 200) profile.value = pickProfile(res.data.data)
@@ -389,6 +379,10 @@ const refreshProfile = async () => {
 }
 
 const loadFloor = async () => {
+  if (!studentId.value || !courseId.value) {
+    ElMessage.warning('缺少学生或课程信息，请先登录并选择课程')
+    return
+  }
   try {
     if (runId.value && nodeId.value) {
       const nodeRes = await getTowerNode(studentId.value, runId.value, nodeId.value)
@@ -470,13 +464,13 @@ const openAiTutor = question => {
 const legacyHandleDiagnosed = async result => {
   diagnosisResult.value = result
   diagnosisSyncError.value = ''
-  const perfect = result.status === 'mastered' || Number(result.correctRate || 0) >= 0.999
+  const perfect = result.status === 'mastered' || correctRateOr(result.correctRate) >= 0.999
 
   if (runId.value && nodeId.value) {
     if (perfect && !isBossFloor.value) {
       battleResult.value = {
         cleared: true,
-        correctRate: result.correctRate || 1,
+        correctRate: correctRateOr(result.correctRate, 1),
         diagnosisBypass: true,
         pendingReport: true
       }
@@ -493,25 +487,16 @@ const legacyHandleDiagnosed = async result => {
   }
 
   if (perfect && !isBossFloor.value) {
-    battleResult.value = { cleared: true, correctRate: result.correctRate || 1, diagnosisBypass: true }
+    battleResult.value = { cleared: true, correctRate: correctRateOr(result.correctRate, 1), diagnosisBypass: true }
     phase.value = 'reward'
     diagnosisSyncing.value = true
-    sendEvent('floor_cleared', {
-      correct_rate: result.correctRate || 1,
-      cleared: true,
-      room_type: roomType.value
-    }).then(refreshProfile).finally(() => {
-      diagnosisSyncing.value = false
-      radarRefreshKey.value += 1
-    })
+    diagnosisSyncError.value = '当前没有可信的 runId/nodeId，无法结算诊断结果。'
+    diagnosisSyncing.value = false
     return
   }
 
   phase.value = isBossFloor.value ? 'boss' : 'battle'
-  sendEvent('diagnosis_finished', {
-    correct_rate: result.correctRate,
-    status: result.status
-  })
+  diagnosisSyncError.value = '当前没有可信的 runId/nodeId，诊断结果不会写入后端。'
 }
 
 const legacySyncDiagnosisResult = async (result, optimisticReward) => {
@@ -567,7 +552,7 @@ const legacySyncDiagnosisResult = async (result, optimisticReward) => {
     if (payload.battleBypassed || optimisticReward) {
       battleResult.value = {
         cleared: true,
-        correctRate: payload.correctRate || result.correctRate || 1,
+        correctRate: firstCorrectRate(payload.correctRate, result.correctRate, 1),
         diagnosisBypass: true,
         pendingReport: false
       }
@@ -596,10 +581,7 @@ const handleDiagnosed = async result => {
   }
 
   phase.value = isBossFloor.value ? 'boss' : 'battle'
-  sendEvent('diagnosis_finished', {
-    correct_rate: result.correctRate,
-    status: result.status
-  })
+  diagnosisSyncError.value = '当前没有可信的 runId/nodeId，诊断结果不会写入后端。'
 }
 
 const syncDiagnosisResult = async result => {
@@ -633,13 +615,13 @@ const syncDiagnosisResult = async result => {
       activeCombatNode.value = null
       battleResult.value = {
         cleared: true,
-        correctRate: serverRate || 1,
+        correctRate: correctRateOr(serverRate, 1),
         diagnosisBypass: true,
         pendingReport: false
       }
       diagnosisResult.value = {
         status: 'perfect',
-        correctRate: serverRate || 1,
+        correctRate: correctRateOr(serverRate, 1),
         aiReportStatus: 'skipped',
         report: {
           summary: '诊断全对，已跳过对应精英关卡。',
@@ -713,6 +695,18 @@ const handleBattleEnd = async result => {
         correctCount: payload.correctCount,
         pendingReport: payload.aiReportStatus === 'pending'
       }
+      if (payload.cleared === true) {
+        rewardLoading.value = true
+        try {
+          const rewardResponse = await getTowerNodeOptions(studentId.value, activeRunId.value, activeNodeId.value)
+          if (rewardResponse.data.code !== 200) throw new Error(rewardResponse.data.msg || '奖励选项加载失败')
+          const rewardEnvelope = rewardResponse.data.data || {}
+          rewardOptions.value = rewardEnvelope.options || []
+          phase.value = rewardEnvelope.resolved ? 'settlement' : 'reward'
+        } finally {
+          rewardLoading.value = false
+        }
+      }
       if (payload.aiReportStatus === 'pending') {
         const reportPayload = await pollDiagnosisReport(payload.evaluationId || evaluationId.value)
         applyDiagnosisReport(reportPayload, serverCorrectRate, payload.cleared === true ? 'cleared' : 'failed')
@@ -720,14 +714,7 @@ const handleBattleEnd = async result => {
         applyDiagnosisReport(payload, serverCorrectRate, payload.cleared === true ? 'cleared' : 'failed')
       }
     } else {
-      await sendEvent(battleResultEvent(result), {
-        correct_rate: result.correctRate,
-        cleared: result.cleared,
-        room_type: activeRoomType.value,
-        hp_left: result.hpLeft
-      })
-      diagnosisSyncError.value = '当前没有爬塔 runId/nodeId，无法生成 AI 诊断报告。'
-      battleResult.value = { ...battleResult.value, pendingReport: false }
+      throw new Error('当前没有可信的 runId/nodeId，无法结算本次挑战。')
     }
     await refreshProfile()
     radarRefreshKey.value += 1
@@ -743,57 +730,28 @@ const handleBattleEnd = async result => {
     })
 }
 
-const handleRewardPicked = async payload => {
-  pickedReward.value = payload.reward
-  const delta = payload.profileDelta || {}
-  applyProfileDelta(delta)
-  await sendEvent('reward_picked', {
-    reward_id: payload.reward?.id,
-    reward_name: payload.reward?.name,
-    reward_type: payload.reward?.type,
-    hp_delta: delta.hp || 0,
-    atk_delta: delta.atk || 0,
-    def_delta: delta.def || 0,
-    exp_delta: delta.exp || 0,
-    coin_delta: delta.coins || 0,
-    energy_delta: delta.energy || 0
-  })
-  await refreshProfile()
-  ElMessage.success('奖励已领取')
-  phase.value = 'settlement'
-}
+const newActionId = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
-const applyProfileDelta = delta => {
-  if (!delta || !Object.keys(delta).length) return
-  const next = { ...profile.value }
-  if (delta.hp) next.hp = Math.min(Number(next.maxHp || next.max_hp || 100), Number(next.hp || 0) + Number(delta.hp))
-  if (delta.coins) next.coins = Number(next.coins || 0) + Number(delta.coins)
-  if (delta.energy) next.energy = Math.max(0, Number(next.energy || 0) + Number(delta.energy))
-  if (delta.atk) next.atk = Math.max(0, Math.min(100, Number(next.atk || 0) + Number(delta.atk)))
-  if (delta.def) next.def = Math.max(0, Math.min(100, Number(next.def || 0) + Number(delta.def)))
-  if (delta.exp) next.exp = Math.max(0, Number(next.exp || 0) + Number(delta.exp))
-  profile.value = next
-}
-
-const battleResultEvent = result => {
-  if (!result.cleared) return 'floor_failed'
-  if (activeRoomType.value === 'boss') return 'boss_defeated'
-  if (activeRoomType.value === 'elite') return 'elite_defeated'
-  return 'floor_cleared'
-}
-
-const sendEvent = async (eventType, extra = {}) => {
+const handleRewardPicked = async reward => {
+  if (!reward?.optionId || rewardSubmitting.value) return
+  rewardSubmitting.value = true
   try {
-    const res = await sendGameEvent(studentId.value, {
-      course_id: courseId.value,
-      knowledge_point_id: kpId.value,
-      source_id: kpId.value,
-      event_type: eventType,
-      ...extra
-    })
-    if (res.data.code === 200) profile.value = pickProfile(res.data.data)
-  } catch {
-    // Event tracking should not block the learning flow.
+    const response = await chooseTowerNodeOption(
+      studentId.value,
+      activeRunId.value,
+      activeNodeId.value,
+      reward.optionId,
+      newActionId()
+    )
+    if (response.data.code !== 200) throw new Error(response.data.msg || '奖励领取失败')
+    profile.value = response.data.data?.profile || profile.value
+    ElMessage.success(response.data.data?.title || '奖励已领取')
+    phase.value = 'settlement'
+    await refreshProfile()
+  } catch (error) {
+    ElMessage.error(error?.message || '奖励领取失败')
+  } finally {
+    rewardSubmitting.value = false
   }
 }
 

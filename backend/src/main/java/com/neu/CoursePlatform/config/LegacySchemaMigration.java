@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
@@ -24,6 +26,7 @@ public class LegacySchemaMigration implements CommandLineRunner {
 
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public LegacySchemaMigration(DataSource dataSource, JdbcTemplate jdbcTemplate) {
         this.dataSource = dataSource;
@@ -32,12 +35,396 @@ public class LegacySchemaMigration implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        addAssessmentInterventionColumns();
         createTowerRunTables();
+        createTowerEconomyTables();
         createLearningEvidenceTables();
+        createProfileProjectionInfrastructure();
+        createAbilityCompetencyMappingTables();
+        removeLegacyCompetencyDefault();
+        enforceAssessmentUniqueness();
+        migrateLegacyPasswords();
         normalizeLegacyMastery();
         cleanupDuplicateAbilityPoints();
         migrateKnowledgeRelations();
         migrateExams();
+    }
+
+    private void addAssessmentInterventionColumns() {
+        if (!tableExists("task_submission")) return;
+        jdbcTemplate.execute("ALTER TABLE task_submission ADD COLUMN IF NOT EXISTS intervention_reason TEXT");
+        jdbcTemplate.execute("ALTER TABLE task_submission ADD COLUMN IF NOT EXISTS intervention_by VARCHAR(64)");
+        jdbcTemplate.execute("ALTER TABLE task_submission ADD COLUMN IF NOT EXISTS intervention_at TIMESTAMP");
+        jdbcTemplate.execute("ALTER TABLE task_submission ADD COLUMN IF NOT EXISTS previous_score INTEGER");
+        if (tableExists("submission_ai_review")) {
+            jdbcTemplate.execute("ALTER TABLE submission_ai_review ADD COLUMN IF NOT EXISTS confidence DECIMAL(4,3)");
+            jdbcTemplate.execute("ALTER TABLE submission_ai_review ADD COLUMN IF NOT EXISTS basis VARCHAR(32)");
+        }
+    }
+
+    private void createTowerEconomyTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS tower_run_inventory (
+                    id VARCHAR(64) PRIMARY KEY,
+                    run_id VARCHAR(64) NOT NULL,
+                    student_no VARCHAR(64) NOT NULL,
+                    item_code VARCHAR(64) NOT NULL,
+                    quantity INTEGER NOT NULL DEFAULT 0,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_tower_inventory_item
+                ON tower_run_inventory(run_id, item_code)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS tower_action_log (
+                    action_id VARCHAR(64) PRIMARY KEY,
+                    run_id VARCHAR(64) NOT NULL,
+                    node_id VARCHAR(64),
+                    student_no VARCHAR(64) NOT NULL,
+                    action_type VARCHAR(64) NOT NULL,
+                    target_id VARCHAR(64),
+                    result_json TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tower_action_run
+                ON tower_action_log(run_id, created_at)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS tower_node_option (
+                    option_id VARCHAR(64) PRIMARY KEY,
+                    run_id VARCHAR(64) NOT NULL,
+                    node_id VARCHAR(64) NOT NULL,
+                    option_kind VARCHAR(32) NOT NULL,
+                    option_code VARCHAR(64) NOT NULL,
+                    option_snapshot_json TEXT NOT NULL,
+                    selected BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    selected_at TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_tower_node_option_code
+                ON tower_node_option(run_id, node_id, option_code)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tower_node_option_node
+                ON tower_node_option(run_id, node_id, selected)
+                """);
+    }
+
+    private void createProfileProjectionInfrastructure() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS profile_projection_ledger (
+                    id VARCHAR(64) PRIMARY KEY,
+                    student_no VARCHAR(64) NOT NULL,
+                    course_code VARCHAR(64) NOT NULL,
+                    source_type VARCHAR(64) NOT NULL,
+                    source_id VARCHAR(64) NOT NULL,
+                    projection_type VARCHAR(64) NOT NULL,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_profile_projection_source
+                ON profile_projection_ledger(source_type, source_id, projection_type)
+                """);
+        jdbcTemplate.execute("""
+                CREATE INDEX IF NOT EXISTS idx_profile_projection_student_course
+                ON profile_projection_ledger(student_no, course_code, applied_at)
+                """);
+        if (!tableExists("achievement")) return;
+        jdbcTemplate.execute("ALTER TABLE achievement ADD COLUMN IF NOT EXISTS badge_code VARCHAR(64)");
+        try {
+            jdbcTemplate.update("""
+                    DELETE FROM achievement WHERE id IN (
+                        SELECT duplicate_id FROM (
+                            SELECT id AS duplicate_id,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY student_no, course_code, name
+                                       ORDER BY earned_at, id
+                                   ) AS rn
+                            FROM achievement
+                            WHERE achievement_type = 'badge'
+                        ) duplicate_badges WHERE rn > 1
+                    )
+                    """);
+            jdbcTemplate.update("""
+                    UPDATE achievement
+                    SET badge_code = CASE name
+                        WHEN '连击王' THEN 'combo_10'
+                        WHEN '完美主义' THEN 'perfect_score'
+                        WHEN '速通者' THEN 'timed_complete'
+                        WHEN 'Pythonic' THEN 'pythonic_3'
+                        WHEN 'Debug之眼' THEN 'self_correction_5'
+                        WHEN '夜枭' THEN 'night_5'
+                        WHEN '助人者' THEN 'helpful_3'
+                        ELSE name
+                    END
+                    WHERE achievement_type = 'badge' AND badge_code IS NULL
+                    """);
+            jdbcTemplate.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uk_achievement_student_badge
+                    ON achievement(student_no, course_code, badge_code)
+                    """);
+        } catch (Exception e) {
+            log.warn("Achievement badge migration skipped", e);
+        }
+    }
+
+    private void removeLegacyCompetencyDefault() {
+        if (!tableExists("competency_score")) return;
+        try {
+            jdbcTemplate.execute("ALTER TABLE competency_score ALTER COLUMN score DROP DEFAULT");
+        } catch (Exception e) {
+            log.warn("Legacy competency score default removal skipped", e);
+        }
+    }
+
+    void migrateLegacyPasswords() {
+        migrateLegacyPasswords("student", "student_no");
+        migrateLegacyPasswords("teacher", "teacher_no");
+    }
+
+    private void migrateLegacyPasswords(String table, String idColumn) {
+        if (!tableExists(table)) return;
+        List<Map<String, Object>> accounts = jdbcTemplate.queryForList(
+                "SELECT " + idColumn + ", password FROM " + table + " WHERE password IS NOT NULL");
+        int migrated = 0;
+        for (Map<String, Object> account : accounts) {
+            String password = valueIgnoreCase(account, "password");
+            String accountId = valueIgnoreCase(account, idColumn);
+            if (accountId == null || password == null || password.isBlank() || isBcrypt(password)) continue;
+            jdbcTemplate.update("UPDATE " + table + " SET password = ? WHERE " + idColumn + " = ?",
+                    passwordEncoder.encode(password), accountId);
+            migrated++;
+        }
+        if (migrated > 0) log.info("Migrated {} legacy passwords in {}", migrated, table);
+    }
+
+    private String valueIgnoreCase(Map<String, Object> row, String key) {
+        return row.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(key))
+                .map(Map.Entry::getValue)
+                .filter(java.util.Objects::nonNull)
+                .map(String::valueOf)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isBcrypt(String password) {
+        return password.matches("^\\$2[aby]\\$\\d{2}\\$.{53}$");
+    }
+
+    private void enforceAssessmentUniqueness() {
+        boolean hasTaskQuestions = tableExists("task_question");
+        boolean hasSubmissionAnswers = tableExists("submission_answer");
+        if (!hasTaskQuestions && !hasSubmissionAnswers) return;
+        if (hasTaskQuestions) removeDuplicateRows("task_question", "id", "task_no, question_id");
+        if (hasSubmissionAnswers) removeDuplicateRows("submission_answer", "id", "submission_id, question_id");
+        try {
+            if (hasTaskQuestions) {
+                jdbcTemplate.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS uk_task_question_task_question
+                        ON task_question(task_no, question_id)
+                        """);
+            }
+            if (hasSubmissionAnswers) {
+                jdbcTemplate.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS uk_submission_answer_submission_question
+                        ON submission_answer(submission_id, question_id)
+                        """);
+            }
+        } catch (Exception e) {
+            log.warn("Assessment uniqueness migration skipped", e);
+        }
+    }
+
+    private void removeDuplicateRows(String table, String idColumn, String partitionColumns) {
+        if (!tableExists(table)) return;
+        try {
+            int removed = jdbcTemplate.update("DELETE FROM " + table + " WHERE " + idColumn + " IN ("
+                    + "SELECT duplicate_id FROM (SELECT " + idColumn + " AS duplicate_id, "
+                    + "ROW_NUMBER() OVER (PARTITION BY " + partitionColumns + " ORDER BY " + idColumn + ") AS rn "
+                    + "FROM " + table + ") duplicate_rows WHERE rn > 1)");
+            if (removed > 0) log.info("Removed {} duplicate rows from {}", removed, table);
+        } catch (Exception e) {
+            log.warn("Duplicate cleanup skipped for {}", table, e);
+        }
+    }
+
+    private void createAbilityCompetencyMappingTables() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS competency_point (
+                    competency_id VARCHAR(64) PRIMARY KEY,
+                    course_code VARCHAR(64) NOT NULL,
+                    name VARCHAR(128) NOT NULL,
+                    description TEXT,
+                    status VARCHAR(32) NOT NULL DEFAULT 'active',
+                    sort_order INTEGER NOT NULL DEFAULT 0
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_competency_point_course_name
+                ON competency_point(course_code, name)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS ability_point_competency_relation (
+                    id VARCHAR(64) PRIMARY KEY,
+                    course_code VARCHAR(64) NOT NULL,
+                    ability_point_id VARCHAR(64) NOT NULL,
+                    competency_id VARCHAR(64) NOT NULL,
+                    relation_status VARCHAR(32) NOT NULL,
+                    strength DECIMAL(8, 6) NOT NULL DEFAULT 0,
+                    confidence DECIMAL(8, 6) NOT NULL DEFAULT 0,
+                    strength_source VARCHAR(32) NOT NULL DEFAULT 'uniform_prior',
+                    evidence_count INTEGER NOT NULL DEFAULT 0,
+                    matrix_version VARCHAR(64) NOT NULL DEFAULT 'v1',
+                    review_note TEXT,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_relation
+                ON ability_point_competency_relation(course_code, ability_point_id, competency_id, matrix_version)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS competency_task_observation (
+                    id VARCHAR(64) PRIMARY KEY,
+                    course_code VARCHAR(64) NOT NULL,
+                    task_no VARCHAR(64) NOT NULL,
+                    competency_id VARCHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'active',
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_competency_task_observation
+                ON competency_task_observation(course_code, task_no, competency_id)
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS ability_competency_matrix_version (
+                    id VARCHAR(64) PRIMARY KEY,
+                    course_code VARCHAR(64) NOT NULL,
+                    version VARCHAR(64) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    based_on_version VARCHAR(64),
+                    sample_count INTEGER NOT NULL DEFAULT 0,
+                    validation_sample_count INTEGER NOT NULL DEFAULT 0,
+                    algorithm_version VARCHAR(32) NOT NULL DEFAULT 'pearson-v1',
+                    published_by VARCHAR(64),
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    published_at TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("ALTER TABLE ability_competency_matrix_version ADD COLUMN IF NOT EXISTS sample_count INTEGER NOT NULL DEFAULT 0");
+        jdbcTemplate.execute("ALTER TABLE ability_competency_matrix_version ADD COLUMN IF NOT EXISTS validation_sample_count INTEGER NOT NULL DEFAULT 0");
+        jdbcTemplate.execute("ALTER TABLE ability_competency_matrix_version ADD COLUMN IF NOT EXISTS algorithm_version VARCHAR(32) NOT NULL DEFAULT 'pearson-v1'");
+        jdbcTemplate.execute("ALTER TABLE ability_competency_matrix_version ADD COLUMN IF NOT EXISTS published_by VARCHAR(64)");
+        jdbcTemplate.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_matrix_version
+                ON ability_competency_matrix_version(course_code, version)
+                """);
+        validateMappingReferences();
+        addMappingConstraints();
+        ensureSinglePublishedMatrixVersion();
+    }
+
+    private void validateMappingReferences() {
+        if (tableExists("ability_point_competency_relation")) {
+            assertNoOrphans("ability_point_competency_relation", "ability_point_id", "ability_point", "ability_point_id");
+            assertNoOrphans("ability_point_competency_relation", "competency_id", "competency_point", "competency_id");
+            assertNoOrphans("ability_point_competency_relation", "course_code", "course", "course_code");
+        }
+        if (tableExists("competency_task_observation")) {
+            assertNoOrphans("competency_task_observation", "task_no", "learning_task", "task_no");
+            assertNoOrphans("competency_task_observation", "competency_id", "competency_point", "competency_id");
+            assertNoOrphans("competency_task_observation", "course_code", "course", "course_code");
+        }
+        if (tableExists("competency_point")) {
+            assertNoOrphans("competency_point", "course_code", "course", "course_code");
+        }
+        if (tableExists("ability_competency_matrix_version")) {
+            assertNoOrphans("ability_competency_matrix_version", "course_code", "course", "course_code");
+        }
+    }
+
+    private void assertNoOrphans(String childTable, String childColumn, String parentTable, String parentColumn) {
+        if (!tableExists(parentTable)) return;
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + childTable
+                + " child WHERE NOT EXISTS (SELECT 1 FROM " + parentTable + " parent WHERE parent."
+                + parentColumn + " = child." + childColumn + ")", Integer.class);
+        if (count != null && count > 0) {
+            throw new IllegalStateException("能力映射数据存在孤儿引用: " + childTable + "." + childColumn
+                    + " -> " + parentTable + "." + parentColumn + "，数量=" + count);
+        }
+    }
+
+    private void addMappingConstraints() {
+        String[] statements = {
+                "ALTER TABLE ability_competency_matrix_version ADD CONSTRAINT ck_mapping_version_status CHECK (status IN ('draft', 'published', 'archived'))",
+                "ALTER TABLE ability_competency_matrix_version ADD CONSTRAINT ck_mapping_version_samples CHECK (sample_count >= 0 AND validation_sample_count >= 0)",
+                "ALTER TABLE ability_competency_matrix_version ADD CONSTRAINT fk_mapping_version_course FOREIGN KEY (course_code) REFERENCES course(course_code)",
+                "ALTER TABLE competency_point ADD CONSTRAINT ck_competency_status CHECK (status IN ('active', 'inactive'))",
+                "ALTER TABLE competency_point ADD CONSTRAINT fk_competency_course FOREIGN KEY (course_code) REFERENCES course(course_code)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT ck_mapping_relation_status CHECK (relation_status IN ('related', 'unrelated', 'uncertain'))",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT ck_mapping_strength CHECK (strength >= 0 AND strength <= 1)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT ck_mapping_confidence CHECK (confidence >= 0 AND confidence <= 1)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT ck_mapping_evidence_count CHECK (evidence_count >= 0)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT fk_mapping_ability FOREIGN KEY (ability_point_id) REFERENCES ability_point(ability_point_id)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT fk_mapping_competency FOREIGN KEY (competency_id) REFERENCES competency_point(competency_id)",
+                "ALTER TABLE ability_point_competency_relation ADD CONSTRAINT fk_mapping_relation_course FOREIGN KEY (course_code) REFERENCES course(course_code)",
+                "ALTER TABLE competency_task_observation ADD CONSTRAINT ck_observation_status CHECK (status IN ('active', 'inactive'))",
+                "ALTER TABLE competency_task_observation ADD CONSTRAINT fk_observation_task FOREIGN KEY (task_no) REFERENCES learning_task(task_no)",
+                "ALTER TABLE competency_task_observation ADD CONSTRAINT fk_observation_competency FOREIGN KEY (competency_id) REFERENCES competency_point(competency_id)",
+                "ALTER TABLE competency_task_observation ADD CONSTRAINT fk_observation_course FOREIGN KEY (course_code) REFERENCES course(course_code)"
+        };
+        for (String statement : statements) {
+            int referencesAt = statement.indexOf("REFERENCES ");
+            if (referencesAt >= 0) {
+                String parentTable = statement.substring(referencesAt + "REFERENCES ".length())
+                        .split("\\(", 2)[0].trim();
+                if (!tableExists(parentTable)) continue;
+            }
+            String constraintName = statement.substring(statement.indexOf("CONSTRAINT ") + "CONSTRAINT ".length())
+                    .split(" ", 2)[0];
+            if (!constraintExists(constraintName)) jdbcTemplate.execute(statement);
+        }
+    }
+
+    private boolean constraintExists(String constraintName) {
+        try {
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM information_schema.table_constraints "
+                    + "WHERE constraint_name = ?", Integer.class, constraintName);
+            return count != null && count > 0;
+        } catch (Exception e) {
+            throw new IllegalStateException("无法确认能力映射约束是否存在: " + constraintName, e);
+        }
+    }
+
+    private void ensureSinglePublishedMatrixVersion() {
+        Integer duplicateCourses = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM (
+                    SELECT course_code FROM ability_competency_matrix_version
+                    WHERE status = 'published'
+                    GROUP BY course_code HAVING COUNT(*) > 1
+                ) duplicate_courses
+                """, Integer.class);
+        if (duplicateCourses != null && duplicateCourses > 0) {
+            throw new IllegalStateException("能力映射存在多个正式版本的课程数量=" + duplicateCourses
+                    + "，请先保留最新正式版本再启动服务");
+        }
+        if (!isH2()) {
+            jdbcTemplate.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_competency_published_course
+                    ON ability_competency_matrix_version(course_code)
+                    WHERE status = 'published'
+                    """);
+        }
     }
 
     private void createLearningEvidenceTables() {
@@ -165,7 +552,10 @@ public class LegacySchemaMigration implements CommandLineRunner {
                     removed++;
                 }
             }
-            jdbcTemplate.execute("""
+            jdbcTemplate.execute(isH2() ? """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_point_course_normalized_name
+                    ON ability_point(course_code, name)
+                    """ : """
                     CREATE UNIQUE INDEX IF NOT EXISTS uk_ability_point_course_normalized_name
                     ON ability_point(course_code, LOWER(TRIM(name)))
                     """);
@@ -428,6 +818,14 @@ public class LegacySchemaMigration implements CommandLineRunner {
                     || tableExists(metaData, tableName.toLowerCase());
         } catch (Exception e) {
             log.warn("Could not inspect table {}", tableName, e);
+            return false;
+        }
+    }
+
+    private boolean isH2() {
+        try (Connection connection = dataSource.getConnection()) {
+            return connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT).contains("h2");
+        } catch (Exception e) {
             return false;
         }
     }

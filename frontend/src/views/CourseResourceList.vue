@@ -108,6 +108,7 @@
 </template>
 
 <script setup>
+import { getCurrentUser } from '../utils/authContext'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -125,7 +126,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const userRole = user.role
 const resources = ref([])
 const loading = ref(true)

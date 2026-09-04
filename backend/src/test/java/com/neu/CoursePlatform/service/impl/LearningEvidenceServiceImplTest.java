@@ -9,6 +9,7 @@ import com.neu.CoursePlatform.mapper.KnowledgeMasteryHistoryMapper;
 import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.mapper.LearningAnswerEvidenceMapper;
 import com.neu.CoursePlatform.mapper.QuestionMapper;
+import com.neu.CoursePlatform.profile.service.ProfileProjectionService;
 import com.neu.CoursePlatform.service.LearningEvidenceService;
 import com.neu.CoursePlatform.service.MasteryScoreCalculator;
 import com.neu.CoursePlatform.service.QuestionAnswerEvaluator;
@@ -37,6 +38,7 @@ class LearningEvidenceServiceImplTest {
     @Mock private LearningAnswerEvidenceMapper evidenceMapper;
     @Mock private KnowledgeMasteryMapper masteryMapper;
     @Mock private KnowledgeMasteryHistoryMapper historyMapper;
+    @Mock private ProfileProjectionService profileProjectionService;
 
     private LearningEvidenceServiceImpl service;
     private Question question;
@@ -44,7 +46,7 @@ class LearningEvidenceServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new LearningEvidenceServiceImpl(questionMapper, evidenceMapper, masteryMapper, historyMapper,
-                new QuestionAnswerEvaluator(new ObjectMapper()), new MasteryScoreCalculator());
+                new QuestionAnswerEvaluator(new ObjectMapper()), new MasteryScoreCalculator(), profileProjectionService);
         question = new Question();
         question.setQuestionId("q-1");
         question.setCourseCode("c-1");
@@ -73,6 +75,7 @@ class LearningEvidenceServiceImplTest {
         assertEquals(57, mastery.getValue().getMasteryScore());
         verify(evidenceMapper).insertIfAbsent(any(LearningAnswerEvidence.class));
         verify(historyMapper).insert(any(KnowledgeMasteryHistory.class));
+        verify(profileProjectionService).applyAnswerEvidence(any(String.class));
     }
 
     @Test
@@ -92,5 +95,20 @@ class LearningEvidenceServiceImplTest {
         verify(masteryMapper, never()).insert(any(KnowledgeMastery.class));
         verify(masteryMapper, never()).updateById(any(KnowledgeMastery.class));
         verify(historyMapper, never()).insert(any(KnowledgeMasteryHistory.class));
+        verify(profileProjectionService, never()).applyAnswerEvidence(any(String.class));
+    }
+
+    @Test
+    void unansweredObjectiveQuestionCountsAsGradedAndWrong() {
+        when(evidenceMapper.insertIfAbsent(any())).thenReturn(1);
+
+        LearningEvidenceService.BatchResult result = service.recordVerifiedAnswers(
+                "s-1", "c-1", "evaluation-missing", "battle_room",
+                List.of(Map.of("questionId", "q-1", "studentAnswer", "", "answered", false)), Set.of("q-1"));
+
+        assertEquals(1, result.gradedCount());
+        assertEquals(0, result.correctCount());
+        assertEquals(0D, result.correctRate());
+        assertFalse(result.answers().get(0).correct());
     }
 }

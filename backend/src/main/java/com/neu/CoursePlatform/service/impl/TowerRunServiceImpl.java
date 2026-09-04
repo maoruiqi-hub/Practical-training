@@ -55,6 +55,7 @@ import java.util.Set;
 @Service
 public class TowerRunServiceImpl implements TowerRunService {
     private static final Set<String> BATTLE_TYPES = Set.of("battle", "elite", "boss");
+    private static final Set<String> NON_COMBAT_TYPES = Set.of("rest", "shop", "treasure", "event");
 
     private final StudentTowerRunMapper runMapper;
     private final StudentTowerNodeMapper nodeMapper;
@@ -202,9 +203,11 @@ public class TowerRunServiceImpl implements TowerRunService {
         StudentTowerAttempt previousAttempt = attemptMapper.selectById(evaluationId);
         if (previousAttempt != null) return completedResponse(run, node, previousAttempt);
 
+        Set<String> allowedQuestionIds = allowedQuestionIds(request, studentNo, run, node, BATTLE_TYPES);
+        List<Map<String, Object>> verifiedAnswers = answersForQuestionPack(request, allowedQuestionIds);
         LearningEvidenceService.BatchResult evidence = learningEvidenceService.recordVerifiedAnswers(
-                studentNo, run.getCourseCode(), evaluationId, reportStageFor(node), answerList(request),
-                allowedQuestionIds(request, studentNo, run, node));
+                studentNo, run.getCourseCode(), evaluationId, reportStageFor(node), verifiedAnswers,
+                allowedQuestionIds);
 
         String result = stringValue(request, "result");
         if (result == null || result.isBlank()) result = Boolean.TRUE.equals(request.get("cleared")) ? "cleared" : "failed";
@@ -215,9 +218,10 @@ public class TowerRunServiceImpl implements TowerRunService {
         result = cleared ? "cleared" : "failed";
         Map<String, Object> reportEnvelope = reportEnvelope("pending", null, "async", null, true, false);
         Map<String, Object> verifiedRequest = new LinkedHashMap<>(request);
-        verifiedRequest.put("answerSummary", verifiedAnswerSummary(answerList(request), evidence.answers()));
+        verifiedRequest.put("answerSummary", verifiedAnswerSummary(verifiedAnswers, evidence.answers()));
         recordAttempt(evaluationId, run, node, studentNo, result, correctRate, verifiedRequest, reportEnvelope);
-        applyCompletion(run, node, result, cleared, correctRate, intValue(request.get("hpLeft"), intValue(request.get("hp_left"), 0)));
+        applyCompletion(run, node, evaluationId, result, cleared, correctRate,
+                intValue(request.get("hpLeft"), intValue(request.get("hp_left"), 0)));
         abilitySnapshotService.createAfterSnapshots(evaluationId);
         applicationEventPublisher.publishEvent(new TowerDiagnosisRequestedEvent(evaluationId));
         Map<String, Object> response = new LinkedHashMap<>(toRunDto(runMapper.selectById(runId), nodes(runId)));
@@ -242,19 +246,22 @@ public class TowerRunServiceImpl implements TowerRunService {
         String evaluationId = evaluationId(request, studentNo, run, node);
         StudentTowerAttempt previousAttempt = attemptMapper.selectById(evaluationId);
         if (previousAttempt != null) return completedDiagnosisResponse(run, node, previousAttempt);
+        Set<String> allowedQuestionIds = allowedQuestionIds(request, studentNo, run, node, Set.of("diagnosis"));
+        List<Map<String, Object>> verifiedAnswers = answersForQuestionPack(request, allowedQuestionIds);
         LearningEvidenceService.BatchResult evidence = learningEvidenceService.recordVerifiedAnswers(
-                studentNo, run.getCourseCode(), evaluationId, "diagnosis_room", answerList(request),
-                allowedQuestionIds(request, studentNo, run, node));
+                studentNo, run.getCourseCode(), evaluationId, "diagnosis_room", verifiedAnswers,
+                allowedQuestionIds);
         RateStats rateStats = new RateStats(evidence.correctRate(), evidence.correctCount(), evidence.gradedCount(), "server_evidence");
         double correctRate = rateStats.gradedCount > 0 ? rateStats.correctRate : 0D;
         boolean perfect = correctRate >= 0.999D;
         StudentTowerNode elite = boundEliteNode(runId, node);
         recordAttempt(evaluationId, run, node, studentNo, perfect ? "diagnosis_perfect" : "diagnosis_partial", correctRate, request, null);
-        applyCompletion(run, node, perfect ? "diagnosis_perfect" : "diagnosis_partial", true, correctRate, 0);
+        applyCompletion(run, node, evaluationId, perfect ? "diagnosis_perfect" : "diagnosis_partial", true, correctRate, 0);
         abilitySnapshotService.createAfterSnapshots(evaluationId);
         if (perfect && elite != null && !"cleared".equals(elite.getStatus())) {
-            recordAttempt(SharedIds.newId(), run, elite, studentNo, "diagnosis_perfect", correctRate, request, null);
-            applyCompletion(run, elite, "diagnosis_perfect", true, correctRate, 0);
+            String bypassAttemptId = SharedIds.newId();
+            recordAttempt(bypassAttemptId, run, elite, studentNo, "diagnosis_perfect", correctRate, request, null);
+            applyCompletion(run, elite, bypassAttemptId, "diagnosis_perfect", true, correctRate, 0);
         } else if (!perfect && elite != null && "locked".equals(elite.getStatus())) {
             elite.setStatus("available");
             elite.setUpdatedAt(LocalDateTime.now());
@@ -281,6 +288,19 @@ public class TowerRunServiceImpl implements TowerRunService {
         result.put("abilityRadar", abilityRadarService.getAbilityRadar(studentNo, run.getCourseCode(), runId, nodeId));
         result.put("run", toRunDto(runMapper.selectById(runId), nodes(runId)));
         return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> completeNonCombatNode(String studentNo, String runId, String nodeId, String result) {
+        StudentTowerRun run = requireRun(studentNo, runId);
+        StudentTowerNode node = requireNode(runId, nodeId);
+        if (!NON_COMBAT_TYPES.contains(node.getRoomType())) throw new IllegalArgumentException("当前节点不是非战斗房间");
+        if ("locked".equals(node.getStatus()) || "disabled".equals(node.getStatus())) {
+            throw new IllegalStateException("节点尚未解锁");
+        }
+        if (!"cleared".equals(node.getStatus())) applyCompletion(run, node, null, result, true, 0D, 0);
+        return toRunDto(runMapper.selectById(runId), nodes(runId));
     }
 
     @Override
@@ -472,7 +492,7 @@ public class TowerRunServiceImpl implements TowerRunService {
         }
     }
 
-    private void applyCompletion(StudentTowerRun run, StudentTowerNode node, String result, boolean cleared,
+    private void applyCompletion(StudentTowerRun run, StudentTowerNode node, String attemptId, String result, boolean cleared,
                                  double correctRate, int hpLeft) {
         LocalDateTime now = LocalDateTime.now();
         if (cleared) {
@@ -498,7 +518,7 @@ public class TowerRunServiceImpl implements TowerRunService {
                     node.getKnowledgePointId(), "weak");
         }
 
-        publishCompletionEvent(run, node, result, cleared, correctRate, hpLeft);
+        publishCompletionEvent(run, node, attemptId, result, cleared, correctRate, hpLeft);
         updateCurrentNode(run);
     }
 
@@ -531,8 +551,11 @@ public class TowerRunServiceImpl implements TowerRunService {
         runMapper.updateById(run);
     }
 
-    private void publishCompletionEvent(StudentTowerRun run, StudentTowerNode node, String result,
+    private void publishCompletionEvent(StudentTowerRun run, StudentTowerNode node, String attemptId, String result,
                                         boolean cleared, double correctRate, int hpLeft) {
+        // 非战斗成长只能由 TowerGrowthService 的服务端选项规则结算，
+        // 不再经过可携带任意 payload 的通用游戏事件。
+        if (NON_COMBAT_TYPES.contains(node.getRoomType())) return;
         String eventType;
         if (!cleared) {
             eventType = GameEventTypes.FLOOR_FAILED;
@@ -540,12 +563,6 @@ public class TowerRunServiceImpl implements TowerRunService {
             eventType = GameEventTypes.BOSS_DEFEATED;
         } else if ("elite".equals(node.getRoomType())) {
             eventType = GameEventTypes.ELITE_DEFEATED;
-        } else if ("rest".equals(node.getRoomType())) {
-            eventType = GameEventTypes.REST_TAKEN;
-        } else if ("shop".equals(node.getRoomType())) {
-            eventType = GameEventTypes.SHOP_PURCHASED;
-        } else if ("treasure".equals(node.getRoomType())) {
-            eventType = GameEventTypes.TREASURE_OPENED;
         } else {
             eventType = GameEventTypes.FLOOR_CLEARED;
         }
@@ -554,7 +571,7 @@ public class TowerRunServiceImpl implements TowerRunService {
                 .eventType(eventType)
                 .studentId(run.getStudentNo())
                 .courseId(run.getCourseCode())
-                .sourceId(node.getNodeId())
+                .sourceId(attemptId)
                 .occurredAt(LocalDateTime.now())
                 .payload(Map.of(
                         "run_id", run.getRunId(),
@@ -727,21 +744,55 @@ public class TowerRunServiceImpl implements TowerRunService {
         return evaluationId;
     }
 
-    private Set<String> allowedQuestionIds(Map<String, Object> request, String studentNo,
-                                           StudentTowerRun run, StudentTowerNode node) {
+    Set<String> allowedQuestionIds(Map<String, Object> request, String studentNo,
+                                   StudentTowerRun run, StudentTowerNode node,
+                                   Set<String> allowedModes) {
         String packId = stringValue(request, "packId");
-        if (packId == null || packId.isBlank()) return Set.of();
+        if (packId == null || packId.isBlank()) throw new IllegalArgumentException("结算必须提供有效题包");
         StudentTowerQuestionPack pack = questionPackMapper.selectById(packId);
         if (pack == null || !studentNo.equals(pack.getStudentNo())
                 || !run.getRunId().equals(pack.getRunId()) || !node.getNodeId().equals(pack.getNodeId())
-                || !run.getCourseCode().equals(pack.getCourseCode())) {
+                || !run.getCourseCode().equals(pack.getCourseCode())
+                || !allowedModes.contains(pack.getMode())) {
             throw new IllegalArgumentException("题包与当前评价不匹配");
         }
         try {
-            return new LinkedHashSet<>(objectMapper.readValue(pack.getQuestionIdsJson(), new TypeReference<List<String>>() {}));
+            List<String> questionIds = objectMapper.readValue(pack.getQuestionIdsJson(), new TypeReference<List<String>>() {});
+            LinkedHashSet<String> uniqueIds = questionIds.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(id -> !id.isBlank())
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            if (uniqueIds.isEmpty() || uniqueIds.size() != questionIds.size()) {
+                throw new IllegalStateException("题包题目列表为空或包含重复题目");
+            }
+            return uniqueIds;
         } catch (Exception e) {
+            if (e instanceof IllegalStateException stateException) throw stateException;
             throw new IllegalStateException("题包数据损坏", e);
         }
+    }
+
+    List<Map<String, Object>> answersForQuestionPack(Map<String, Object> request,
+                                                      Set<String> allowedQuestionIds) {
+        Map<String, Map<String, Object>> submitted = new LinkedHashMap<>();
+        for (Map<String, Object> answer : answerList(request)) {
+            String questionId = String.valueOf(answer.getOrDefault("questionId", "")).trim();
+            if (questionId.isBlank()) throw new IllegalArgumentException("答案缺少题目编号");
+            if (!allowedQuestionIds.contains(questionId)) throw new IllegalArgumentException("答案包含题包外题目");
+            if (submitted.putIfAbsent(questionId, answer) != null) {
+                throw new IllegalArgumentException("答案包含重复题目：" + questionId);
+            }
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (String questionId : allowedQuestionIds) {
+            Map<String, Object> answer = new LinkedHashMap<>(submitted.getOrDefault(questionId, Map.of()));
+            answer.put("questionId", questionId);
+            if (!answer.containsKey("studentAnswer")) answer.put("studentAnswer", "");
+            answer.put("answered", !String.valueOf(answer.get("studentAnswer")).trim().isEmpty());
+            result.add(answer);
+        }
+        return result;
     }
 
     private Map<String, Object> completedResponse(StudentTowerRun run, StudentTowerNode node,

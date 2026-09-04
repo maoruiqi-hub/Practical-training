@@ -118,11 +118,12 @@
 </template>
 
 <script setup>
+import { getCurrentUser, getStudentId } from '../utils/authContext'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getStudentWrongQuestions } from '../api'
 
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const loading = ref(false)
 const filters = reactive({ taskNo: '', knowledgePointId: '', type: '' })
 const summary = reactive({
@@ -174,13 +175,14 @@ function applySummary(data = {}) {
 }
 
 async function loadWrongBook() {
-  if (!user.studentNo) {
+  const studentId = getStudentId(user)
+  if (!studentId) {
     ElMessage.error('未找到学生信息，请重新登录')
     return
   }
   loading.value = true
   try {
-    const res = await getStudentWrongQuestions(user.studentNo, {
+    const res = await getStudentWrongQuestions(studentId, {
       taskNo: filters.taskNo || undefined,
       knowledgePointId: filters.knowledgePointId || undefined,
       type: filters.type || undefined

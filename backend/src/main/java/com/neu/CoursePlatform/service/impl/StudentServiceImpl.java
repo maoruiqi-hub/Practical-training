@@ -8,12 +8,15 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.*;
 import java.util.List;
 
 @Service
 public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> implements StudentService {
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
     public Student login(String username, String password) {
@@ -21,7 +24,8 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
             return null;
         }
         Student student = baseMapper.selectByUsername(username);
-        if (student != null && student.getPassword().equals(password)) {
+        if (student != null && passwordMatches(password, student.getPassword())) {
+            upgradeLegacyPassword(student, password);
             return student;
         }
         return null;
@@ -37,6 +41,7 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
             return false;
         }
         try {
+            student.setPassword(passwordEncoder.encode(student.getPassword()));
             return save(student);
         } catch (DuplicateKeyException e) {
             return false;
@@ -83,7 +88,12 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
                     s.setCollege(cols[2].trim());
                     s.setClassName(cols[3].trim());
                     s.setUsername(cols[4].trim());
-                    s.setPassword(cols[5].trim());
+                    String rawPassword = cols[5].trim();
+                    if (rawPassword.isBlank()) {
+                        errors.append("第").append(rowNum).append("行: 密码不能为空, 已跳过; ");
+                        continue;
+                    }
+                    s.setPassword(passwordEncoder.encode(rawPassword));
                     s.setPhone(cols.length > 6 ? cols[6].trim() : "");
                     save(s);
                     count++;
@@ -113,5 +123,35 @@ public class StudentServiceImpl extends ServiceImpl<StudentMapper, Student> impl
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    @Override
+    @Transactional
+    public boolean updateById(Student student) {
+        if (student == null || student.getStudentNo() == null) return false;
+        if (isBlank(student.getPassword())) {
+            Student existing = baseMapper.selectById(student.getStudentNo());
+            if (existing != null) student.setPassword(existing.getPassword());
+        } else if (!isBcrypt(student.getPassword())) {
+            student.setPassword(passwordEncoder.encode(student.getPassword()));
+        }
+        return baseMapper.updateById(student) > 0;
+    }
+
+    private boolean passwordMatches(String rawPassword, String storedPassword) {
+        if (storedPassword == null) return false;
+        return isBcrypt(storedPassword)
+                ? passwordEncoder.matches(rawPassword, storedPassword)
+                : storedPassword.equals(rawPassword);
+    }
+
+    private void upgradeLegacyPassword(Student student, String rawPassword) {
+        if (isBcrypt(student.getPassword())) return;
+        student.setPassword(passwordEncoder.encode(rawPassword));
+        baseMapper.updateById(student);
+    }
+
+    private boolean isBcrypt(String value) {
+        return value != null && value.matches("^\\$2[aby]\\$\\d{2}\\$.{53}$");
     }
 }

@@ -27,7 +27,8 @@ import {
   extractKnowledgeCandidates, addKnowledgeRelation, deleteKnowledgeRelation,
   getLeaderboard, getCourseStats,
   // 补充未覆盖的函数
-  getStudentRoster, getTowerMap, sendGameEvent,
+  getStudentRoster, getTowerMap, getTowerNodeOptions, chooseTowerNodeOption,
+  getTowerInventory, useTowerInventory,
   getStudentCourseStats, getStudentProgress, getCourseProgress,
   getSubmissionsByTask, getMySubmissions, getGradeDetail,
   getKnowledgeGraph, getKnowledgePointDetail, getKnowledgeRelations,
@@ -44,6 +45,9 @@ import {
   acceptKnowledgeCandidate, rejectKnowledgeCandidate, getKnowledgeExtractionCandidates,
   getAbilityMap, generateAbilityMap, addAbilityPoint, updateAbilityPoint, deleteAbilityPoint,
   bindAbilityKnowledgePoint, unbindAbilityKnowledgePoint,
+  getAbilityCompetencyMap, addTrueCompetency, updateTrueCompetency, deleteTrueCompetency,
+  saveAbilityCompetencyRelation, saveCompetencyTaskObservation,
+  calibrateAbilityCompetencyStrengths, publishAbilityCompetencyVersion,
   searchTeacher, getTeacherList, getTeacherByNo, updateTeacher, deleteTeacher,
   getStudentList, updateStudent, deleteStudent,
   getKnowledgePoints, filterQuestion, bindExamToTask,
@@ -263,9 +267,24 @@ describe('补充覆盖 — 学生进度与游戏事件', () => {
     expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/students/S1/tower-map', { params: { course_id: 'C001' } })
   })
 
-  it('sendGameEvent 发送 POST 携带事件体', async () => {
-    await sendGameEvent('S1', { type: 'ATTACK', target: 'boss' })
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/students/S1/game-event', { type: 'ATTACK', target: 'boss' })
+  it('爬塔成长接口只提交选项和幂等键', async () => {
+    await getTowerNodeOptions('S1', 'run-1', 'node-1')
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/students/S1/tower-run/run-1/nodes/node-1/options')
+    await chooseTowerNodeOption('S1', 'run-1', 'node-1', 'option-1', 'action-1')
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      '/api/students/S1/tower-run/run-1/nodes/node-1/options/option-1/choose',
+      { actionId: 'action-1' }
+    )
+  })
+
+  it('库存接口不接受客户端恢复数值', async () => {
+    await getTowerInventory('S1', 'run-1')
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/students/S1/tower-run/run-1/inventory')
+    await useTowerInventory('S1', 'run-1', 'node-1', 'healing_supply', 'action-use')
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+      '/api/students/S1/tower-run/run-1/nodes/node-1/inventory/healing_supply/use',
+      { actionId: 'action-use' }
+    )
   })
 
   it('getStudentCourseStats 构造正确路径', async () => {
@@ -633,6 +652,40 @@ describe('补充覆盖 — 能力图谱', () => {
   it('unbindAbilityKnowledgePoint 解绑能力-知识点', async () => {
     await unbindAbilityKnowledgePoint('ap1', 'kp1')
     expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/api/ability-map/ap1/knowledge-points/kp1')
+  })
+})
+
+describe('补充覆盖 — 假能力点到真能力点映射', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('getAbilityCompetencyMap 获取已发布矩阵', async () => {
+    await getAbilityCompetencyMap('1')
+    expect(mockAxiosInstance.get).toHaveBeenCalledWith('/api/ability-competency-map', { params: { courseCode: '1' } })
+  })
+
+  it('维护真能力点', async () => {
+    await addTrueCompetency({ courseCode: '1', name: '调试' })
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/ability-competency-map/competencies', { courseCode: '1', name: '调试' })
+    await updateTrueCompetency('c1', { name: '软件调试' })
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith('/api/ability-competency-map/competencies/c1', { name: '软件调试' })
+    await deleteTrueCompetency('c1', '1')
+    expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/api/ability-competency-map/competencies/c1', { params: { courseCode: '1' } })
+  })
+
+  it('保存关系与观测任务', async () => {
+    const relation = { courseCode: '1', abilityPointId: 'a1', competencyId: 'c1', relationStatus: 'related' }
+    await saveAbilityCompetencyRelation(relation)
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith('/api/ability-competency-map/relations', relation)
+    const observation = { courseCode: '1', taskNo: 't1', competencyId: 'c1', status: 'active' }
+    await saveCompetencyTaskObservation(observation)
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith('/api/ability-competency-map/observations', observation)
+  })
+
+  it('生成并发布候选矩阵版本', async () => {
+    await calibrateAbilityCompetencyStrengths('1')
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/ability-competency-map/calibrate', null, { params: { courseCode: '1' } })
+    await publishAbilityCompetencyVersion('1', 'v2')
+    expect(mockAxiosInstance.post).toHaveBeenCalledWith('/api/ability-competency-map/publish', null, { params: { courseCode: '1', version: 'v2' } })
   })
 })
 

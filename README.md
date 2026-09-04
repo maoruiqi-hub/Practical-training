@@ -81,18 +81,24 @@
 
 ### 后端启动
 
+本项目开发环境使用 SSH 隧道连接服务器 Kingbase，不能直接运行 Maven。
+
 ```bash
-cd backend
-
-# 1. 配置环境变量（复制模板并填入你的数据库信息）
-cp .env.example .env
-# 编辑 .env 文件，填入 DB_URL / DB_USERNAME / DB_PASSWORD
-
-# 2. 编译运行
-mvn spring-boot:run
+# 从项目根目录执行；脚本会自动建立 SSH 隧道并启动后端
+bash scripts/run-backend-local.sh
 
 # 后端默认运行在 http://localhost:8081/practical-training
 ```
+
+首次配置或排查数据库连接前，先阅读：[服务器 Kingbase 数据库连接说明](docs/kingbase-setup.md)。
+
+如果 `backend/.env` 不存在，先执行：
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+然后填写服务器 SSH 和 Kingbase 账号配置。真实 `.env` 含敏感信息，不要提交 Git。
 
 ### 前端启动
 
@@ -105,7 +111,7 @@ npm install
 # 开发模式启动
 npm run serve
 
-# 前端默认运行在 http://localhost:8080
+# 前端默认运行在 http://localhost:3000
 ```
 
 ### HarmonyOS 端

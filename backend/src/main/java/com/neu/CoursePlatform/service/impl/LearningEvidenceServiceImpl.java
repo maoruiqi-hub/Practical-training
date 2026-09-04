@@ -10,6 +10,7 @@ import com.neu.CoursePlatform.mapper.KnowledgeMasteryHistoryMapper;
 import com.neu.CoursePlatform.mapper.KnowledgeMasteryMapper;
 import com.neu.CoursePlatform.mapper.LearningAnswerEvidenceMapper;
 import com.neu.CoursePlatform.mapper.QuestionMapper;
+import com.neu.CoursePlatform.profile.service.ProfileProjectionService;
 import com.neu.CoursePlatform.service.LearningEvidenceService;
 import com.neu.CoursePlatform.service.MasteryScoreCalculator;
 import com.neu.CoursePlatform.service.QuestionAnswerEvaluator;
@@ -35,19 +36,22 @@ public class LearningEvidenceServiceImpl implements LearningEvidenceService {
     private final KnowledgeMasteryHistoryMapper historyMapper;
     private final QuestionAnswerEvaluator answerEvaluator;
     private final MasteryScoreCalculator calculator;
+    private final ProfileProjectionService profileProjectionService;
 
     public LearningEvidenceServiceImpl(QuestionMapper questionMapper,
                                        LearningAnswerEvidenceMapper evidenceMapper,
                                        KnowledgeMasteryMapper masteryMapper,
                                        KnowledgeMasteryHistoryMapper historyMapper,
                                        QuestionAnswerEvaluator answerEvaluator,
-                                       MasteryScoreCalculator calculator) {
+                                       MasteryScoreCalculator calculator,
+                                       ProfileProjectionService profileProjectionService) {
         this.questionMapper = questionMapper;
         this.evidenceMapper = evidenceMapper;
         this.masteryMapper = masteryMapper;
         this.historyMapper = historyMapper;
         this.answerEvaluator = answerEvaluator;
         this.calculator = calculator;
+        this.profileProjectionService = profileProjectionService;
     }
 
     @Override
@@ -63,6 +67,13 @@ public class LearningEvidenceServiceImpl implements LearningEvidenceService {
     public BatchResult recordReviewedAnswers(String studentNo, String courseCode, String evaluationId,
                                              List<Map<String, Object>> answers, Set<String> allowedQuestionIds) {
         return recordAnswers(studentNo, courseCode, evaluationId, "teacher_review", answers, allowedQuestionIds, true);
+    }
+
+    @Override
+    @Transactional
+    public BatchResult recordAiReviewedAnswers(String studentNo, String courseCode, String evaluationId,
+                                               List<Map<String, Object>> answers, Set<String> allowedQuestionIds) {
+        return recordAnswers(studentNo, courseCode, evaluationId, "ai_review", answers, allowedQuestionIds, true);
     }
 
     private BatchResult recordAnswers(String studentNo, String courseCode, String evaluationId,
@@ -99,11 +110,11 @@ public class LearningEvidenceServiceImpl implements LearningEvidenceService {
             boolean eligible = teacherReviewed
                     ? question != null && !answerEvaluator.isAutoGradable(question)
                     : question != null && answerEvaluator.isAutoGradable(question);
-            if (!eligible || !isAnswered(answer)) continue;
+            if (!eligible || (teacherReviewed && !isAnswered(answer))) continue;
             gradedCount++;
             boolean correct = teacherReviewed
                     ? Boolean.TRUE.equals(answer.get("correct"))
-                    : answerEvaluator.isCorrect(question, answer.get("studentAnswer"));
+                    : isAnswered(answer) && answerEvaluator.isCorrect(question, answer.get("studentAnswer"));
             if (correct) correctCount++;
             int attemptNo = previousAttempts.getOrDefault(questionId, 0) + 1;
             String idempotencyKey = sourceType + ":" + evaluationId + ":" + questionId;
@@ -126,6 +137,7 @@ public class LearningEvidenceServiceImpl implements LearningEvidenceService {
             mastery = saveMastery(mastery, studentNo, courseCode, question.getKnowledgePointId(), evaluationId, calculation.afterScore());
             masteryIndex.put(question.getKnowledgePointId(), mastery);
             historyMapper.insert(history(evidence, calculation));
+            profileProjectionService.applyAnswerEvidence(evidence.getEvidenceId());
             affected.add(question.getKnowledgePointId());
             results.add(new AnswerResult(questionId, question.getKnowledgePointId(), correct, attemptNo,
                     calculation.beforeScore(), calculation.afterScore(), true));

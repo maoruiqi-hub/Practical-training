@@ -42,6 +42,8 @@ public class TaskQuestionServiceImpl extends ServiceImpl<TaskQuestionMapper, Tas
             validateQuestionBelongsToTask(task, questionId);
         }
         for (String questionId : uniqueQuestionIds) {
+            if (baseMapper.selectCount(new QueryWrapper<TaskQuestion>()
+                    .eq("task_no", taskNo).eq("question_id", questionId)) > 0) continue;
             TaskQuestion taskQuestion = new TaskQuestion();
             taskQuestion.setTaskNo(taskNo);
             taskQuestion.setQuestionId(questionId);

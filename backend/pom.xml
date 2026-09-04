@@ -27,6 +27,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Password hashing without enabling the full Spring Security filter chain. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- MySQL Driver (legacy/local deployments) -->
         <dependency>
             <groupId>com.mysql</groupId>

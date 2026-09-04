@@ -160,28 +160,50 @@
               </div>
             </div>
           </el-tab-pane>
-          <el-tab-pane label="成就" name="achievements">
+          <el-tab-pane label="徽章来源" name="achievements">
             <el-empty v-if="!detailAchievements.length" description="暂无成就" />
-            <el-row :gutter="10">
-              <el-col :span="8" v-for="a in detailAchievements" :key="a.id" style="margin-bottom:10px">
-                <div style="text-align:center;padding:12px;background:#fef0f0;border-radius:8px">
-                  <div style="font-size:32px">{{ badgeIcon(a.name) }}</div>
-                  <div style="font-weight:bold">{{ a.name }}</div>
-                  <div style="font-size:11px;color:#999">{{ a.description }}</div>
-                </div>
-              </el-col>
-            </el-row>
+            <el-table v-else :data="detailAchievements" stripe>
+              <el-table-column label="徽章" min-width="140">
+                <template #default="{ row }">
+                  <span style="font-size:20px;margin-right:6px">{{ badgeIcon(row.name) }}</span>
+                  <strong>{{ row.name }}</strong>
+                </template>
+              </el-table-column>
+              <el-table-column prop="description" label="授予规则" min-width="180" />
+              <el-table-column label="可信事实快照" min-width="260">
+                <template #default="{ row }">{{ badgeFactSummary(row) }}</template>
+              </el-table-column>
+              <el-table-column label="徽章编码" width="150">
+                <template #default="{ row }"><code>{{ row.badgeCode || '-' }}</code></template>
+              </el-table-column>
+              <el-table-column label="授予时间" width="180">
+                <template #default="{ row }">{{ formatDateTime(row.earnedAt) }}</template>
+              </el-table-column>
+            </el-table>
           </el-tab-pane>
-          <el-tab-pane label="成长历史" name="growthHistory">
+          <el-tab-pane label="成长来源" name="growthHistory">
             <el-empty v-if="!detailGrowthHistory.length" description="暂无记录" />
-            <el-timeline v-else>
-              <el-timeline-item v-for="(g, i) in detailGrowthHistory" :key="i"
-                :timestamp="g.createdAt ? new Date(g.createdAt).toLocaleString() : ''"
-                :color="g.amount > 0 ? '#67c23a' : '#f56c6c'">
-                {{ g.type === 'exp' ? '成长记录' : '激励值' }} {{ g.amount > 0 ? '+' : '' }}{{ g.amount }}
-                ({{ sourceLabel(g.source) }})
-              </el-timeline-item>
-            </el-timeline>
+            <el-table v-else :data="detailGrowthHistory" stripe>
+              <el-table-column label="属性" width="100">
+                <template #default="{ row }">{{ growthTypeLabel(row.type) }}</template>
+              </el-table-column>
+              <el-table-column label="变化" width="90">
+                <template #default="{ row }">
+                  <el-tag :type="row.amount >= 0 ? 'success' : 'danger'" size="small">
+                    {{ row.amount > 0 ? '+' : '' }}{{ row.amount }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="业务来源" min-width="150">
+                <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
+              </el-table-column>
+              <el-table-column label="来源记录 ID" min-width="220">
+                <template #default="{ row }"><code>{{ row.sourceId || '-' }}</code></template>
+              </el-table-column>
+              <el-table-column label="发生时间" width="180">
+                <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+              </el-table-column>
+            </el-table>
           </el-tab-pane>
           <el-tab-pane label="能力变化" name="competencyHistory">
             <el-empty v-if="!detailCompHistory.length" description="暂无变化记录" />
@@ -237,6 +259,7 @@
 </template>
 
 <script setup>
+import { getCurrentUser } from '../utils/authContext'
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
@@ -320,7 +343,30 @@ const recTypeLabel = (t) => ({ review_material: '复习', practice: '练习', ex
 const urgencyTag = (value) => ({ high: 'danger', medium: 'warning', low: 'info', 高: 'danger', 中: 'warning', 低: 'info' }[value] || 'info')
 const urgencyLabel = (value) => ({ high: '高优先级', medium: '中优先级', low: '低优先级' }[value] || value || '普通')
 const badgeIcon = (n) => ({ '连击王': '🔥', '完美主义': '💎', '速通者': '🏃', 'Pythonic': '🐍', 'Debug之眼': '🔍', '夜枭': '🦉', '助人者': '🤝' }[n] || '🏆')
-const sourceLabel = (s) => ({ quiz: '测验', boss: '综合测验', default: '答题', task_complete: '任务完成', exam_pass: '考试通过', streak: '连续学习' }[s] || s)
+const sourceLabel = (s) => ({
+  answer: '服务端判题证据', quiz: '测验', boss: '综合测验', default: '答题',
+  task_complete: '任务完成', exam_pass: '考试通过', streak: '连续学习',
+  tower_attempt: '爬塔战斗记录', tower_growth_option: '爬塔选项/库存动作',
+  boss_task_submission: 'Boss 任务满分提交'
+}[s] || s || '未知来源')
+const growthTypeLabel = (type) => ({ hp: '生命', atk: '解题表现', def: '基础掌握', exp: '成长值', coins: '金币', energy: '精力' }[type] || type)
+const formatDateTime = value => value ? new Date(value).toLocaleString() : '-'
+const badgeFactSummary = (achievement) => {
+  try {
+    const facts = JSON.parse(achievement.metadata || '{}').facts || {}
+    const labels = {
+      totalCorrect: '累计答对', consecutiveCorrect: '连续答对', timedComplete: '限时完成',
+      fullScore: '满分提交', nightAnswers: '夜间答题', helpfulFeedback: '有效反馈',
+      selfCorrections: '纠错题数', pythonicStyleCount: 'Pythonic 次数'
+    }
+    const values = Object.entries(facts)
+      .filter(([, value]) => value === true || (typeof value === 'number' && value > 0))
+      .map(([key, value]) => `${labels[key] || key}：${value === true ? '是' : value}`)
+    return values.join('，') || '由服务端可信事实判定'
+  } catch {
+    return '历史记录未保存事实快照'
+  }
+}
 
 const daysSince = (dateValue) => {
   if (!dateValue) return null
@@ -392,7 +438,7 @@ const loadCourses = async () => {
   try {
     const { data } = await searchCourse('')
     if (data.code === 200) {
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const user = getCurrentUser()
       if (user.role === 'admin') {
         courses.value = data.data
       } else {

@@ -6,6 +6,9 @@ export const getProfileSummary = (studentNo, courseCode) =>
 export const getCompetency = (studentNo, courseCode) =>
     api.get(`/api/profile/${studentNo}/${courseCode}/competency`)
 
+export const getTrueCompetency = (studentNo, courseCode) =>
+    api.get(`/api/profile/${studentNo}/${courseCode}/true-competency`)
+
 export const getRecommendations = (studentNo, courseCode) =>
     api.get(`/api/profile/${studentNo}/${courseCode}/recommendations`)
 

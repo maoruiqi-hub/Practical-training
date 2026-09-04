@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @SpringBootTest
 class ApiContractMappingTest {
@@ -68,8 +69,16 @@ class ApiContractMappingTest {
         assertMapping(RequestMethod.POST, "/api/students/{studentId}/profile/generate");
         assertMapping(RequestMethod.POST, "/api/students/{studentId}/competency/update");
         assertMapping(RequestMethod.POST, "/api/students/{studentId}/recommendations/generate");
-        assertMapping(RequestMethod.POST, "/api/students/{studentId}/growth/add");
-        assertMapping(RequestMethod.POST, "/api/students/{studentId}/achievements");
+        assertNotMapping(RequestMethod.POST, "/api/students/{studentId}/growth/add");
+        assertNotMapping(RequestMethod.POST, "/api/students/{studentId}/achievements");
+        assertNotMapping(RequestMethod.POST, "/api/students/{studentId}/game-event");
+        assertNotMapping(RequestMethod.POST, "/api/profile/{studentNo}/{courseCode}/submit");
+        assertNotMapping(RequestMethod.POST, "/api/profile/{studentNo}/{courseCode}/growth/add");
+        assertNotMapping(RequestMethod.POST, "/api/profile/{studentNo}/{courseCode}/achievements/award");
+        assertNotMapping(RequestMethod.POST, "/api/profile/{studentNo}/{courseCode}/generate");
+        assertNotMapping(RequestMethod.POST, "/api/profile/{studentNo}/{courseCode}/competency/update");
+        assertNotMapping(RequestMethod.POST, "/api/profile/event/receive");
+        assertNotMapping(RequestMethod.POST, "/api/profile/string/{studentNo}/{courseCode}/growth");
         assertMapping(RequestMethod.GET, "/api/students/{studentId}/tower-map");
         assertMapping(RequestMethod.GET, "/api/leaderboard");
         assertMapping(RequestMethod.GET, "/api/profile/{studentNo}/{courseCode}");
@@ -93,6 +102,12 @@ class ApiContractMappingTest {
         boolean found = mappings.getHandlerMethods().keySet().stream()
                 .anyMatch(info -> hasMethod(info, method) && patterns(info).contains(path));
         assertTrue(found, () -> method + " " + path + " is not mapped");
+    }
+
+    private void assertNotMapping(RequestMethod method, String path) {
+        boolean found = mappings.getHandlerMethods().keySet().stream()
+                .anyMatch(info -> hasMethod(info, method) && patterns(info).contains(path));
+        assertFalse(found, () -> method + " " + path + " must not be publicly mapped");
     }
 
     private boolean hasMethod(RequestMappingInfo info, RequestMethod method) {

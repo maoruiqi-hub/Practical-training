@@ -12,6 +12,10 @@ public interface LearningEvidenceService {
     BatchResult recordReviewedAnswers(String studentNo, String courseCode, String evaluationId,
                                       List<Map<String, Object>> answers, Set<String> allowedQuestionIds);
 
+    /** AI 评价通过可信度策略后的主观/编程题证据。 */
+    BatchResult recordAiReviewedAnswers(String studentNo, String courseCode, String evaluationId,
+                                       List<Map<String, Object>> answers, Set<String> allowedQuestionIds);
+
     record AnswerResult(String questionId, String knowledgePointId, boolean correct, int attemptNo,
                         int beforeMastery, int afterMastery, boolean applied) {}
 

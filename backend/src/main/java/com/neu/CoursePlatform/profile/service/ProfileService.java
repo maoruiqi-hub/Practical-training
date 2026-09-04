@@ -7,7 +7,9 @@ import java.util.*;
 public interface ProfileService {
     StudentProfile getOrCreateProfile(Integer studentNo, Integer courseCode);
     void updateProfileFromSubmission(Integer studentNo, Integer courseCode,
-                                    boolean correct, String taskType);
+                                     boolean correct, String taskType);
+    void updateProfileFromEvidence(Integer studentNo, Integer courseCode,
+                                   boolean correct, String taskType, String evidenceId);
     List<CompetencyScore> getCompetencyScores(Integer studentNo, Integer courseCode);
     void updateCompetencyScores(Integer studentNo, Integer courseCode,
                                String abilityPointId, boolean correct);

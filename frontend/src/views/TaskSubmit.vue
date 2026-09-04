@@ -1,9 +1,10 @@
 <template>
-  <div>
-    <el-button @click="$router.back()" style="margin-bottom:10px">← 返回</el-button>
+  <div class="task-submit-page" :style="taskPageStyle">
+    <div class="task-submit-shell">
+    <el-button class="task-back" @click="$router.back()">← 返回活动挑战</el-button>
 
     <!-- 任务信息卡片 -->
-    <el-card v-if="task" style="margin-bottom:20px">
+    <el-card v-if="task" class="task-brief">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span><b>{{ task.taskName || task.description }}</b></span>
@@ -21,7 +22,7 @@
         <el-descriptions-item label="附件要求">{{ task.attachmentFormats || '不限格式' }}</el-descriptions-item>
         <el-descriptions-item label="提交次数">
           {{ task.maxAttempts || 3 }}次
-          <span v-if="mySubmissions.length" style="color:#909399">（已提交{{ mySubmissions.length }}次）</span>
+          <span v-if="mySubmissions.length" class="submission-count">（已提交{{ mySubmissions.length }}次）</span>
         </el-descriptions-item>
         <el-descriptions-item v-if="task.gradingRule" label="评分规则" :span="3">{{ task.gradingRule }}</el-descriptions-item>
         <el-descriptions-item v-if="task.resourceUrl" label="附件资源" :span="3">
@@ -40,24 +41,27 @@
       </el-result>
 
       <!-- 普通任务类：提交表单 -->
-      <el-card v-else v-loading="submitting" style="max-width:700px">
+      <el-card v-else v-loading="submitting" class="submit-panel">
         <!-- 提交历史 -->
         <div v-if="mySubmissions.length" style="margin-bottom:16px">
           <h4 style="margin-bottom:8px">提交记录</h4>
           <div v-for="(s, idx) in mySubmissions" :key="s.submissionId"
-            :style="{ opacity: s.status === 'superseded' ? 0.5 : 1, padding: '8px 12px', marginBottom: '6px', borderRadius: '6px', border: '1px solid #ebeef5', background: s.status === 'superseded' ? '#fafafa' : '#f0f9eb' }">
+            class="submission-record" :class="{ superseded: s.status === 'superseded', graded: s.status === 'graded' }">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span>
                 <el-tag :type="s.status === 'superseded' ? 'info' : s.status === 'graded' ? 'success' : 'warning'" size="small">
                   {{ s.status === 'superseded' ? '已覆盖' : s.status === 'graded' ? '已批改' : '待批改' }}
                 </el-tag>
                 <span style="margin-left:8px;font-weight:500">第{{ s.attemptNumber || idx + 1 }}次提交</span>
-                <span style="margin-left:8px;color:#909399;font-size:13px">{{ s.submitTime }}</span>
+                <span class="submission-time">{{ s.submitTime }}</span>
               </span>
-              <span>
-                <el-tag v-if="s.status === 'graded' && s.score != null" type="success" size="small">{{ s.score }}分</el-tag>
+                <span>
+                  <el-tag v-if="s.status === 'graded' && s.score != null" type="success" size="small">{{ s.score }}分</el-tag>
+                  <el-tag v-if="aiReviewBySubmission[s.submissionId]" :type="aiReviewTag(aiReviewBySubmission[s.submissionId])" size="small" style="margin-left:6px">
+                    {{ aiReviewLabel(aiReviewBySubmission[s.submissionId]) }}
+                  </el-tag>
                 <el-link v-if="s.filePath" :href="'/practical-training/' + s.filePath" target="_blank" type="primary" :underline="false" style="margin-left:6px">📎</el-link>
-                <span v-if="s.status !== 'superseded' && idx === 0" style="color:#e6a23c;font-size:12px;margin-left:6px">← 教师可见</span>
+                <span v-if="s.status !== 'superseded' && idx === 0" class="teacher-visible">← 教师可见</span>
               </span>
             </div>
           </div>
@@ -82,7 +86,7 @@
               <el-upload :auto-upload="false" :limit="1" :on-change="handleFile" :accept="task?.attachmentFormats || ''" :disabled="!canSubmit">
                 <el-button type="primary" :disabled="!canSubmit">选择文件</el-button>
               </el-upload>
-              <span v-if="task?.attachmentFormats" style="color:#909399;font-size:12px">仅支持：{{ task.attachmentFormats }}</span>
+              <span v-if="task?.attachmentFormats" class="attachment-hint">仅支持：{{ task.attachmentFormats }}</span>
             </div>
           </el-form-item>
           <el-form-item>
@@ -145,10 +149,10 @@
         <el-descriptions-item label="状态">{{ grading.status === 'graded' ? '已完成' : '待教师复核' }}</el-descriptions-item>
       </el-descriptions>
       <div v-if="gradeDetails.length" style="margin-top:16px">
-        <div v-for="(d,i) in gradeDetails" :key="i" style="margin-bottom:12px;padding:10px;background:#f9f9f9;border-radius:6px;text-align:left">
-          <div><b>{{ i + 1 }}.</b> {{ d.stem }} <el-tag size="small" style="margin-left:6px">{{ typeLabel(d.type) }}</el-tag> <span style="color:#999;font-size:12px">{{ d.score }}分</span></div>
-          <div style="margin-top:6px">学生答案：<span :style="{ color: d.autoGradable ? (d.correct ? '#67c23a' : '#f56c6c') : '#606266' }">{{ d.studentAnswer || '(空)' }}</span></div>
-          <div style="margin-top:4px;color:#67c23a">{{ d.autoGradable ? '正确答案' : '参考答案' }}：{{ d.correctAnswer || '(无)' }}</div>
+        <div v-for="(d,i) in gradeDetails" :key="i" class="grade-question">
+          <div><b>{{ i + 1 }}.</b> {{ d.stem }} <el-tag size="small" style="margin-left:6px">{{ typeLabel(d.type) }}</el-tag> <span class="question-score">{{ d.score }}分</span></div>
+          <div class="student-answer">学生答案：<span :class="{ correct: d.autoGradable && d.correct, incorrect: d.autoGradable && !d.correct }">{{ d.studentAnswer || '(空)' }}</span></div>
+          <div class="correct-answer">{{ d.autoGradable ? '正确答案' : '参考答案' }}：{{ d.correctAnswer || '(无)' }}</div>
           <div v-if="!d.autoGradable" class="manual-grade-row">
             <span>本题得分</span>
             <el-input-number v-model="d.earnedScore" :min="0" :max="d.score || 0" size="small" />
@@ -157,7 +161,7 @@
           </div>
         </div>
       </div>
-      <div v-else-if="!gradeLoading" style="margin-top:16px;text-align:center;color:#999;padding:20px">非在线测验提交：{{ grading.content || '附件提交' }}</div>
+      <div v-else-if="!gradeLoading" class="non-quiz-note">非在线测验提交：{{ grading.content || '附件提交' }}</div>
       <div v-if="showAiReviewPanel" class="ai-review-panel">
         <div class="ai-review-head">
           <h4>AI 智能评价</h4>
@@ -170,6 +174,8 @@
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="建议分数">{{ aiReview.aiScore ?? '-' }} 分</el-descriptions-item>
             <el-descriptions-item label="风险等级">{{ riskLabel(aiReview.riskLevel) }}</el-descriptions-item>
+            <el-descriptions-item label="评价状态">{{ aiReviewLabel(aiReview) }}</el-descriptions-item>
+            <el-descriptions-item label="可信度">{{ aiReview.confidence == null ? '-' : Math.round(aiReview.confidence * 100) + '%' }}</el-descriptions-item>
             <el-descriptions-item label="评价摘要" :span="2">{{ aiReview.summary || '-' }}</el-descriptions-item>
           </el-descriptions>
           <div v-if="reviewSuggestions.length" class="ai-suggestions">
@@ -188,19 +194,25 @@
         <el-button v-if="grading.status !== 'graded' || gradeDetails.some(d => !d.autoGradable)" type="primary" @click="doGrade">确认复核</el-button>
       </template>
     </el-dialog>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { getCurrentUser, getStudentId } from '../utils/authContext'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { submitTask, getSubmissionsByTask, getGradeDetail, gradeSubmission, getTaskDetail, getMySubmissions, generateAiReview, getAiReview } from '../api'
+import { gameBackgrounds } from '../data/gameAssetManifest'
 
 const route = useRoute()
 const taskNo = route.params.taskNo
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const userRole = user.role
+const taskPageStyle = computed(() => ({
+  backgroundImage: `linear-gradient(180deg, rgba(6, 8, 12, .2), rgba(6, 8, 12, .82)), url(${gameBackgrounds.mapAct1})`
+}))
 const task = ref(null)
 const content = ref('')
 const file = ref(null)
@@ -208,6 +220,7 @@ const submitting = ref(false)
 const submissions = ref([])
 const subLoading = ref(true)
 const mySubmissions = ref([])
+const aiReviewBySubmission = ref({})
 const dialogVisible = ref(false)
 const grading = ref({ submissionId: '', studentName: '', content: '', score: null, feedback: '' })
 const gradeLoading = ref(false)
@@ -296,8 +309,19 @@ const loadMySubmissions = async () => {
       mySubmissions.value = (res.data.data || [])
         .filter(s => String(s.taskNo) === String(taskNo))
         .sort((a, b) => new Date(b.submitTime) - new Date(a.submitTime))
+      await loadMyAiReviews()
     }
   } catch { /* ignore */ }
+}
+
+const loadMyAiReviews = async () => {
+  const entries = await Promise.all(mySubmissions.value.map(async submission => {
+    try {
+      const res = await getAiReview(submission.submissionId)
+      return [submission.submissionId, res.data.code === 200 ? res.data.data : null]
+    } catch { return [submission.submissionId, null] }
+  }))
+  aiReviewBySubmission.value = Object.fromEntries(entries.filter(([, review]) => review))
 }
 
 const openGradeDialog = async (row) => {
@@ -362,13 +386,21 @@ const parseJson = (value, fallback) => {
 
 const reviewSuggestions = computed(() => parseJson(aiReview.value?.suggestions, []))
 const riskLabel = level => ({ low: '低', medium: '中', high: '高' }[level] || level || '-')
+const aiReviewLabel = review => ({
+  accepted: '已自动评价', generated: '已生成待复核', needs_review: '待教师复核',
+  pending_review: '等待评价', provider_error: '评价失败'
+}[review?.status] || '评价中')
+const aiReviewTag = review => review?.status === 'accepted' ? 'success' : review?.status === 'needs_review' ? 'warning' : 'info'
 
 const loadAiReview = async (submissionId, showError = true) => {
   if (!submissionId) return
   aiReviewLoading.value = true
   try {
     const res = await getAiReview(submissionId)
-    if (res.data.code === 200) aiReview.value = res.data.data
+    if (res.data.code === 200) {
+      aiReview.value = res.data.data
+      aiReviewBySubmission.value = { ...aiReviewBySubmission.value, [submissionId]: res.data.data }
+    }
     else if (showError) ElMessage.warning(res.data.msg || '暂无智能评价')
   } catch {
     if (showError) ElMessage.error('智能评价加载失败')
@@ -382,6 +414,7 @@ const requestAiReview = async () => {
     const res = await generateAiReview(grading.value.submissionId)
     if (res.data.code === 200) {
       aiReview.value = res.data.data
+      aiReviewBySubmission.value = { ...aiReviewBySubmission.value, [grading.value.submissionId]: res.data.data }
       if (grading.value.score == null) grading.value.score = res.data.data.aiScore
       ElMessage.success('智能评价已生成')
     } else ElMessage.error(res.data.msg)
@@ -418,12 +451,82 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.task-submit-page {
+  min-height: 100vh;
+  margin: -20px;
+  padding: 28px 28px 56px;
+  color: #f8edcf;
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+.task-submit-shell { width: min(980px, 100%); margin: 0 auto; }
+.task-back {
+  margin-bottom: 18px;
+  border-color: rgba(238, 181, 91, .36);
+  color: #f8ebcb;
+  background: rgba(255, 255, 255, .08);
+}
+.task-submit-page :deep(.el-card) {
+  border: 1px solid rgba(232, 184, 91, .3);
+  border-radius: 10px;
+  color: #f8edcf;
+  background: linear-gradient(145deg, rgba(55, 29, 21, .92), rgba(9, 11, 15, .92));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .34);
+}
+.task-brief :deep(.el-card__header) { border-bottom-color: rgba(232, 184, 91, .22); }
+.task-brief :deep(.el-card__header b) { color: #fff1c9; font-family: Georgia, serif; font-size: 25px; }
+.task-brief :deep(.el-descriptions__body),
+.task-brief :deep(.el-descriptions__table) { background: transparent; }
+.task-brief :deep(.el-descriptions__cell) { border-color: rgba(232, 184, 91, .26) !important; }
+.task-brief :deep(.el-descriptions__label),
+.task-brief :deep(.el-descriptions__label.is-bordered-label) { color: #e0b968; background: rgba(125, 71, 35, .34); }
+.task-brief :deep(.el-descriptions__content),
+.task-brief :deep(.el-descriptions__content.is-bordered-content) { color: #fff1d0; background: rgba(20, 15, 15, .72); }
+.submit-panel { max-width: 760px !important; margin-top: 18px; }
+.submit-panel h4 { color: #fff1c9; font-family: Georgia, serif; }
+.submit-panel :deep(.el-form-item__label) { color: #d8c39f; }
+.submit-panel :deep(.el-textarea__inner),
+.submit-panel :deep(.el-input__wrapper) { color: #f8edcf; background: rgba(255, 255, 255, .08); box-shadow: 0 0 0 1px rgba(232, 184, 91, .22) inset; }
+.submit-panel :deep(.el-textarea__inner)::placeholder { color: #9d8b70; }
+.submit-panel :deep(.el-upload-list__item-name) { color: #e9bd6d; }
+.task-submit-page :deep(.el-alert) { border-color: rgba(232, 184, 91, .25); background: rgba(232, 184, 91, .1); }
+.task-submit-page :deep(.el-tag--info) { color: #d8c39f; border-color: rgba(189, 168, 131, .38); background: rgba(189, 168, 131, .12); }
+.task-submit-page :deep(.el-tag--warning) { color: #ffda85; border-color: rgba(232, 184, 91, .42); background: rgba(232, 184, 91, .14); }
+.task-submit-page :deep(.el-tag--success) { color: #a7d7a9; border-color: rgba(118, 191, 122, .42); background: rgba(118, 191, 122, .14); }
+.task-submit-page :deep(.el-tag--danger) { color: #ff9d83; border-color: rgba(220, 86, 62, .42); background: rgba(220, 86, 62, .14); }
+.task-submit-page :deep(.el-table) { color: #eadfc8; background: rgba(8, 10, 14, .42); }
+.task-submit-page :deep(.el-table th.el-table__cell) { color: #d8b779; background: rgba(232, 184, 91, .1); }
+.task-submit-page :deep(.el-table tr),
+.task-submit-page :deep(.el-table td.el-table__cell) { color: #eadfc8; background: transparent; border-bottom-color: rgba(232, 184, 91, .14); }
+.task-submit-page :deep(.el-table::before) { background-color: rgba(232, 184, 91, .2); }
+.submission-count { color: #d8b779; }
+.submission-record {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(232, 184, 91, .3);
+  border-radius: 7px;
+  background: linear-gradient(90deg, rgba(232, 184, 91, .12), rgba(28, 20, 18, .72));
+}
+.submission-record.graded { border-color: rgba(118, 191, 122, .42); background: linear-gradient(90deg, rgba(118, 191, 122, .12), rgba(28, 20, 18, .72)); }
+.submission-record.superseded { opacity: .58; border-color: rgba(151, 112, 70, .26); background: rgba(20, 16, 16, .55); }
+.submission-time { margin-left: 8px; color: #bda883; font-size: 13px; }
+.teacher-visible { margin-left: 8px; color: #ffda85; font-size: 12px; }
+.attachment-hint { color: #bda883; font-size: 12px; }
+.grade-question { margin-bottom: 12px; padding: 12px; border: 1px solid rgba(232, 184, 91, .24); border-radius: 7px; color: #eadfc8; text-align: left; background: rgba(232, 184, 91, .08); }
+.question-score { color: #d8b779; font-size: 12px; }
+.student-answer { margin-top: 8px; color: #d8c39f; }
+.student-answer span { color: #eadfc8; }
+.student-answer span.correct { color: #a7d7a9; }
+.student-answer span.incorrect { color: #ff9d83; }
+.correct-answer { margin-top: 5px; color: #e9bd6d; }
+.non-quiz-note { margin-top: 16px; padding: 22px; color: #d8c39f; text-align: center; border: 1px dashed rgba(232, 184, 91, .3); border-radius: 7px; background: rgba(232, 184, 91, .08); }
 .ai-review-panel {
   margin-top: 16px;
   padding: 12px;
-  border: 1px solid #ebeef5;
+  border: 1px solid rgba(232, 184, 91, .28);
   border-radius: 6px;
-  background: #fafafa;
+  background: rgba(232, 184, 91, .08);
 }
 .ai-review-head {
   display: flex;
@@ -434,11 +537,12 @@ onMounted(async () => {
 }
 .ai-review-head h4 {
   margin: 0;
+  color: #fff1c9;
 }
 .ai-suggestions {
   margin: 10px 0;
   line-height: 1.8;
-  color: #606266;
+  color: #d8c39f;
 }
 .manual-grade-row {
   display: flex;
@@ -447,7 +551,11 @@ onMounted(async () => {
   gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid #e5e7eb;
-  color: #475569;
+  border-top: 1px solid rgba(232, 184, 91, .22);
+  color: #d8c39f;
+}
+@media (max-width: 760px) {
+  .task-submit-page { margin: -16px; padding: 20px 16px 40px; }
+  .task-brief :deep(.el-card__header b) { font-size: 21px; }
 }
 </style>

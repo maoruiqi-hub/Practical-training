@@ -2,8 +2,6 @@ package com.neu.CoursePlatform.profile.controller;
 
 import com.neu.CoursePlatform.common.Auth;
 import com.neu.CoursePlatform.common.Result;
-import com.neu.CoursePlatform.common.SharedIds;
-import com.neu.CoursePlatform.common.event.GameEvent;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.profile.entity.Achievement;
 import com.neu.CoursePlatform.profile.entity.CompetencyScore;
@@ -11,15 +9,14 @@ import com.neu.CoursePlatform.profile.entity.Recommendation;
 import com.neu.CoursePlatform.profile.service.IncentiveService;
 import com.neu.CoursePlatform.profile.service.ProfileService;
 import com.neu.CoursePlatform.profile.service.RecommendationService;
-import com.neu.CoursePlatform.service.CourseGameConfigService;
 import com.neu.CoursePlatform.service.AbilityRadarService;
+import com.neu.CoursePlatform.service.StudentAbilityProjectionService;
 import com.neu.CoursePlatform.service.TowerQuestionPackService;
+import com.neu.CoursePlatform.service.TowerGrowthService;
 import com.neu.CoursePlatform.service.TowerRunService;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -36,30 +33,30 @@ public class ProfileApiController {
     private final ProfileService profileService;
     private final RecommendationService recommendationService;
     private final IncentiveService incentiveService;
-    private final CourseGameConfigService gameConfigService;
     private final TowerRunService towerRunService;
     private final TowerQuestionPackService towerQuestionPackService;
+    private final TowerGrowthService towerGrowthService;
     private final AbilityRadarService abilityRadarService;
-    private final ApplicationEventPublisher applicationEventPublisher;
+    private final StudentAbilityProjectionService abilityProjectionService;
     private final Auth auth;
 
     public ProfileApiController(ProfileService profileService,
                                 RecommendationService recommendationService,
                                 IncentiveService incentiveService,
-                                CourseGameConfigService gameConfigService,
                                 TowerRunService towerRunService,
                                 TowerQuestionPackService towerQuestionPackService,
+                                TowerGrowthService towerGrowthService,
                                 AbilityRadarService abilityRadarService,
-                                ApplicationEventPublisher applicationEventPublisher,
+                                StudentAbilityProjectionService abilityProjectionService,
                                 Auth auth) {
         this.profileService = profileService;
         this.recommendationService = recommendationService;
         this.incentiveService = incentiveService;
-        this.gameConfigService = gameConfigService;
         this.towerRunService = towerRunService;
         this.towerQuestionPackService = towerQuestionPackService;
+        this.towerGrowthService = towerGrowthService;
         this.abilityRadarService = abilityRadarService;
-        this.applicationEventPublisher = applicationEventPublisher;
+        this.abilityProjectionService = abilityProjectionService;
         this.auth = auth;
     }
 
@@ -88,27 +85,27 @@ public class ProfileApiController {
     }
 
     @GetMapping("/students/{studentId}/competency")
-    public Result<List<CompetencyScore>> competency(@PathVariable String studentId,
-                                                    @RequestParam(name = "course_id", required = false) String courseId,
-                                                    @RequestParam(name = "courseCode", required = false) String courseCode,
-                                                    HttpSession session) {
+    public Result<List<Map<String, Object>>> competency(@PathVariable String studentId,
+                                                        @RequestParam(name = "course_id", required = false) String courseId,
+                                                        @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                        HttpSession session) {
         if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
-        return Result.ok(profileService.getCompetencyScores(studentNo, courseNo));
+        return Result.ok(abilityProjectionService.coursePoints(studentNo.toString(), courseNo.toString()));
     }
 
     @PostMapping("/students/{studentId}/competency/update")
-    public Result<List<CompetencyScore>> updateCompetency(@PathVariable String studentId,
-                                                          @RequestParam(name = "course_id", required = false) String courseId,
-                                                          @RequestParam(name = "courseCode", required = false) String courseCode,
-                                                          HttpSession session) {
+    public Result<List<Map<String, Object>>> updateCompetency(@PathVariable String studentId,
+                                                              @RequestParam(name = "course_id", required = false) String courseId,
+                                                              @RequestParam(name = "courseCode", required = false) String courseCode,
+                                                              HttpSession session) {
         if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
         Integer studentNo = parseInt(studentId, "studentId");
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
-        return Result.ok(profileService.updateAllCompetencyScores(studentNo, courseNo));
+        return Result.ok(abilityProjectionService.coursePoints(studentNo.toString(), courseNo.toString()));
     }
 
     @GetMapping("/students/{studentId}/recommendations")
@@ -251,6 +248,71 @@ public class ProfileApiController {
         }
     }
 
+    @GetMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/options")
+    public Result<Map<String, Object>> towerNodeOptions(@PathVariable String studentId,
+                                                        @PathVariable String runId,
+                                                        @PathVariable String nodeId,
+                                                        HttpSession session) {
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerGrowthService.getNodeOptions(String.valueOf(studentNo), runId, nodeId));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/options/{optionId}/choose")
+    public Result<Map<String, Object>> chooseTowerNodeOption(@PathVariable String studentId,
+                                                             @PathVariable String runId,
+                                                             @PathVariable String nodeId,
+                                                             @PathVariable String optionId,
+                                                             @RequestBody Map<String, Object> body,
+                                                             HttpSession session) {
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerGrowthService.chooseNodeOption(String.valueOf(studentNo), runId, nodeId,
+                    optionId, body == null ? null : String.valueOf(body.getOrDefault("actionId", ""))));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @GetMapping("/students/{studentId}/tower-run/{runId}/inventory")
+    public Result<List<Map<String, Object>>> towerInventory(@PathVariable String studentId,
+                                                            @PathVariable String runId,
+                                                            HttpSession session) {
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerGrowthService.getInventory(String.valueOf(studentNo), runId));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    @PostMapping("/students/{studentId}/tower-run/{runId}/nodes/{nodeId}/inventory/{itemCode}/use")
+    public Result<Map<String, Object>> useTowerInventory(@PathVariable String studentId,
+                                                         @PathVariable String runId,
+                                                         @PathVariable String nodeId,
+                                                         @PathVariable String itemCode,
+                                                         @RequestBody Map<String, Object> body,
+                                                         HttpSession session) {
+        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
+        Integer studentNo = parseInt(studentId, "studentId");
+        if (studentNo == null) return Result.fail("studentId 必须为数字");
+        try {
+            return Result.ok(towerGrowthService.useInventoryItem(String.valueOf(studentNo), runId, nodeId,
+                    itemCode, body == null ? null : String.valueOf(body.getOrDefault("actionId", ""))));
+        } catch (RuntimeException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
     @GetMapping("/students/{studentId}/tower-run/attempts/{evaluationId}/report")
     public Result<Map<String, Object>> towerAttemptReport(@PathVariable String studentId,
                                                           @PathVariable String evaluationId,
@@ -324,40 +386,6 @@ public class ProfileApiController {
         return Result.ok(abilityRadarService.getAbilityRadar(String.valueOf(studentNo), String.valueOf(courseNo), runId, nodeId));
     }
 
-    @PostMapping("/students/{studentId}/growth/add")
-    public Result<Void> addGrowth(@PathVariable String studentId,
-                                  @RequestParam(name = "course_id", required = false) String courseId,
-                                  @RequestParam(name = "courseCode", required = false) String courseCode,
-                                  @RequestBody Map<String, Object> body,
-                                  HttpSession session) {
-        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
-        Integer studentNo = parseInt(studentId, "studentId");
-        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
-        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
-        int amount = body.get("amount") instanceof Number number ? number.intValue() : 0;
-        String source = String.valueOf(body.getOrDefault("source", "unknown"));
-        String sourceId = String.valueOf(body.getOrDefault("source_id", body.getOrDefault("sourceId", "")));
-        profileService.addGrowth(studentNo, courseNo, amount, source, sourceId);
-        return Result.ok();
-    }
-
-    @PostMapping("/students/{studentId}/achievements")
-    public Result<List<Achievement>> awardAchievements(@PathVariable String studentId,
-                                                       @RequestParam(name = "course_id", required = false) String courseId,
-                                                       @RequestParam(name = "courseCode", required = false) String courseCode,
-                                                       @RequestBody Map<String, Object> body,
-                                                       HttpSession session) {
-        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
-        Integer studentNo = parseInt(studentId, "studentId");
-        Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
-        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
-        return Result.ok(incentiveService.checkAndAwardBadges(studentNo, courseNo,
-                intValue(body, "totalCorrect"), intValue(body, "consecutiveCorrect"),
-                boolValue(body, "timedComplete"), boolValue(body, "fullScore"),
-                intValue(body, "nightSessions"), intValue(body, "helpfulFeedback"),
-                intValue(body, "selfCorrections"), intValue(body, "pythonicStyleCount")));
-    }
-
     @GetMapping("/leaderboard")
     public Result<List<Map<String, Object>>> leaderboard(@RequestParam(name = "course_id", required = false) String courseId,
                                                          @RequestParam(name = "courseCode", required = false) String courseCode,
@@ -367,32 +395,6 @@ public class ProfileApiController {
         Integer courseNo = parseInt(resolveCourseId(courseId, courseCode), "course_id");
         if (courseNo == null) return Result.fail("course_id 必须为数字");
         return Result.ok(incentiveService.getLeaderboard(courseNo, type));
-    }
-
-    @PostMapping("/students/{studentId}/game-event")
-    public Result<Map<String, Object>> receiveGameEvent(@PathVariable String studentId,
-                                                        @RequestBody Map<String, Object> body,
-                                                        HttpSession session) {
-        if (!canAccessStudent(studentId, session)) return Result.fail("无权限");
-        String courseId = stringValue(body, "course_id", "courseId", "courseCode");
-        String eventType = stringValue(body, "event_type", "eventType");
-        if (courseId == null || eventType == null) return Result.fail("course_id 和 event_type 不能为空");
-        Integer studentNo = parseInt(studentId, "studentId");
-        Integer courseNo = parseInt(courseId, "course_id");
-        if (studentNo == null || courseNo == null) return Result.fail("studentId 和 course_id 必须为数字");
-        if (!gameConfigService.isEnabled(courseId)) {
-            return Result.ok(profileService.getProfileSummary(studentNo, courseNo));
-        }
-        applicationEventPublisher.publishEvent(GameEvent.builder()
-                .eventId(SharedIds.newId())
-                .eventType(eventType)
-                .studentId(studentId)
-                .courseId(courseId)
-                .sourceId(stringValue(body, "source_id", "sourceId"))
-                .occurredAt(LocalDateTime.now())
-                .payload(body)
-                .build());
-        return Result.ok(profileService.getProfileSummary(studentNo, courseNo));
     }
 
     private static String resolveCourseId(String courseId, String courseCode) {
@@ -415,16 +417,6 @@ public class ProfileApiController {
         } catch (NumberFormatException ignored) {
             return null;
         }
-    }
-
-    private static int intValue(Map<String, Object> body, String key) {
-        Object value = body.get(key);
-        return value instanceof Number number ? number.intValue() : 0;
-    }
-
-    private static boolean boolValue(Map<String, Object> body, String key) {
-        Object value = body.get(key);
-        return value instanceof Boolean bool && bool;
     }
 
     private static String stringValue(Map<String, Object> body, String... keys) {

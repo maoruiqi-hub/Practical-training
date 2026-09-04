@@ -22,8 +22,23 @@ const studentRoomRedirects = {
   '/learning-analysis': 'event'
 }
 
-function beforeEachGuard(to, from, next) {
-  const user = JSON.parse(localStorage.getItem('user') || '{}')
+const protectedPaths = new Set(['/dashboard', '/tower-map', '/data-center', '/floor/1', '/courses', '/profile'])
+const teacherPaths = new Set(['/admin/courses', '/admin/questions', '/teacher/student-profiles', '/class-operations'])
+const adminPaths = new Set(['/admin/students', '/admin/teachers'])
+
+function beforeEachGuard(to) {
+  let user = {}
+  try { user = JSON.parse(localStorage.getItem('user') || '{}') || {} } catch { user = {} }
+  const isProtected = protectedPaths.has(to.path) || teacherPaths.has(to.path) || adminPaths.has(to.path)
+  if (isProtected && !user.role) return { path: '/login', query: { redirect: to.fullPath || to.path } }
+  if (teacherPaths.has(to.path) && !['teacher', 'admin'].includes(user.role)) return '/dashboard'
+  if (adminPaths.has(to.path) && user.role !== 'admin') return '/dashboard'
+  const requiresCourse = user.role === 'student' &&
+    ['/tower-map', '/data-center', '/profile', '/progress', '/stats', '/wrong-book', '/learning-analysis'].includes(to.path) ||
+    (user.role === 'student' && to.path.startsWith('/floor/'))
+  if (requiresCourse && !(to.query?.courseId || store.courseId)) {
+    return { path: '/courses', query: { redirect: to.fullPath || to.path } }
+  }
   if (user.role !== 'student') return true
   const room = studentRoomRedirects[to.path]
   if (room) {
@@ -95,6 +110,7 @@ describe('学生房间重定向映射', () => {
 describe('beforeEach 导航守卫', () => {
   beforeEach(() => {
     Object.keys(store).forEach(k => delete store[k])
+    store.courseId = 'C1'
   })
 
   it('学生访问 dashboard → 重定向到塔地图 start', () => {
@@ -165,18 +181,33 @@ describe('beforeEach 导航守卫', () => {
   })
 
   // 边界
-  it('空 user 对象 → 不重定向', () => {
+  it('空 user 对象 → 受保护页面重定向登录', () => {
     store.user = '{}'
-    expect(beforeEachGuard({ path: '/dashboard' })).toBe(true)
+    expect(beforeEachGuard({ path: '/dashboard' }).path).toBe('/login')
   })
 
-  it('无 user 数据 → 不重定向', () => {
-    expect(beforeEachGuard({ path: '/dashboard' })).toBe(true)
+  it('学生缺少课程上下文 → 进入课程选择', () => {
+    store.user = JSON.stringify({ role: 'student', studentNo: 'S1' })
+    delete store.courseId
+    expect(beforeEachGuard({ path: '/tower-map' }).path).toBe('/courses')
   })
 
-  // 异常
-  it('损坏的 JSON → 抛出异常', () => {
+  it('无 user 数据 → 受保护页面重定向登录', () => {
+    expect(beforeEachGuard({ path: '/dashboard' }).path).toBe('/login')
+  })
+
+  it('损坏的 JSON → 安全重定向登录', () => {
     store.user = '{invalid json'
-    expect(() => beforeEachGuard({ path: '/dashboard' })).toThrow()
+    expect(beforeEachGuard({ path: '/dashboard' }).path).toBe('/login')
+  })
+
+  it('学生访问教师页面 → 回到工作台', () => {
+    store.user = JSON.stringify({ role: 'student' })
+    expect(beforeEachGuard({ path: '/teacher/student-profiles' })).toBe('/dashboard')
+  })
+
+  it('教师访问管理员页面 → 回到工作台', () => {
+    store.user = JSON.stringify({ role: 'teacher' })
+    expect(beforeEachGuard({ path: '/admin/students' })).toBe('/dashboard')
   })
 })

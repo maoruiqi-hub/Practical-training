@@ -1,5 +1,6 @@
 <template>
   <div class="profile-page">
+    <el-alert v-if="!studentNo || !courseCode" title="缺少学习上下文" description="请先登录并选择课程后查看个人画像。" type="warning" show-icon :closable="false" style="margin-bottom: 20px" />
     <!-- 画像总览 -->
     <el-row :gutter="20">
       <el-col :span="16">
@@ -131,10 +132,11 @@ import StudentAbilityMapPanel from '../components/StudentAbilityMapPanel.vue'
 import { getProfileSummary, getCompetency, getRecommendations, generateRecommendations,
          feedbackRecommendation, getAchievements, getTitle, getLeaderboard,
          getGrowthHistory, getCompetencyHistory } from '@/api/profile'
+import { getCurrentUser, getCourseId, getStudentId } from '../utils/authContext'
 
-const user = JSON.parse(localStorage.getItem('user') || '{}')
-const studentNo = ref(parseInt(user.studentNo) || 1)
-const courseCode = ref(1)
+const user = getCurrentUser()
+const studentNo = ref(getStudentId(user))
+const courseCode = ref(getCourseId(null))
 const activeTab = ref('competency')
 const profile = ref({})
 const competencyScores = ref([])
@@ -202,6 +204,7 @@ const sourceLabel = (src) => {
 }
 
 const loadProfile = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getProfileSummary(studentNo.value, courseCode.value)
     if (data.code === 200) {
@@ -220,6 +223,7 @@ const loadProfile = async () => {
 }
 
 const loadRecs = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getRecommendations(studentNo.value, courseCode.value)
     if (data.code === 200) recommendations.value = data.data
@@ -227,6 +231,7 @@ const loadRecs = async () => {
 }
 
 const loadAchievements = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const oldCount = achievements.value.length
     const { data } = await getAchievements(studentNo.value, courseCode.value)
@@ -244,6 +249,7 @@ const loadAchievements = async () => {
 }
 
 const loadTitle = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getTitle(studentNo.value, courseCode.value)
     if (data.code === 200) title.value = data.data
@@ -251,6 +257,7 @@ const loadTitle = async () => {
 }
 
 const loadLeaderboard = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getLeaderboard(courseCode.value, rankType.value)
     if (data.code === 200) leaderboard.value = data.data
@@ -258,6 +265,7 @@ const loadLeaderboard = async () => {
 }
 
 const loadGrowthHistory = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getGrowthHistory(studentNo.value, courseCode.value)
     if (data.code === 200) growthHistory.value = data.data
@@ -265,6 +273,7 @@ const loadGrowthHistory = async () => {
 }
 
 const loadCompetencyHistory = async () => {
+  if (!studentNo.value || !courseCode.value) return
   try {
     const { data } = await getCompetencyHistory(studentNo.value, courseCode.value, null)
     if (data.code === 200) {

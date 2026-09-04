@@ -1,3 +1,7 @@
+if (process.env.SEED_ALLOW_DEMO !== '1') {
+  throw new Error('这是演示数据脚本。请仅在测试环境显式设置 SEED_ALLOW_DEMO=1 后执行。')
+}
+
 const BASE_URL = process.env.SEED_BASE_URL || 'http://localhost:8081/practical-training'
 const ADMIN_USERNAME = process.env.SEED_USERNAME || 'admin'
 const ADMIN_PASSWORD = process.env.SEED_PASSWORD || 'admin123'

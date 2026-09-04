@@ -70,12 +70,13 @@
 </template>
 
 <script setup>
+import { getCurrentUser } from '../utils/authContext'
 import { ref, onMounted, nextTick } from 'vue'
 import { getStudentStats, getCourseStats, searchCourse } from '../api'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const userRole = user.role
 const stats = ref(null)
 const courses = ref([])

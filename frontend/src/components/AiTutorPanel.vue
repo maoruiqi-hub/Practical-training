@@ -53,7 +53,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { askKnowledgePoint, explainKnowledgePoint, sendGameEvent } from '../api'
+import { askKnowledgePoint, explainKnowledgePoint } from '../api'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -97,15 +97,6 @@ watch(() => [props.modelValue, props.initialQuestion], ([open, question]) => {
   }
 })
 
-const getStudentId = () => {
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    return user.studentNo || user.student_no || user.no || user.id || user.username || ''
-  } catch {
-    return ''
-  }
-}
-
 const previousMessages = () => messages.value.map(message =>
   `${message.role === 'user' ? '学生' : 'AI'}：${message.content}`
 )
@@ -136,22 +127,6 @@ const extractAnswer = response => {
     return statusMessage
   }
   return 'AI 已返回结果，但没有可显示的文本。'
-}
-
-const reportAiEvent = async () => {
-  const studentId = getStudentId()
-  if (!studentId || !props.courseId) return
-  try {
-    await sendGameEvent(studentId, {
-      course_id: props.courseId,
-      event_type: 'ai_tutor_called',
-      knowledge_point_id: props.knowledgePointId,
-      source_id: props.resourceId || props.knowledgePointId,
-      mode: props.mode
-    })
-  } catch {
-    // AI 使用事件失败不影响问答本身。
-  }
 }
 
 const scrollToBottom = async () => {
@@ -195,7 +170,6 @@ const sendQuestion = async () => {
       : await askKnowledgePoint(props.knowledgePointId, payload)
 
     messages.value.push({ role: 'assistant', content: extractAnswer(response) })
-    reportAiEvent()
   } catch {
     errorMessage.value = 'AI 服务暂不可用，请稍后重试'
     messages.value.push({ role: 'assistant', content: errorMessage.value })

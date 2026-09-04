@@ -101,6 +101,7 @@
         SET status = 'superseded'
         WHERE task_no = #{taskNo}
           AND student_no = #{studentNo}
+          AND submission_id != #{currentSubmissionId}
           AND (status IS NULL OR status != 'superseded')
     </update>
 

@@ -13,6 +13,7 @@ public class Achievement {
     private Integer studentNo;
     private Integer courseCode;
     private String achievementType;
+    private String badgeCode;
     private String name;
     private String description;
     private java.util.Date earnedAt;

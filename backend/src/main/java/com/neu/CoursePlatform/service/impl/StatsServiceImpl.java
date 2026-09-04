@@ -102,8 +102,7 @@ public class StatsServiceImpl implements StatsService {
         }
         if (tasks == null) tasks = List.of();
         if (submissions == null) {
-            submissions = submissionService.listByStudentNo(studentNo);
-            if (submissions == null) submissions = List.of();
+            submissions = List.of();
         }
 
         Set<String> submittedTaskNos = new HashSet<>();
@@ -132,13 +131,44 @@ public class StatsServiceImpl implements StatsService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("studentNo", studentNo);
         result.put("courseCode", courseCode);
+        result.put("totalSubmissions", submissions.size());
         result.put("totalTasks", tasks.size());
         result.put("completedCount", completedCount);
         result.put("completionRate", tasks.size() > 0 ? Math.round((double) completedCount / tasks.size() * 100) : 0);
         result.put("gradedCount", gradedCount);
         result.put("averageScore", gradedCount > 0 ? Math.round((double) gradedTotal / gradedCount * 10) / 10.0 : 0);
         result.put("overdueCount", overdueCount);
+        result.put("totalStudyDuration", courseDuration(studentNo, courseCode));
+        result.put("details", buildStudentDetails(tasks, submissions));
         return result;
+    }
+
+    private List<Map<String, Object>> buildStudentDetails(List<LearningTask> tasks, List<TaskSubmission> submissions) {
+        Map<String, LearningTask> taskIndex = tasks.stream().filter(Objects::nonNull)
+                .collect(Collectors.toMap(LearningTask::getTaskNo, task -> task, (first, ignored) -> first));
+        return submissions.stream().map(sub -> {
+            LearningTask task = taskIndex.get(sub.getTaskNo());
+            Map<String, Object> detail = new LinkedHashMap<>();
+            detail.put("taskNo", sub.getTaskNo());
+            detail.put("taskName", task == null ? "" : task.getTaskName());
+            detail.put("taskType", task == null ? "" : task.getTaskType());
+            detail.put("score", sub.getScore());
+            detail.put("status", sub.getStatus());
+            detail.put("submitTime", sub.getSubmitTime());
+            detail.put("deadline", task == null ? null : task.getDeadline());
+            detail.put("isOverdue", sub.getIsOverdue() != null && sub.getIsOverdue() == 1);
+            return detail;
+        }).toList();
+    }
+
+    private long courseDuration(String studentNo, String courseCode) {
+        Map<String, String> filters = new HashMap<>();
+        filters.put("userId", studentNo);
+        filters.put("course_id", courseCode);
+        List<LearningBehaviorLog> logs = behaviorLogService.query(filters);
+        if (logs == null) return 0;
+        return logs.stream().filter(Objects::nonNull).map(LearningBehaviorLog::getDuration)
+                .filter(Objects::nonNull).mapToLong(Integer::longValue).sum();
     }
 
     @Override

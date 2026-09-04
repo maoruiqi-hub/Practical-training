@@ -11,14 +11,17 @@ public interface LearningAnswerEvidenceMapper extends BaseMapper<LearningAnswerE
                 evidence_id, student_no, course_code, question_id, knowledge_point_id,
                 difficulty, attempt_no, first_attempt, correct, answer_content,
                 source_type, source_id, idempotency_key, formula_version, answered_at
-            ) VALUES (
+            ) SELECT
                 #{item.evidenceId}, #{item.studentNo}, #{item.courseCode}, #{item.questionId},
                 #{item.knowledgePointId}, #{item.difficulty}, #{item.attemptNo},
                 #{item.firstAttempt}, #{item.correct}, #{item.answerContent},
                 #{item.sourceType}, #{item.sourceId}, #{item.idempotencyKey},
                 #{item.formulaVersion}, #{item.answeredAt}
+            WHERE NOT EXISTS (
+                SELECT 1 FROM learning_answer_evidence
+                WHERE student_no = #{item.studentNo}
+                  AND idempotency_key = #{item.idempotencyKey}
             )
-            ON CONFLICT (student_no, idempotency_key) DO NOTHING
             """)
     int insertIfAbsent(@Param("item") LearningAnswerEvidence item);
 }

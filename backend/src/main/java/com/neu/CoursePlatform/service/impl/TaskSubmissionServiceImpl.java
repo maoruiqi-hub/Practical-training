@@ -14,6 +14,7 @@ import com.neu.CoursePlatform.entity.Question;
 import com.neu.CoursePlatform.entity.Student;
 import com.neu.CoursePlatform.entity.SubmissionAnswer;
 import com.neu.CoursePlatform.entity.TaskSubmission;
+import com.neu.CoursePlatform.entity.TaskQuestion;
 import com.neu.CoursePlatform.mapper.TaskSubmissionMapper;
 import com.neu.CoursePlatform.service.KnowledgePointService;
 import com.neu.CoursePlatform.service.CourseGameConfigService;
@@ -24,6 +25,7 @@ import com.neu.CoursePlatform.service.QuestionService;
 import com.neu.CoursePlatform.service.StudentService;
 import com.neu.CoursePlatform.service.SubmissionAnswerService;
 import com.neu.CoursePlatform.service.TaskSubmissionService;
+import com.neu.CoursePlatform.service.TaskQuestionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +56,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
     private final FloorProgressService floorProgressService;
     private final GameEventPublisher gameEventPublisher;
     private final LearningEvidenceService learningEvidenceService;
+    private final TaskQuestionService taskQuestionService;
 
     public TaskSubmissionServiceImpl(LearningTaskService taskService, StudentService studentService,
                                      QuestionService questionService, SubmissionAnswerService answerService,
@@ -61,7 +64,8 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                                      CourseGameConfigService gameConfigService,
                                      FloorProgressService floorProgressService,
                                      GameEventPublisher gameEventPublisher,
-                                     LearningEvidenceService learningEvidenceService) {
+                                     LearningEvidenceService learningEvidenceService,
+                                     TaskQuestionService taskQuestionService) {
         this.taskService = taskService;
         this.studentService = studentService;
         this.questionService = questionService;
@@ -71,6 +75,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         this.floorProgressService = floorProgressService;
         this.gameEventPublisher = gameEventPublisher;
         this.learningEvidenceService = learningEvidenceService;
+        this.taskQuestionService = taskQuestionService;
     }
 
     @Override
@@ -84,7 +89,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
             return listByStudentNo(studentNo);
         }
         List<TaskSubmission> submissions = baseMapper.selectByStudentNoAndCourse(studentNo, courseCode);
-        return submissions == null ? listByStudentNo(studentNo) : submissions;
+        return submissions == null ? List.of() : submissions;
     }
 
     @Override
@@ -224,8 +229,8 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
 
         // 测验/试卷类：系统自动评阅客观题
         if (taskService.isQuizTask(task)) {
-            List<Map<String, Object>> answers = parseQuizAnswers(sub);
-            sub.setScore(autoScoreChoices(answers));
+            List<Map<String, Object>> answers = standardizedQuizAnswers(sub);
+            sub.setScore(capToTaskScore(sub, autoScoreChoices(answers)));
             if (containsManualQuestions(answers)) {
                 sub.setStatus("submitted");
                 sub.setFeedback("客观题已自动评阅，主观题/编程题待教师复核");
@@ -254,18 +259,17 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         applyInitialGrading(sub);
         save(sub);
         saveAnswerDetails(sub);
+        if (sub.getSubmissionId() == null || sub.getSubmissionId().isBlank()) {
+            throw new IllegalStateException("提交记录未生成有效编号");
+        }
+        baseMapper.markSupersededPrevious(sub.getTaskNo(), sub.getStudentNo(), sub.getSubmissionId());
         publishAssessmentResultEvents(sub);
     }
 
     @Override
     public int autoScoreChoices(TaskSubmission sub) {
         if (!isQuizSubmission(sub)) return 0;
-        return autoScoreChoices(parseQuizAnswers(sub));
-    }
-
-    @Override
-    public void supersedePrevious(String taskNo, String studentNo) {
-        baseMapper.markSupersededPrevious(taskNo, studentNo);
+        return capToTaskScore(sub, autoScoreChoices(standardizedQuizAnswers(sub)));
     }
 
     private int autoScoreChoices(List<Map<String, Object>> answers) {
@@ -282,7 +286,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
 
     private boolean containsManualQuestions(TaskSubmission sub) {
         if (!isQuizSubmission(sub)) return false;
-        return containsManualQuestions(parseQuizAnswers(sub));
+        return containsManualQuestions(standardizedQuizAnswers(sub));
     }
 
     private boolean containsManualQuestions(List<Map<String, Object>> answers) {
@@ -298,7 +302,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         LearningTask task = taskService.getById(sub.getTaskNo());
         if (!taskService.isQuizTask(task) || sub.getSubmissionId() == null) return;
 
-        List<SubmissionAnswer> answers = buildSubmissionAnswers(sub, parseQuizAnswers(sub));
+        List<SubmissionAnswer> answers = buildSubmissionAnswers(sub, standardizedQuizAnswers(sub));
         if (!answers.isEmpty()) answerService.saveBatch(answers);
     }
 
@@ -399,10 +403,17 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                     floorProgressService.recordQuizResult(sub.getStudentNo(), task.getCourseCode(), knowledgePointId,
                             sub.getSubmissionId(), allCorrect, pointAnswers.stream().mapToInt(answer -> answer.getMaxScore() == null ? 0 : answer.getMaxScore()).sum());
                 });
-        boolean bossPassed = !answers.isEmpty() && answers.stream()
-                .filter(answer -> Boolean.TRUE.equals(answer.getAutoGradable()))
-                .allMatch(answer -> Boolean.TRUE.equals(answer.getCorrect()));
-        if (bossPassed && isBossTask(task) && gameConfigService.isEnabled(task.getCourseCode())) {
+        publishBossCompletionEvent(sub);
+    }
+
+    @Override
+    public void publishBossCompletionEvent(TaskSubmission sub) {
+        if (sub == null || sub.getTaskNo() == null || sub.getSubmissionId() == null
+                || !"graded".equalsIgnoreCase(sub.getStatus())) return;
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        if (task != null && isBossTask(task) && task.getScore() != null && task.getScore() > 0
+                && sub.getScore() != null && sub.getScore() >= task.getScore()
+                && gameConfigService.isEnabled(task.getCourseCode())) {
             gameEventPublisher.publish(GameEvent.builder().eventId(SharedIds.newId())
                     .eventType(GameEventTypes.BOSS_DEFEATED).studentId(sub.getStudentNo())
                     .courseId(task.getCourseCode()).sourceId(sub.getSubmissionId()).occurredAt(LocalDateTime.now())
@@ -420,15 +431,19 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                 .collect(Collectors.toMap(SubmissionAnswer::getQuestionId, answer -> answer, (a, b) -> a));
         List<Map<String, Object>> reviewed = new ArrayList<>();
         Set<String> allowed = new LinkedHashSet<>();
+        Set<String> reviewedQuestionIds = new HashSet<>();
         for (Map<String, Object> grade : manualAnswers) {
             String questionId = String.valueOf(grade.getOrDefault("questionId", ""));
+            if (!reviewedQuestionIds.add(questionId)) {
+                throw new IllegalArgumentException("同一主观题不能重复干预");
+            }
             SubmissionAnswer answer = answerIndex.get(questionId);
             if (answer == null || Boolean.TRUE.equals(answer.getAutoGradable())) {
                 throw new IllegalArgumentException("主观题复核结果与当前提交不匹配");
             }
             int maxScore = answer.getMaxScore() == null ? 0 : answer.getMaxScore();
             int reviewedScore = Math.max(0, Math.min(maxScore, intValue(grade.get("score"), 0)));
-            boolean correct = Boolean.TRUE.equals(grade.get("correct"));
+            boolean correct = maxScore > 0 && reviewedScore >= maxScore;
             answer.setScore(reviewedScore);
             answer.setCorrect(correct);
             answerService.updateById(answer);
@@ -442,6 +457,19 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         }
         learningEvidenceService.recordReviewedAnswers(sub.getStudentNo(), task.getCourseCode(),
                 sub.getSubmissionId(), reviewed, allowed);
+    }
+
+    @Override
+    public int recalculateFinalScore(TaskSubmission sub) {
+        if (sub == null) throw new IllegalArgumentException("提交记录不存在");
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        if (task == null || !taskService.isQuizTask(task)) return capToTaskScore(sub, sub.getScore() == null ? 0 : sub.getScore());
+        int total = answerService.listBySubmissionId(sub.getSubmissionId()).stream()
+                .map(SubmissionAnswer::getScore)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        return capToTaskScore(sub, total);
     }
 
     private int intValue(Object value, int fallback) {
@@ -494,7 +522,7 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         }
 
         try {
-            for (Map<String, Object> ans : parseQuizAnswers(sub)) {
+            for (Map<String, Object> ans : standardizedQuizAnswers(sub)) {
                 Question q = questionService.getById(String.valueOf(ans.get("no")));
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("questionId", ans.get("no"));
@@ -540,6 +568,9 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
                 if (answer.get("no") == null) {
                     throw new IllegalArgumentException("在线测验答题缺少题目编号");
                 }
+                String questionId = String.valueOf(answer.get("no")).trim();
+                if (questionId.isBlank()) throw new IllegalArgumentException("在线测验答题缺少题目编号");
+                answer.put("no", questionId);
                 answers.add(answer);
             }
             return answers;
@@ -548,6 +579,52 @@ public class TaskSubmissionServiceImpl extends ServiceImpl<TaskSubmissionMapper,
         } catch (Exception e) {
             throw new IllegalArgumentException("在线测验答题格式错误");
         }
+    }
+
+    private List<Map<String, Object>> standardizedQuizAnswers(TaskSubmission sub) {
+        if (taskQuestionService == null) {
+            throw new IllegalStateException("测验题目服务不可用");
+        }
+        List<TaskQuestion> taskQuestions = taskQuestionService.listByTaskNo(sub.getTaskNo());
+        if (taskQuestions == null || taskQuestions.isEmpty()) {
+            throw new IllegalArgumentException("当前测验未配置题目");
+        }
+        LinkedHashSet<String> expectedIds = taskQuestions.stream()
+                .map(TaskQuestion::getQuestionId)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(id -> !id.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (expectedIds.isEmpty() || expectedIds.size() != taskQuestions.size()) {
+            throw new IllegalStateException("测验题目配置为空或包含重复题目");
+        }
+
+        Map<String, Map<String, Object>> submitted = new LinkedHashMap<>();
+        for (Map<String, Object> answer : parseQuizAnswers(sub)) {
+            String questionId = String.valueOf(answer.get("no"));
+            if (!expectedIds.contains(questionId)) {
+                throw new IllegalArgumentException("答案包含不属于当前测验的题目：" + questionId);
+            }
+            if (submitted.putIfAbsent(questionId, answer) != null) {
+                throw new IllegalArgumentException("答案包含重复题目：" + questionId);
+            }
+        }
+
+        List<Map<String, Object>> standardized = new ArrayList<>();
+        for (String questionId : expectedIds) {
+            Map<String, Object> answer = new LinkedHashMap<>(submitted.getOrDefault(questionId, Map.of()));
+            answer.put("no", questionId);
+            answer.putIfAbsent("response", "");
+            standardized.add(answer);
+        }
+        return standardized;
+    }
+
+    private int capToTaskScore(TaskSubmission sub, int score) {
+        LearningTask task = taskService.getById(sub.getTaskNo());
+        int nonNegativeScore = Math.max(0, score);
+        if (task == null || task.getScore() == null || task.getScore() <= 0) return nonNegativeScore;
+        return Math.min(task.getScore(), nonNegativeScore);
     }
 
     private boolean isAutoGradable(Question q) {

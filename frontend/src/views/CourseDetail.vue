@@ -183,6 +183,7 @@
 </template>
 
 <script setup>
+import { getCurrentUser } from '../utils/authContext'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -208,7 +209,7 @@ import {
 
 const route = useRoute()
 const code = route.params.code
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const userRole = user.role
 const ONLINE_QUIZ_TYPE = '在线测验'
 const isQuizType = type => type === ONLINE_QUIZ_TYPE
@@ -375,6 +376,7 @@ const saveCourseConfig = async (value) => {
 }
 
 onMounted(async () => {
+  if (code) localStorage.setItem('courseId', String(code))
   try {
     const [lRes, cRes] = await Promise.all([getCourseLessons(code), searchCourse(code)])
     if (lRes.data.code === 200) lessons.value = lRes.data.data

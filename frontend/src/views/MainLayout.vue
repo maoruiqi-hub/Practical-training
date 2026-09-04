@@ -46,10 +46,11 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, DocumentChecked, HomeFilled, Reading, Setting, TrendCharts, User } from '@element-plus/icons-vue'
+import { getCurrentUser } from '../utils/authContext'
 
 const route = useRoute()
 const router = useRouter()
-const user = JSON.parse(localStorage.getItem('user') || '{}')
+const user = getCurrentUser()
 const isAdmin = computed(() => user.role === 'admin')
 const isStudent = computed(() => user.role === 'student')
 const userRoleLabel = computed(() => isAdmin.value ? '管理员' : user.role === 'student' ? '学生' : '教师')

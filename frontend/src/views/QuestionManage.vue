@@ -188,7 +188,7 @@ onMounted(async () => {
 
 const openAdd = () => {
   isEdit.value = false; optList.value = []
-  Object.assign(form, { questionId:'',type:'single',stem:'',answer:'',courseCode:filter.courseCode || '1',lessonNo:filter.lessonNo || '',knowledgePointId:'',difficulty:3,score:10 })
+  Object.assign(form, { questionId:'',type:'single',stem:'',answer:'',courseCode:filter.courseCode || '',lessonNo:filter.lessonNo || '',knowledgePointId:'',difficulty:3,score:10 })
   dialogVisible.value = true
 }
 const openEdit = (row) => {
