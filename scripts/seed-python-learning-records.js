@@ -52,7 +52,7 @@ const studentPlans = [
 ]
 
 const profileCompatibleStudents = [
-  { studentNo: '2', name: '徐清源', className: '软件工程1班', username: 'huangyuhang', phone: '13821010302' },
+  { studentNo: '2', name: 'huangyuhang', className: '软件工程1班', username: 'huangyuhang', phone: '13821010302' },
   { studentNo: '3', name: '沈佳怡', className: '软件工程1班', username: 'shenjiayi', phone: '13821010303' },
   { studentNo: '4', name: '俞景皓', className: '软件工程1班', username: 'yujinghao', phone: '13821010304' },
   { studentNo: '5', name: '秦瑶', className: '软件工程2班', username: 'qinyao', phone: '13821010305' },
