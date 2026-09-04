@@ -15,7 +15,7 @@ WHERE NOT EXISTS (SELECT 1 FROM student WHERE student_no = '1');
 INSERT INTO student (student_no, name, college, class_name, course_grades, username, password, phone)
 SELECT v.student_no, v.name, '软件学院', v.class_name, '{}', v.username, '$2y$10$g.6iH4XGxY0ajdQsi6nxNOxd/Yej86soWE.GpXeRGdPFiEDnVPBuO', v.phone
 FROM (VALUES
-    ('2', '徐清源', '软件工程1班', 'xuqingyuan', '13821010302'),
+    ('2', '徐清源', '软件工程1班', 'huangyuhang', '13821010302'),
     ('3', '沈佳怡', '软件工程1班', 'shenjiayi', '13821010303'),
     ('4', '俞景皓', '软件工程1班', 'yujinghao', '13821010304'),
     ('5', '秦瑶', '软件工程2班', 'qinyao', '13821010305'),
